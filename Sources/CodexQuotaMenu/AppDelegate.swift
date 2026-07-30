@@ -56,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func render(_ snapshot: UsageSnapshot, tasks: TaskSnapshot) {
         if let window = snapshot.headlineWindow {
             let reset = window.resetsAt.map { " · \(text.shortRemaining(until: $0))" } ?? ""
-            let taskStatus = " · ▶\(tasks.running.count) \(text.taskDivider) ⏸\(tasks.waiting.count)"
+            let taskStatus = " · ▶ \(tasks.running.count) \(text.taskDivider) ⏸ \(tasks.waiting.count)"
             setMenuBarTitle("Codex \(window.remainingPercent)%\(reset)\(taskStatus)")
         }
 

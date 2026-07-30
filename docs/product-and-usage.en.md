@@ -24,15 +24,15 @@ The app has no main window or Dock icon. Completed-task counts are intentionally
 The English interface looks similar to:
 
 ```text
-Codex 90% · 4h 25m · ▶1 | ⏸0
+Codex 90% · 4h 25m · ▶ 1 | ⏸ 0
 ```
 
 | Item | Meaning |
 |---|---|
 | `Codex 90%` | Remaining percentage for the shortest usage window |
 | `4h 25m` | Time until that window resets |
-| `▶1` | Number of tasks running normally |
-| `⏸0` | Number of tasks waiting for you |
+| `▶ 1` | Number of tasks running normally |
+| `⏸ 0` | Number of tasks waiting for you |
 
 Open the menu to see every returned usage window, exact reset times, the Codex plan, task titles, the latest successful update time, and app actions.
 
