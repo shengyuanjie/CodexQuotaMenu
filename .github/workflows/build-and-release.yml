@@ -40,7 +40,7 @@ jobs:
             echo "发布标签 $GITHUB_REF_NAME 与应用版本 v${VERSION} 不一致" >&2
             exit 1
           fi
-          ARCHIVE="Codex用量-v${VERSION}-macOS-${{ matrix.architecture }}.zip"
+          ARCHIVE="CodexQuotaMenu-v${VERSION}-macOS-${{ matrix.architecture }}.zip"
           ditto -c -k --sequesterRsrc --keepParent "dist/Codex用量.app" "$ARCHIVE"
           ./scripts/audit-release.sh "$ARCHIVE"
           shasum -a 256 "$ARCHIVE" > "${ARCHIVE}.sha256"

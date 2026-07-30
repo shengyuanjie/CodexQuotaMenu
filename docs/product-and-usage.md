@@ -122,6 +122,8 @@ GitHub Release 分别提供两套原生安装包：
 
 两套安装包功能相同，不需要同时下载。它们不是通用二进制，请务必选择与处理器匹配的版本。
 
+为避免 GitHub 改写非 ASCII 发布资源名称，安装包文件名使用英文 `CodexQuotaMenu`；解压后的应用名称仍为 `Codex用量.app`。
+
 ### 查看 Mac 处理器类型
 
 方法一：打开“苹果菜单 → 关于本机”。
@@ -155,13 +157,13 @@ uname -m
 Apple Silicon：
 
 ```sh
-shasum -a 256 -c Codex用量-v1.4.1-macOS-arm64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.4.1-macOS-arm64.zip.sha256
 ```
 
 Intel：
 
 ```sh
-shasum -a 256 -c Codex用量-v1.4.1-macOS-x86_64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.4.1-macOS-x86_64.zip.sha256
 ```
 
 显示 `OK` 表示 ZIP 与发布时生成的校验值一致。校验只能证明文件与对应校验清单匹配，因此 ZIP 和 `.sha256` 都应从本项目的同一个 GitHub Release 下载。

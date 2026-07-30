@@ -22,7 +22,7 @@ cleanup() {
 trap cleanup EXIT
 
 for ARCH in arm64 x86_64; do
-    ARCHIVE="$ASSETS_DIR/Codex用量-v${VERSION}-macOS-${ARCH}.zip"
+    ARCHIVE="$ASSETS_DIR/CodexQuotaMenu-v${VERSION}-macOS-${ARCH}.zip"
     CHECKSUM="${ARCHIVE}.sha256"
 
     if [[ ! -f "$ARCHIVE" || ! -f "$CHECKSUM" ]]; then
