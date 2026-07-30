@@ -1,0 +1,6 @@
+.DS_Store
+.build/
+dist/
+tmp/
+*.zip
+*.sha256
