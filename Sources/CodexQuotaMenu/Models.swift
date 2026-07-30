@@ -56,7 +56,7 @@ enum UsageParser {
         guard let object = root as? [String: Any],
               let result = object["result"] as? [String: Any],
               let limits = result["rateLimits"] as? [String: Any] else {
-            throw UsageError.invalidResponse("Codex 返回了无法识别的数据")
+            throw UsageError.invalidUsageResponse
         }
 
         var windows: [RateLimitWindow] = []
@@ -73,7 +73,7 @@ enum UsageParser {
         }
 
         guard !windows.isEmpty else {
-            throw UsageError.invalidResponse("账号没有返回可显示的用量窗口")
+            throw UsageError.noUsageWindows
         }
         return UsageSnapshot(windows: windows, plan: limits["planType"] as? String, fetchedAt: now)
     }
@@ -89,7 +89,7 @@ enum TaskParser {
         guard let object = root as? [String: Any],
               let result = object["result"] as? [String: Any],
               let rows = result["data"] as? [[String: Any]] else {
-            throw UsageError.invalidResponse("Codex 返回了无法识别的任务列表")
+            throw UsageError.invalidTaskResponse
         }
 
         let recentCutoff = now.addingTimeInterval(-86_400)
@@ -277,18 +277,18 @@ private extension TaskParser {
 
 enum UsageError: LocalizedError {
     case codexNotFound
-    case processFailed(String)
+    case taskConnectionUnavailable
+    case usageConnectionUnavailable
+    case cannotStartCodex(String)
+    case serverError(String?)
+    case readFailed(String)
+    case connectionClosed
     case timedOut
-    case invalidResponse(String)
+    case invalidUsageResponse
+    case noUsageWindows
+    case invalidTaskResponse
 
     var errorDescription: String? {
-        switch self {
-        case .codexNotFound:
-            return "未找到 Codex。请先安装并登录 Codex 桌面版或 CLI。"
-        case .processFailed(let message), .invalidResponse(let message):
-            return message
-        case .timedOut:
-            return "读取 Codex 用量超时"
-        }
+        AppText.current.errorDescription(self)
     }
 }

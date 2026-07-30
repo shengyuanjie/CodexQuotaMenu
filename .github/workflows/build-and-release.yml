@@ -82,5 +82,7 @@ jobs:
           release-assets/*
           --verify-tag
           --generate-notes
-          --title "Codex 用量 $GITHUB_REF_NAME"
-          --notes "同时提供 Apple Silicon（arm64）和 Intel（x86_64）安装包。两套安装包均经过测试、发布审计和 SHA-256 校验。本版本采用 Hardened Runtime 和 ad-hoc 签名，但没有 Apple Developer 证书，未经 Apple 公证。首次启动可能需要在 Finder 中右键选择“打开”。"
+          --title "Codex Usage / Codex 用量 $GITHUB_REF_NAME"
+          --notes "English: Apple Silicon (arm64) and Intel (x86_64) builds are included. Both are tested, release-audited, and accompanied by SHA-256 checksums. The app uses Hardened Runtime and an ad-hoc signature, but it is not notarized because the project has no Apple Developer certificate. On first launch, you may need to right-click the app in Finder and select Open.
+
+          中文：同时提供 Apple Silicon（arm64）和 Intel（x86_64）安装包。两套安装包均经过测试、发布审计和 SHA-256 校验。本版本采用 Hardened Runtime 和 ad-hoc 签名，但没有 Apple Developer 证书，未经 Apple 公证。首次启动可能需要在 Finder 中右键选择“打开”。"

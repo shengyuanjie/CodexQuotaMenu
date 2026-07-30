@@ -24,7 +24,7 @@ final class CodexClient {
         do {
             try ensureStarted()
             guard let input, let output else {
-                throw UsageError.processFailed("Codex 任务连接不可用")
+                throw UsageError.taskConnectionUnavailable
             }
             let requestID = nextRequestID
             nextRequestID += 1
@@ -53,7 +53,7 @@ final class CodexClient {
     private func fetchFromPersistentSession() throws -> UsageSnapshot {
         try ensureStarted()
         guard let input, let output else {
-            throw UsageError.processFailed("Codex 用量连接不可用")
+            throw UsageError.usageConnectionUnavailable
         }
 
         let requestID = nextRequestID
@@ -81,7 +81,7 @@ final class CodexClient {
         newProcess.standardOutput = newOutput
         newProcess.standardError = FileHandle.nullDevice
         do { try newProcess.run() } catch {
-            throw UsageError.processFailed("无法启动 Codex：\(error.localizedDescription)")
+            throw UsageError.cannotStartCodex(error.localizedDescription)
         }
 
         process = newProcess
@@ -94,7 +94,7 @@ final class CodexClient {
             "id": 1,
             "method": "initialize",
             "params": [
-                "clientInfo": ["name": "codex-quota-menubar", "title": "Codex 用量", "version": "1.4.1"],
+                "clientInfo": ["name": "codex-quota-menubar", "title": "Codex Usage", "version": "1.5.0"],
                 "capabilities": ["experimentalApi": true]
             ]
         ], to: newInput.fileHandleForWriting)
@@ -127,7 +127,7 @@ final class CodexClient {
                       let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
                       object["id"] as? Int == id else { continue }
                 if let error = object["error"] as? [String: Any] {
-                    throw UsageError.processFailed(error["message"] as? String ?? "Codex 查询失败")
+                    throw UsageError.serverError(error["message"] as? String)
                 }
                 return Data(line)
             }
@@ -138,15 +138,15 @@ final class CodexClient {
             if pollResult == 0 { throw UsageError.timedOut }
             if pollResult < 0 {
                 if errno == EINTR { continue }
-                throw UsageError.processFailed("读取 Codex 用量失败：\(String(cString: strerror(errno)))")
+                throw UsageError.readFailed(String(cString: strerror(errno)))
             }
 
             var bytes = [UInt8](repeating: 0, count: 8_192)
             let count = Darwin.read(handle.fileDescriptor, &bytes, bytes.count)
-            if count == 0 { throw UsageError.processFailed("Codex 用量接口意外断开") }
+            if count == 0 { throw UsageError.connectionClosed }
             if count < 0 {
                 if errno == EINTR { continue }
-                throw UsageError.processFailed("读取 Codex 用量失败：\(String(cString: strerror(errno)))")
+                throw UsageError.readFailed(String(cString: strerror(errno)))
             }
             buffer.append(contentsOf: bytes.prefix(count))
         }

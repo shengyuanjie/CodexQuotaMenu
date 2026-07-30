@@ -1,5 +1,7 @@
 # 安全策略
 
+[English](SECURITY.en.md) | 简体中文
+
 ## 支持范围
 
 仅维护最新 GitHub Release。旧版本发现问题后应升级，不再单独提供安全修复。
