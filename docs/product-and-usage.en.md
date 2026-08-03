@@ -201,6 +201,12 @@ defaults delete com.local.codexquotamenu
 
 Uninstalling this utility does not remove Codex, your Codex sign-in, or task history.
 
+## Support the Project
+
+If this utility is useful to you, you can optionally support ongoing maintenance through [Afdian](https://afdian.com/a/520_00) or [Ko-fi](https://ko-fi.com/520_00). Donations do not affect downloads, features, updates, or issue reporting.
+
+The donation links appear only in the project documentation and GitHub Sponsor button; the app itself does not load or connect to either platform. Each platform's own privacy policy and terms apply after you follow its link.
+
 ## Project and License
 
 This independent community project is not affiliated with or endorsed by OpenAI and does not use official OpenAI or Codex trademarks in its icon.
