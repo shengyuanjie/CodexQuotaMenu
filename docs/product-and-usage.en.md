@@ -2,7 +2,7 @@
 
 English | [简体中文](product-and-usage.md)
 
-Version: v1.5.0
+Version: v1.5.1
 
 System: macOS 14 or later
 
@@ -18,6 +18,8 @@ Codex Usage is a native macOS menu bar utility for checking:
 - tasks waiting for approval, a choice, input, an upload, or a reply.
 
 The app has no main window or Dock icon. Completed-task counts are intentionally omitted.
+
+The menu bar uses a text-only presentation with no extra icon before `Codex`, keeping the display compact and visually clean.
 
 ## Menu Bar
 
@@ -111,13 +113,13 @@ The release archive uses the ASCII name `CodexQuotaMenu` to prevent GitHub from 
 Apple Silicon:
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.5.0-macOS-arm64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.5.1-macOS-arm64.zip.sha256
 ```
 
 Intel:
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.5.0-macOS-x86_64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.5.1-macOS-x86_64.zip.sha256
 ```
 
 An `OK` result confirms that the ZIP matches its checksum file. Download both files from the same official Release.

@@ -2,7 +2,7 @@
 
 [English](product-and-usage.en.md) | 简体中文
 
-适用版本：v1.5.0
+适用版本：v1.5.1
 
 适用系统：macOS 14 或更高版本
 
@@ -13,6 +13,8 @@
 Codex 用量是一款原生 macOS 菜单栏工具，用于快速查看 Codex 剩余用量、重置倒计时和当前任务状态。
 
 应用常驻屏幕顶部菜单栏，不显示主窗口或 Dock 图标，也不显示已经完成的任务数量。它使用本机现有的 Codex 登录状态，不要求用户向本项目提供账号令牌。
+
+菜单栏采用纯文字显示，不在 `Codex` 前放置额外图标，以保持界面简洁并节省菜单栏空间。
 
 ## 二、主要功能
 
@@ -166,13 +168,13 @@ uname -m
 Apple Silicon：
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.5.0-macOS-arm64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.5.1-macOS-arm64.zip.sha256
 ```
 
 Intel：
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.5.0-macOS-x86_64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.5.1-macOS-x86_64.zip.sha256
 ```
 
 显示 `OK` 表示 ZIP 与发布时生成的校验值一致。校验只能证明文件与对应校验清单匹配，因此 ZIP 和 `.sha256` 都应从本项目的同一个 GitHub Release 下载。

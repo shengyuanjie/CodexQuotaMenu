@@ -19,8 +19,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runConnectionCheck()
             return
         }
-        updateStatusImage()
-        statusItem.button?.imagePosition = .imageLeading
         statusItem.button?.title = text.loadingTitle
         rebuildMenu(message: text.loadingMessage)
         refresh()
@@ -169,20 +167,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let selection = AppLanguage(rawValue: rawValue) else { return }
         languageSelection = selection
         languageSelection.save()
-        updateStatusImage()
         if let snapshot = lastSnapshot, let tasks = lastTaskSnapshot {
             render(snapshot, tasks: tasks)
         } else {
             statusItem.button?.title = text.loadingTitle
             rebuildMenu(message: text.loadingMessage)
         }
-    }
-
-    private func updateStatusImage() {
-        statusItem.button?.image = NSImage(
-            systemSymbolName: "gauge.with.dots.needle.67percent",
-            accessibilityDescription: text.appName
-        )
     }
 
     private func runConnectionCheck() {

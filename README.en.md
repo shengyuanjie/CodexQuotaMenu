@@ -16,6 +16,7 @@ A native macOS menu bar utility that shows your remaining Codex usage, reset cou
 - Uses `⏸` for the number of tasks waiting for approval, a choice, manual input, an upload, or a reply.
 - Lists recent running and waiting tasks in the menu and shows explicit error states.
 - Refreshes every five seconds, supports an immediate manual refresh, and preserves the last successful result during temporary query failures.
+- Uses a text-only menu-bar display without a leading icon for a cleaner appearance.
 - Supports Follow System, Simplified Chinese, and English interface languages.
 - Reuses your existing local Codex sign-in; no account token needs to be provided to this project.
 - Contains no advertising, analytics, telemetry, or third-party runtime dependencies.
