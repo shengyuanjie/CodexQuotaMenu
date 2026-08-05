@@ -2,7 +2,7 @@
 
 English | [简体中文](product-and-usage.md)
 
-Version: v1.5.1
+Version: v1.5.2
 
 System: macOS 14 or later
 
@@ -14,8 +14,7 @@ Codex Usage is a native macOS menu bar utility for checking:
 
 - remaining Codex usage;
 - reset dates and countdowns;
-- tasks that are running normally;
-- tasks waiting for approval, a choice, input, an upload, or a reply.
+- tasks that are currently active.
 
 The app has no main window or Dock icon. Completed-task counts are intentionally omitted.
 
@@ -26,15 +25,14 @@ The menu bar uses a text-only presentation with no extra icon before `Codex`, ke
 The English interface looks similar to:
 
 ```text
-Codex 90% · 4h 25m · ▶ 1 | ⏸ 0
+Codex 90% · 4h 25m · ▶ 1
 ```
 
 | Item | Meaning |
 |---|---|
 | `Codex 90%` | Remaining percentage for the shortest usage window |
 | `4h 25m` | Time until that window resets |
-| `▶ 1` | Number of tasks running normally |
-| `⏸ 0` | Number of tasks waiting for you |
+| `▶ 1` | Number of tasks that are still active |
 
 Open the menu to see every returned usage window, exact reset times, the Codex plan, task titles, the latest successful update time, and app actions.
 
@@ -42,29 +40,17 @@ The app queries up to the 50 most recently updated Codex tasks. Each task catego
 
 ## Task States
 
-### `▶` Running
+### `▶` Active
 
-A task is normally counted as running when Codex is reasoning, producing output, calling tools, or continuing after you approved or supplied something.
+A task is counted as active when Codex reports it as active, or when its recent session log has not completed and was updated within the last 30 minutes.
 
-### `⏸` Waiting for Action
-
-A task is normally counted as waiting when:
-
-- a privileged operation needs approval;
-- Plan mode is waiting for a choice;
-- a form or other manual input is required;
-- the completed response explicitly asks you to provide information, choose, upload, confirm, or reply;
-- the next step clearly depends on an action from you.
-
-Codex runtime flags and pending tool calls take priority. For completed turns, the app can inspect the full final response to determine whether a reply is still required. Code samples, quotations, optional suggestions, negative statements, and already completed actions are excluded where possible.
-
-Natural language is ambiguous, so occasional false positives or missed waiting states remain possible.
+The app no longer separates “running” from “waiting for user action,” and it does not inspect response text to infer whether you need to approve, choose, enter information, upload, or reply. This removes the false-positive-prone `⏸` classification.
 
 ### Completed and Failed Tasks
 
 Completed tasks are not shown. Completion markers are still recognized internally so a finished task is removed from `▶`.
 
-If Codex explicitly reports a system error, the menu shows an `⚠ Errors` count. Failed tasks are not included in `▶` or `⏸`.
+If Codex explicitly reports a system error, the menu shows an `⚠ Errors` count. Failed tasks are not included in `▶`.
 
 ## Refresh Behavior
 
@@ -113,13 +99,13 @@ The release archive uses the ASCII name `CodexQuotaMenu` to prevent GitHub from 
 Apple Silicon:
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.5.1-macOS-arm64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.5.2-macOS-arm64.zip.sha256
 ```
 
 Intel:
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.5.1-macOS-x86_64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.5.2-macOS-x86_64.zip.sha256
 ```
 
 An `OK` result confirms that the ZIP matches its checksum file. Download both files from the same official Release.
@@ -181,9 +167,9 @@ CODEX_CLI_PATH=/full/path/to/codex
 
 Apps launched from Finder do not normally inherit temporary environment variables from a Terminal session.
 
-### A running or waiting count looks wrong
+### The active-task count looks wrong
 
-Wait for the next five-second refresh or choose **Refresh Now**. Incomplete logs that have not changed for more than 30 minutes are not treated as running. Natural-language waiting detection may occasionally be incorrect.
+Wait for the next five-second refresh or choose **Refresh Now**. Incomplete logs that have not changed for more than 30 minutes are not treated as active.
 
 ## Quit and Uninstall
 

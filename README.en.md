@@ -2,7 +2,7 @@
 
 English | [简体中文](README.md)
 
-A native macOS menu bar utility that shows your remaining Codex usage, reset countdown, and the number of tasks that are running or waiting for you.
+A native macOS menu bar utility that shows your remaining Codex usage, reset countdown, and the number of currently active tasks.
 
 ![App icon](Resources/AppIcon-1024.png)
 
@@ -12,9 +12,8 @@ A native macOS menu bar utility that shows your remaining Codex usage, reset cou
 
 - Shows the remaining percentage, exact reset time, and countdown for Codex usage windows.
 - Shows every usage window returned by Codex and the current plan type.
-- Uses `▶` for the number of tasks that are running normally.
-- Uses `⏸` for the number of tasks waiting for approval, a choice, manual input, an upload, or a reply.
-- Lists recent running and waiting tasks in the menu and shows explicit error states.
+- Uses `▶` for the number of tasks that are still active.
+- Lists recent active tasks in the menu and shows explicit error states.
 - Refreshes every five seconds, supports an immediate manual refresh, and preserves the last successful result during temporary query failures.
 - Uses a text-only menu-bar display without a leading icon for a cleaner appearance.
 - Supports Follow System, Simplified Chinese, and English interface languages.
@@ -26,19 +25,18 @@ Completed tasks are not included in the menu bar counts, and no completed-task c
 ## Menu Bar Display
 
 ```text
-Codex 90% · 4h 25m · ▶ 1 | ⏸ 0
+Codex 90% · 4h 25m · ▶ 1
 ```
 
 | Display | Meaning |
 |---|---|
 | `Codex 90%` | Remaining percentage for the shortest usage window |
 | `4h 25m` | Time until that window resets |
-| `▶ 1` | Number of tasks currently running normally |
-| `⏸ 0` | Number of tasks waiting for approval, a choice, input, an upload, or a reply |
+| `▶ 1` | Number of tasks that are still active |
 
 Click the menu bar item to see all usage windows, plan type, recent task titles, error count, last update time, and the Refresh Now, Language, and Quit actions.
 
-Task state detection prioritizes Codex runtime flags and pending tool calls. If a completed response still requires user action, the app also evaluates the full current response locally. Natural language is ambiguous, so a small number of false positives or missed waiting states may still occur.
+The app no longer classifies tasks as waiting for user action and does not analyze response text to infer intent. Any task still marked active by Codex is counted under `▶`; a detected completion marker removes it from the count.
 
 ## Requirements
 
@@ -58,7 +56,7 @@ Do not download builds from unofficial mirror sites. Public release archives are
 ## How to Use
 
 1. Launch `Codex用量.app` from Applications. It has no main window or Dock icon; look for it in the macOS menu bar.
-2. Read the remaining usage, reset countdown, `▶` running count, and `⏸` waiting count directly from the menu bar.
+2. Read the remaining usage, reset countdown, and `▶` active-task count directly from the menu bar.
 3. Click the item for details. Choose **Refresh Now**, or press `R` while the menu is open, to query immediately.
 4. Choose **Language** to switch instantly between Follow System, Simplified Chinese, and English.
 5. Choose **Quit**, or press `Q` while the menu is open, to stop the app and its local status queries.
@@ -69,7 +67,7 @@ The app keeps a local Codex connection and queries every five seconds. “Real t
 
 ## Privacy
 
-The app queries usage and task metadata through a local Codex process. To identify running, waiting, and completed tasks, it may read up to the last 512 KB of relevant local Codex session logs. This may include task titles and the current turn's response.
+The app queries usage and task metadata through a local Codex process. To identify whether a task is still active or completed, it may read up to the last 512 KB of relevant local Codex session logs. It no longer analyzes response text to infer user intent.
 
 All such content is processed in memory. It is not copied, stored in a project database, uploaded, or used for telemetry. The only setting persisted by this app is the selected interface language.
 
@@ -87,7 +85,6 @@ See the [English privacy notice](PRIVACY.en.md) for the complete statement.
 - **No window appears:** This is a menu bar app. Check the top of the screen; it has no normal window or Dock icon.
 - **The menu stays on “Loading…” or `Codex --`:** Confirm that Codex or the ChatGPT desktop app is installed and signed in, then choose **Refresh Now** or restart this utility.
 - **`▶ 1` remains when no task is running:** Refresh first. An abnormally interrupted task that receives no further updates stops counting as running after 30 minutes.
-- **The `⏸` count looks wrong:** Refresh after completing the approval, choice, or reply. Local natural-language detection can occasionally produce a false positive or miss a waiting state.
 - **macOS cannot verify the developer:** Confirm that the archive came from this project's Release page and passed SHA-256 verification, then right-click the app in Finder and choose **Open**.
 
 See the [full product and usage guide](docs/product-and-usage.en.md) for additional troubleshooting and uninstall instructions.

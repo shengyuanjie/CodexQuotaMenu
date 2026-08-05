@@ -65,41 +65,28 @@ final class UsageParserTests: XCTestCase {
         XCTAssertEqual(TaskParser.stateFromLog(path: url.path, now: Date()), .running)
     }
 
-    func testDetectsPendingManualApproval() throws {
+    func testPendingManualApprovalStillCountsAsRunning() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jsonl")
         defer { try? FileManager.default.removeItem(at: url) }
         let log = """
         {"type":"event_msg","payload":{"type":"user_message"}}
         {"type":"response_item","payload":{"type":"custom_tool_call","call_id":"approval-1","name":"exec","input":"{\\"sandbox_permissions\\":\\"require_escalated\\",\\"justification\\":\\"允许？\\"}"}}
-        """
-        try Data(log.utf8).write(to: url)
-        XCTAssertEqual(TaskParser.stateFromLog(path: url.path, now: Date()), .waiting)
-    }
-
-    func testApprovalOutputReturnsTaskToRunning() throws {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jsonl")
-        defer { try? FileManager.default.removeItem(at: url) }
-        let log = """
-        {"type":"event_msg","payload":{"type":"user_message"}}
-        {"type":"response_item","payload":{"type":"custom_tool_call","call_id":"approval-1","name":"exec","input":"{\\"sandbox_permissions\\":\\"require_escalated\\",\\"justification\\":\\"允许？\\"}"}}
-        {"type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"approval-1","output":"approved"}}
         """
         try Data(log.utf8).write(to: url)
         XCTAssertEqual(TaskParser.stateFromLog(path: url.path, now: Date()), .running)
     }
 
-    func testUsesRuntimeWaitingFlagsWhenAvailable() throws {
+    func testActiveFlagsStillCountAsRunning() throws {
         let json = #"{"id":3,"result":{"data":[{"id":"wait","name":"等待选择","preview":"","updatedAt":2000,"status":{"type":"active","activeFlags":["waitingOnUserInput"]},"path":"/tmp/wait.jsonl"}]}}"#
         let snapshot = try TaskParser.parse(
             Data(json.utf8),
             now: Date(timeIntervalSince1970: 2_100),
             fileState: { _, _ in nil }
         )
-        XCTAssertEqual(snapshot.waiting.map(\.title), ["等待选择"])
-        XCTAssertTrue(snapshot.running.isEmpty)
+        XCTAssertEqual(snapshot.running.map(\.title), ["等待选择"])
     }
 
-    func testCompletedTurnThatRequestsInformationRemainsWaiting() throws {
+    func testCompletedTurnRequestingInformationRemainsCompleted() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jsonl")
         defer { try? FileManager.default.removeItem(at: url) }
         let log = """
@@ -108,35 +95,10 @@ final class UsageParserTests: XCTestCase {
         {"type":"event_msg","payload":{"type":"task_complete"}}
         """
         try Data(log.utf8).write(to: url)
-        XCTAssertEqual(TaskParser.stateFromLog(path: url.path, now: Date()), .waiting)
+        XCTAssertEqual(TaskParser.stateFromLog(path: url.path, now: Date()), .completed)
     }
 
-    func testRequestInEarlierFinalAnswerFragmentRemainsWaiting() throws {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jsonl")
-        defer { try? FileManager.default.removeItem(at: url) }
-        let log = """
-        {"type":"event_msg","payload":{"type":"user_message"}}
-        {"type":"event_msg","payload":{"type":"agent_message","phase":"final_answer","message":"请上传付款申请表，我收到后继续处理。"}}
-        {"type":"event_msg","payload":{"type":"agent_message","phase":"final_answer","message":"支持 PDF 或图片格式。"}}
-        {"type":"event_msg","payload":{"type":"task_complete"}}
-        """
-        try Data(log.utf8).write(to: url)
-        XCTAssertEqual(TaskParser.stateFromLog(path: url.path, now: Date()), .waiting)
-    }
-
-    func testRequestWithWordsBetweenPromptAndActionRemainsWaiting() throws {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jsonl")
-        defer { try? FileManager.default.removeItem(at: url) }
-        let log = """
-        {"type":"event_msg","payload":{"type":"user_message"}}
-        {"type":"event_msg","payload":{"type":"agent_message","phase":"final_answer","message":"请在下方列出的三个方案中选择一个，然后告诉我你的决定。"}}
-        {"type":"event_msg","payload":{"type":"task_complete"}}
-        """
-        try Data(log.utf8).write(to: url)
-        XCTAssertEqual(TaskParser.stateFromLog(path: url.path, now: Date()), .waiting)
-    }
-
-    func testOrdinaryCompletedAnswerDoesNotWaitForReply() throws {
+    func testOrdinaryCompletedAnswerIsCompleted() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jsonl")
         defer { try? FileManager.default.removeItem(at: url) }
         let log = """
@@ -148,7 +110,7 @@ final class UsageParserTests: XCTestCase {
         XCTAssertEqual(TaskParser.stateFromLog(path: url.path, now: Date()), .completed)
     }
 
-    func testCompletedStatementContainingActionWordDoesNotWait() throws {
+    func testCompletedStatementContainingActionWordRemainsCompleted() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jsonl")
         defer { try? FileManager.default.removeItem(at: url) }
         let log = """
@@ -160,32 +122,7 @@ final class UsageParserTests: XCTestCase {
         XCTAssertEqual(TaskParser.stateFromLog(path: url.path, now: Date()), .completed)
     }
 
-    func testInformationalDescriptionOfWaitingFeatureDoesNotWait() {
-        let reply = "应用会判断本轮回复是否要求你提供、填写、选择或上传信息，并据此显示状态。"
-        XCTAssertFalse(ReplyIntentClassifier.isWaitingForUser(fullReply: reply))
-    }
-
-    func testOptionalSuggestionDoesNotWait() {
-        let reply = "你可以在菜单中选择“立即刷新”查看最新状态。如果还需要调整，我可以继续。"
-        XCTAssertFalse(ReplyIntentClassifier.isWaitingForUser(fullReply: reply))
-    }
-
-    func testQuotedExampleDoesNotWait() {
-        let reply = "误判示例是 `请上传文件并回复我`，该句只是用于解释判定规则。"
-        XCTAssertFalse(ReplyIntentClassifier.isWaitingForUser(fullReply: reply))
-    }
-
-    func testDirectQuestionRequiresReply() {
-        let reply = "目前有两种显示方案。你希望选择哪一种？两者都不会显示完成数量。"
-        XCTAssertTrue(ReplyIntentClassifier.isWaitingForUser(fullReply: reply))
-    }
-
-    func testContinuationDependencyRequiresReply() {
-        let reply = "资料上传后，我会继续生成安装包。"
-        XCTAssertTrue(ReplyIntentClassifier.isWaitingForUser(fullReply: reply))
-    }
-
-    func testUserReplyClearsPreviousWaitingState() throws {
+    func testUserReplyStartsNewRunningTurnAfterCompletion() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jsonl")
         defer { try? FileManager.default.removeItem(at: url) }
         let log = """
