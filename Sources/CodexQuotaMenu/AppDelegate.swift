@@ -54,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func render(_ snapshot: UsageSnapshot, tasks: TaskSnapshot) {
         if let window = snapshot.headlineWindow {
             let reset = window.resetsAt.map { " · \(text.shortRemaining(until: $0))" } ?? ""
-            let taskStatus = " · ▶ \(tasks.running.count) \(text.taskDivider) ⏸ \(tasks.waiting.count)"
+            let taskStatus = " · ▶ \(tasks.running.count)"
             setMenuBarTitle("Codex \(window.remainingPercent)%\(reset)\(taskStatus)")
         }
 
@@ -127,10 +127,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for task in snapshot.running.prefix(5) {
             menu.addItem(disabledItem("  ▶ \(task.title)"))
         }
-        menu.addItem(disabledItem(text.waitingDescription(snapshot.waiting.count)))
-        for task in snapshot.waiting.prefix(5) {
-            menu.addItem(disabledItem("  ⏸ \(task.title)"))
-        }
         if !snapshot.failed.isEmpty {
             menu.addItem(disabledItem(text.failedDescription(snapshot.failed.count)))
         }
@@ -143,20 +139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setMenuBarTitle(_ title: String) {
-        let baseFont = NSFont.menuBarFont(ofSize: 0)
-        let attributed = NSMutableAttributedString(
-            string: title,
-            attributes: [.font: baseFont]
-        )
-        let pauseRange = (title as NSString).range(of: "⏸")
-        if pauseRange.location != NSNotFound {
-            let pauseFont = NSFont.menuBarFont(ofSize: baseFont.pointSize + 2)
-            attributed.addAttributes([
-                .font: pauseFont,
-                .baselineOffset: -0.6
-            ], range: pauseRange)
-        }
-        statusItem.button?.attributedTitle = attributed
+        statusItem.button?.title = title
     }
 
     @objc private func refreshClicked() { refresh() }
@@ -184,8 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .joined(separator: text.language == .simplifiedChinese ? "，" : ", ")
             let message = text.connectionSuccess(
                 summary: summary,
-                running: tasks.running.count,
-                waiting: tasks.waiting.count
+                running: tasks.running.count
             )
             FileHandle.standardOutput.write(Data("\(message)\n".utf8))
             exit(EXIT_SUCCESS)

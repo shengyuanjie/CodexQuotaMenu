@@ -86,10 +86,6 @@ struct AppText {
 
     var languageEnglish: String { "English" }
 
-    var taskDivider: String {
-        language == .simplifiedChinese ? "｜" : "|"
-    }
-
     func languageName(_ selection: AppLanguage) -> String {
         switch selection {
         case .system: languageSystem
@@ -156,12 +152,6 @@ struct AppText {
             : "▶ Running: \(count)"
     }
 
-    func waitingDescription(_ count: Int) -> String {
-        language == .simplifiedChinese
-            ? "⏸ 等待手动操作：\(count)"
-            : "⏸ Waiting for Action: \(count)"
-    }
-
     func failedDescription(_ count: Int) -> String {
         language == .simplifiedChinese
             ? "⚠ 异常：\(count)"
@@ -179,11 +169,11 @@ struct AppText {
             : message
     }
 
-    func connectionSuccess(summary: String, running: Int, waiting: Int) -> String {
+    func connectionSuccess(summary: String, running: Int) -> String {
         if language == .simplifiedChinese {
-            return "连接成功：\(summary)，正常执行 \(running)，等待操作 \(waiting)"
+            return "连接成功：\(summary)，正在执行 \(running)"
         }
-        return "Connected: \(summary); running \(running), waiting for action \(waiting)"
+        return "Connected: \(summary); running \(running)"
     }
 
     func connectionFailure(_ message: String) -> String {
