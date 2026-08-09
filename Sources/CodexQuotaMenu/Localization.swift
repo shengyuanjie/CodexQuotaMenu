@@ -185,7 +185,10 @@ struct AppText {
         if seconds >= 86_400 {
             let days = seconds / 86_400
             let hours = (seconds % 86_400) / 3_600
-            return language == .simplifiedChinese ? "\(days)天\(hours)时" : "\(days)d \(hours)h"
+            let minutes = (seconds % 3_600) / 60
+            return language == .simplifiedChinese
+                ? "\(days)天\(hours)时\(minutes)分"
+                : "\(days)d \(hours)h \(minutes)m"
         }
         if seconds >= 3_600 {
             let hours = seconds / 3_600

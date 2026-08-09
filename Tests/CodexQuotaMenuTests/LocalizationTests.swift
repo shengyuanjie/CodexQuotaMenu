@@ -53,6 +53,20 @@ final class LocalizationTests: XCTestCase {
         )
     }
 
+    func testMultiDayRemainingTimeIncludesMinutes() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let later = now.addingTimeInterval(6 * 86_400 + 23 * 3_600 + 7 * 60)
+
+        XCTAssertEqual(
+            AppText(language: .simplifiedChinese).shortRemaining(until: later, now: now),
+            "6天23时7分"
+        )
+        XCTAssertEqual(
+            AppText(language: .english).shortRemaining(until: later, now: now),
+            "6d 23h 7m"
+        )
+    }
+
     func testKnownErrorsAreLocalized() {
         XCTAssertEqual(
             AppText(language: .simplifiedChinese).errorDescription(UsageError.timedOut),
