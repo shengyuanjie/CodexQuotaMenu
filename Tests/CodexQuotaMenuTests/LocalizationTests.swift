@@ -55,7 +55,10 @@ final class LocalizationTests: XCTestCase {
 
     func testMultiDayRemainingTimeIncludesMinutes() {
         let now = Date(timeIntervalSince1970: 1_000_000)
-        let later = now.addingTimeInterval(6 * 86_400 + 23 * 3_600 + 7 * 60)
+        let days: TimeInterval = 6 * 86_400
+        let hours: TimeInterval = 23 * 3_600
+        let minutes: TimeInterval = 7 * 60
+        let later = now.addingTimeInterval(days + hours + minutes)
 
         XCTAssertEqual(
             AppText(language: .simplifiedChinese).shortRemaining(until: later, now: now),
