@@ -2,7 +2,7 @@
 
 English | [简体中文](product-and-usage.md)
 
-Version: v1.5.2
+Version: v1.5.3
 
 System: macOS 14 or later
 
@@ -99,13 +99,13 @@ The release archive uses the ASCII name `CodexQuotaMenu` to prevent GitHub from 
 Apple Silicon:
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.5.2-macOS-arm64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.5.3-macOS-arm64.zip.sha256
 ```
 
 Intel:
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.5.2-macOS-x86_64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.5.3-macOS-x86_64.zip.sha256
 ```
 
 An `OK` result confirms that the ZIP matches its checksum file. Download both files from the same official Release.

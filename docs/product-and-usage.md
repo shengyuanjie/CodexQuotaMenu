@@ -2,7 +2,7 @@
 
 [English](product-and-usage.en.md) | 简体中文
 
-适用版本：v1.5.2
+适用版本：v1.5.3
 
 适用系统：macOS 14 或更高版本
 
@@ -154,13 +154,13 @@ uname -m
 Apple Silicon：
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.5.2-macOS-arm64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.5.3-macOS-arm64.zip.sha256
 ```
 
 Intel：
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.5.2-macOS-x86_64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.5.3-macOS-x86_64.zip.sha256
 ```
 
 显示 `OK` 表示 ZIP 与发布时生成的校验值一致。校验只能证明文件与对应校验清单匹配，因此 ZIP 和 `.sha256` 都应从本项目的同一个 GitHub Release 下载。
