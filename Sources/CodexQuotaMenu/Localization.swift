@@ -64,6 +64,16 @@ struct AppText {
         language == .simplifiedChinese ? "当前任务" : "Current Tasks"
     }
 
+    var globalResetForecastHeading: String {
+        language == .simplifiedChinese ? "全局额外重置预测" : "Global Bonus Reset Forecast"
+    }
+
+    var strongSignalDescription: String {
+        language == .simplifiedChinese
+            ? "⚡ Tibo 强信号，可能即将重置或正在落地"
+            : "⚡ Strong Tibo signal: a reset may be imminent or landing"
+    }
+
     var refreshAction: String {
         language == .simplifiedChinese ? "立即刷新" : "Refresh Now"
     }
@@ -144,6 +154,51 @@ struct AppText {
             return "更新：\(updateTime(date)) · 实时连接 / 5 秒校准"
         }
         return "Updated: \(updateTime(date)) · persistent connection / 5-second refresh"
+    }
+
+    func forecast24hDescription(_ probability: Int?) -> String {
+        let value = probability.map { "\($0)%" } ?? "--"
+        return language == .simplifiedChinese
+            ? "未来 24 小时：\(value)"
+            : "Next 24 hours: \(value)"
+    }
+
+    func forecast48hDescription(_ probability: Int?) -> String {
+        let value = probability.map { "\($0)%" } ?? "--"
+        return language == .simplifiedChinese
+            ? "未来 48 小时：\(value)"
+            : "Next 48 hours: \(value)"
+    }
+
+    func forecastConfidenceDescription(_ confidence: ForecastConfidence?) -> String {
+        let value: String
+        switch (language, confidence) {
+        case (.simplifiedChinese, .low?): value = "低"
+        case (.simplifiedChinese, .medium?): value = "中"
+        case (.simplifiedChinese, .high?): value = "高"
+        case (.english, .low?): value = "Low"
+        case (.english, .medium?): value = "Medium"
+        case (.english, .high?): value = "High"
+        case (_, nil): value = "--"
+        }
+        return language == .simplifiedChinese ? "置信度：\(value)" : "Confidence: \(value)"
+    }
+
+    func forecastStatusDescription(_ status: ForecastDisplayStatus) -> String {
+        let value: String
+        switch (language, status) {
+        case (.simplifiedChinese, .recentlyReset): value = "最近已全局重置"
+        case (.simplifiedChinese, .strongSignal): value = "Tibo 强信号"
+        case (.simplifiedChinese, .forecast): value = "常规预测"
+        case (.simplifiedChinese, .cached): value = "数据延迟"
+        case (.simplifiedChinese, .unavailable): value = "暂无可信预测"
+        case (.english, .recentlyReset): value = "Recently reset globally"
+        case (.english, .strongSignal): value = "Strong Tibo signal"
+        case (.english, .forecast): value = "Regular forecast"
+        case (.english, .cached): value = "Delayed data"
+        case (.english, .unavailable): value = "No reliable forecast"
+        }
+        return language == .simplifiedChinese ? "状态：\(value)" : "Status: \(value)"
     }
 
     func runningDescription(_ count: Int) -> String {

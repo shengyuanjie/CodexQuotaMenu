@@ -80,4 +80,29 @@ final class LocalizationTests: XCTestCase {
             "Reading Codex usage timed out"
         )
     }
+
+    func testForecastDetailsAreLocalizedWithoutConfusingScheduledReset() {
+        let chinese = AppText(language: .simplifiedChinese)
+        let english = AppText(language: .english)
+
+        XCTAssertEqual(chinese.globalResetForecastHeading, "全局额外重置预测")
+        XCTAssertEqual(english.globalResetForecastHeading, "Global Bonus Reset Forecast")
+        XCTAssertEqual(chinese.forecast24hDescription(30), "未来 24 小时：30%")
+        XCTAssertEqual(english.forecast48hDescription(50), "Next 48 hours: 50%")
+        XCTAssertEqual(chinese.forecastConfidenceDescription(.medium), "置信度：中")
+        XCTAssertEqual(english.forecastConfidenceDescription(.high), "Confidence: High")
+        XCTAssertEqual(chinese.forecastStatusDescription(.recentlyReset), "状态：最近已全局重置")
+        XCTAssertEqual(english.forecastStatusDescription(.cached), "Status: Delayed data")
+        XCTAssertEqual(chinese.strongSignalDescription, "⚡ Tibo 强信号，可能即将重置或正在落地")
+        XCTAssertEqual(english.strongSignalDescription, "⚡ Strong Tibo signal: a reset may be imminent or landing")
+    }
+
+    func testUnavailableForecastDescriptionsDoNotInventPercentages() {
+        let chinese = AppText(language: .simplifiedChinese)
+        let english = AppText(language: .english)
+
+        XCTAssertEqual(chinese.forecast24hDescription(nil), "未来 24 小时：--")
+        XCTAssertEqual(english.forecastConfidenceDescription(nil), "Confidence: --")
+        XCTAssertEqual(chinese.forecastStatusDescription(.unavailable), "状态：暂无可信预测")
+    }
 }
