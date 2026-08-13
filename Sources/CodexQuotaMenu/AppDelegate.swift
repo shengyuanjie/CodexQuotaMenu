@@ -31,10 +31,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        if ProcessInfo.processInfo.arguments.contains("--check") {
-            runConnectionCheck()
-            return
-        }
         statusItem.button?.title = text.loadingTitle
         rebuildMenu(message: text.loadingMessage)
         if widgetPreferences.isServerEnabled {
@@ -322,26 +318,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         languageSelection = selection
         languageSelection.save()
         renderCurrentState()
-    }
-
-    private func runConnectionCheck() {
-        do {
-            let snapshot = try client.fetchUsage()
-            let tasks = try client.fetchTasks()
-            let summary = snapshot.windows
-                .map { text.remainingUsage(window: $0) }
-                .joined(separator: text.language == .simplifiedChinese ? "，" : ", ")
-            let message = text.connectionSuccess(
-                summary: summary,
-                running: tasks.running.count
-            )
-            FileHandle.standardOutput.write(Data("\(message)\n".utf8))
-            exit(EXIT_SUCCESS)
-        } catch {
-            let message = text.connectionFailure(text.errorDescription(error))
-            FileHandle.standardError.write(Data("\(message)\n".utf8))
-            exit(EXIT_FAILURE)
-        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
