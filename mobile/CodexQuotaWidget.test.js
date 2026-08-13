@@ -9,7 +9,9 @@ const {
   nextRefreshDate,
   makeRefreshDiagnostic,
   pruneRefreshDiagnostics,
-  appendRefreshDiagnostic
+  appendRefreshDiagnostic,
+  formatRefreshFeedback,
+  calculateRefreshStats
 } = require("./CodexQuotaWidget.js")
 
 assert.equal(resolveRunMode({ runsInWidget: true, runsInApp: false }, "refresh"), "widget")
@@ -88,6 +90,72 @@ assert.equal(formatInlineSummary(85, "2026-08-13T08:40:00Z", 23, fixedNow), "剩
 assert.equal(formatInlineSummary(85, "2026-08-13T05:40:00Z", 23, fixedNow), "剩85% 余40分 Tibo23%")
 assert.equal(formatInlineSummary(85, "2026-08-13T04:59:00Z", 23, fixedNow), "剩85% 余待重置 Tibo23%")
 assert.equal(formatInlineSummary(null, null, null, fixedNow), "剩-- 余-- Tibo--")
+
+const validLivePayload = validatePayload({
+  schemaVersion: 2,
+  generatedAt: "2026-08-13T05:00:00.000Z",
+  quotaStatus: "fresh",
+  quota: {
+    weeklyRemainingPercent: 85,
+    weeklyResetsAt: "2026-08-20T05:00:00.000Z",
+    shortRemainingPercent: 90,
+    shortResetsAt: "2026-08-13T09:00:00.000Z"
+  },
+  tasks: { runningCount: 0 },
+  forecastStatus: "fresh",
+  forecast: {
+    probability48h: 23,
+    calibrationState: "experimental",
+    updatedAt: "2026-08-13T05:00:00.000Z",
+    isCached: false,
+    source: "codexreset.org"
+  }
+})
+
+assert.deepEqual(formatRefreshFeedback({
+  payload: validLivePayload,
+  receivedAt: "2026-08-13T05:00:00.000Z",
+  offline: false,
+  errorCode: null,
+  statusCode: 200
+}, fixedNow), {
+  title: "实时刷新成功",
+  message: "剩85% 余7天 Tibo23%\n锁屏重绘时间由 iOS 决定。"
+})
+
+assert.deepEqual(formatRefreshFeedback({
+  payload: validLivePayload,
+  receivedAt: "2026-08-13T04:30:00.000Z",
+  offline: true,
+  errorCode: "network",
+  statusCode: null
+}, fixedNow), {
+  title: "实时连接失败",
+  message: "已使用本地缓存：剩85% 余7天 Tibo23%\n请检查 Shadowrocket 回家链路。"
+})
+
+assert.deepEqual(formatRefreshFeedback({
+  payload: null,
+  receivedAt: null,
+  offline: true,
+  errorCode: "network",
+  statusCode: null
+}, fixedNow), {
+  title: "刷新失败",
+  message: "没有可用缓存。请检查 Shadowrocket 回家链路。"
+})
+
+assert.deepEqual(calculateRefreshStats([
+  { completedAt: "2026-08-13T05:00:00.000Z" },
+  { completedAt: "2026-08-13T05:07:00.000Z" },
+  { completedAt: "2026-08-13T05:20:00.000Z" }
+]), {
+  count: 3,
+  averageIntervalMinutes: 10,
+  minimumIntervalMinutes: 7,
+  maximumIntervalMinutes: 13,
+  lastCompletedAt: "2026-08-13T05:20:00.000Z"
+})
 
 const renderedTexts = []
 globalThis.config = { widgetFamily: "accessoryInline" }

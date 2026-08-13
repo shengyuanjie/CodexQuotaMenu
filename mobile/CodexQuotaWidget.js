@@ -12,8 +12,10 @@ const DIAGNOSTIC_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000
 const DIAGNOSTIC_MAX_ENTRIES = 200
 
 async function main() {
+  const widgetParameter = typeof args === "undefined" ? null : args.widgetParameter
+  const runMode = resolveRunMode(config, widgetParameter)
   let credentials = loadCredentials()
-  if (config.runsInApp) {
+  if (runMode === "app") {
     const configured = await presentConfiguration(credentials)
     if (configured) credentials = configured
   }
@@ -23,16 +25,39 @@ async function main() {
       "Codex 周余量 --",
       "请在 Scriptable 中完成配置"
     )
-    await finish(widget, config.runsInApp)
+    if (runMode === "refresh") {
+      Script.setWidget(widget)
+      await presentMissingConfiguration()
+      Script.complete()
+    } else {
+      await finish(widget, runMode === "app")
+    }
     return
   }
 
+  const startedAt = Date.now()
   const result = await loadCurrentOrCached(credentials)
+  const completedAt = Date.now()
+  appendRefreshDiagnostic(makeRefreshDiagnostic({
+    completedAt: new Date(completedAt).toISOString(),
+    runMode,
+    offline: result.offline,
+    hasPayload: Boolean(result.payload),
+    errorCode: result.errorCode,
+    statusCode: result.statusCode,
+    durationMs: completedAt - startedAt
+  }))
   const widget = buildQuotaWidget(result)
-  if (config.runsInApp && result.errorCode) {
+  if (runMode === "refresh") {
+    Script.setWidget(widget)
+    await presentRefreshResult(result)
+    Script.complete()
+    return
+  }
+  if (runMode === "app" && result.errorCode) {
     await presentConnectionError(result.errorCode, result.statusCode)
   }
-  await finish(widget, config.runsInApp)
+  await finish(widget, runMode === "app")
 }
 
 function resolveRunMode(runtimeConfig, widgetParameter) {
@@ -107,10 +132,15 @@ async function presentConfiguration(existing) {
   alert.addTextField("http://192.168.x.x:47821", existing?.baseURL || "")
   alert.addSecureTextField("64 位访问令牌", existing?.token || "")
   alert.addAction("保存并测试")
+  alert.addAction("查看刷新记录")
   alert.addCancelAction("取消")
 
   const choice = await alert.presentAlert()
   if (choice === -1) return existing
+  if (choice === 1) {
+    await presentRefreshDiagnostics()
+    return existing
+  }
 
   try {
     const credentials = validateCredentials(
@@ -306,6 +336,17 @@ function loadCache() {
   }
 }
 
+function readRefreshDiagnostics(manager = FileManager.local()) {
+  try {
+    const path = manager.joinPath(manager.documentsDirectory(), DIAGNOSTIC_FILE)
+    if (!manager.fileExists(path)) return []
+    const parsed = JSON.parse(manager.readString(path))
+    return pruneRefreshDiagnostics(parsed, Date.now())
+  } catch (_) {
+    return []
+  }
+}
+
 function buildQuotaWidget(result) {
   if (!result.payload) {
     return buildMessageWidget("Codex 周余量 --", "Mac 离线 · 暂无缓存")
@@ -394,6 +435,102 @@ function formatInlineSummary(weeklyPercent, weeklyResetsAt, probability48h, now)
   return `剩${quota} 余${remaining} Tibo${probability}`
 }
 
+function inlineSummaryForResult(result, now) {
+  if (!result?.payload) return "剩-- 余-- Tibo--"
+  const payload = result.payload
+  const receivedTime = Date.parse(result.receivedAt || payload.generatedAt)
+  const cacheAge = now - receivedTime
+  if (result.offline && (
+    cacheAge < -FUTURE_TOLERANCE_MS ||
+    cacheAge > FORECAST_MAX_AGE_MS
+  )) return "剩-- 余-- Tibo--"
+
+  const quota = payload.quotaStatus === "fresh" ? payload.quota : null
+  const forecast = payload.forecast
+  const probability48h = forecast?.updatedAt && isRecentDate(forecast.updatedAt, now) && Number.isInteger(forecast.probability48h)
+    ? forecast.probability48h
+    : null
+  return formatInlineSummary(
+    quota?.weeklyRemainingPercent ?? null,
+    quota?.weeklyResetsAt || null,
+    probability48h,
+    now
+  )
+}
+
+function formatRefreshFeedback(result, now) {
+  if (!result?.payload) {
+    return {
+      title: "刷新失败",
+      message: `没有可用缓存。${refreshFailureHint(result?.errorCode)}`
+    }
+  }
+
+  const receivedTime = Date.parse(result.receivedAt || result.payload.generatedAt)
+  const cacheAge = now - receivedTime
+  const cacheExpired = result.offline && (
+    cacheAge < -FUTURE_TOLERANCE_MS ||
+    cacheAge > FORECAST_MAX_AGE_MS
+  )
+  if (cacheExpired) {
+    return {
+      title: "刷新失败",
+      message: `本地缓存已超过两小时。${refreshFailureHint(result.errorCode)}`
+    }
+  }
+
+  const summary = inlineSummaryForResult(result, now)
+  if (result.offline) {
+    return {
+      title: "实时连接失败",
+      message: `已使用本地缓存：${summary}\n${refreshFailureHint(result.errorCode)}`
+    }
+  }
+  return {
+    title: "实时刷新成功",
+    message: `${summary}\n锁屏重绘时间由 iOS 决定。`
+  }
+}
+
+function refreshFailureHint(errorCode) {
+  if (errorCode === "unauthorized") return "请从 Mac 菜单重新复制访问令牌。"
+  if (errorCode === "invalid_payload") return "Mac 与手机脚本版本不兼容。"
+  if (errorCode === "http") return "Mac 接口返回错误。"
+  return "请检查 Shadowrocket 回家链路。"
+}
+
+function calculateRefreshStats(entries) {
+  const times = (Array.isArray(entries) ? entries : [])
+    .map(entry => ({ completedAt: entry?.completedAt, time: Date.parse(entry?.completedAt) }))
+    .filter(entry => Number.isFinite(entry.time))
+    .sort((left, right) => left.time - right.time)
+  if (times.length === 0) {
+    return {
+      count: 0,
+      averageIntervalMinutes: null,
+      minimumIntervalMinutes: null,
+      maximumIntervalMinutes: null,
+      lastCompletedAt: null
+    }
+  }
+
+  const intervals = []
+  for (let index = 1; index < times.length; index += 1) {
+    const interval = times[index].time - times[index - 1].time
+    if (interval >= 0) intervals.push(interval / 60000)
+  }
+  const rounded = value => Math.round(value * 10) / 10
+  return {
+    count: times.length,
+    averageIntervalMinutes: intervals.length > 0
+      ? rounded(intervals.reduce((sum, value) => sum + value, 0) / intervals.length)
+      : null,
+    minimumIntervalMinutes: intervals.length > 0 ? rounded(Math.min(...intervals)) : null,
+    maximumIntervalMinutes: intervals.length > 0 ? rounded(Math.max(...intervals)) : null,
+    lastCompletedAt: times[times.length - 1].completedAt
+  }
+}
+
 function formatClock(value) {
   const date = new Date(value)
   const hours = String(date.getHours()).padStart(2, "0")
@@ -441,6 +578,42 @@ async function presentConnectionError(code, statusCode) {
   await alert.presentAlert()
 }
 
+async function presentMissingConfiguration() {
+  const alert = new Alert()
+  alert.title = "尚未配置"
+  alert.message = "请先手动打开 Scriptable 运行脚本并完成配置。"
+  alert.addAction("好")
+  await alert.presentAlert()
+}
+
+async function presentRefreshResult(result) {
+  const feedback = formatRefreshFeedback(result, Date.now())
+  const alert = new Alert()
+  alert.title = feedback.title
+  alert.message = feedback.message
+  alert.addAction("好")
+  await alert.presentAlert()
+}
+
+async function presentRefreshDiagnostics() {
+  const entries = readRefreshDiagnostics().filter(entry => entry.runMode === "widget")
+  const stats = calculateRefreshStats(entries)
+  const alert = new Alert()
+  alert.title = "后台刷新记录"
+  if (stats.count === 0) {
+    alert.message = "还没有后台小组件刷新记录。"
+  } else {
+    const last = new Date(stats.lastCompletedAt)
+    const lastText = `${last.getMonth() + 1}月${last.getDate()}日 ${formatClock(stats.lastCompletedAt)}`
+    const intervalText = stats.averageIntervalMinutes == null
+      ? "需要至少两次后台刷新才能计算间隔。"
+      : `平均 ${stats.averageIntervalMinutes} 分钟\n最短 ${stats.minimumIntervalMinutes} 分钟\n最长 ${stats.maximumIntervalMinutes} 分钟`
+    alert.message = `最近3天共 ${stats.count} 次\n${intervalText}\n最近一次 ${lastText}`
+  }
+  alert.addAction("好")
+  await alert.presentAlert()
+}
+
 async function finish(widget, presentPreview) {
   Script.setWidget(widget)
   if (presentPreview) await widget.presentAccessoryRectangular()
@@ -457,7 +630,9 @@ if (typeof module !== "undefined") {
     nextRefreshDate,
     makeRefreshDiagnostic,
     pruneRefreshDiagnostics,
-    appendRefreshDiagnostic
+    appendRefreshDiagnostic,
+    formatRefreshFeedback,
+    calculateRefreshStats
   }
 }
 
