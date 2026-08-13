@@ -271,8 +271,11 @@ function buildQuotaWidget(result) {
   const probabilityUsable = forecast?.updatedAt
     ? isRecentDate(forecast.updatedAt, now)
     : false
-  const probabilityText = probabilityUsable && Number.isInteger(forecast?.probability48h)
-    ? `↻48h ${forecast.probability48h}%`
+  const probabilityValue = probabilityUsable && Number.isInteger(forecast?.probability48h)
+    ? forecast.probability48h
+    : null
+  const probabilityText = Number.isInteger(probabilityValue)
+    ? `↻48h ${probabilityValue}%`
     : null
 
   let detail
@@ -289,7 +292,13 @@ function buildQuotaWidget(result) {
     parts.push(probabilityText || "↻48h --")
     detail = parts.length > 0 ? parts.join(" · ") : "余量或预测暂不可用"
   }
-  return buildMessageWidget(title, detail, strong)
+  const inlineText = formatInlineSummary(
+    weeklyPercent,
+    quota?.weeklyResetsAt || null,
+    probabilityValue,
+    now
+  )
+  return buildMessageWidget(title, detail, strong, inlineText)
 }
 
 function isRecentDate(value, now) {
@@ -312,6 +321,22 @@ function formatRemaining(value, now) {
   return `${Math.max(1, Math.floor(seconds / 60))}分后恢复`
 }
 
+function formatInlineRemaining(value, now) {
+  if (typeof value !== "string" || !Number.isFinite(Date.parse(value))) return "--"
+  const seconds = Math.floor((Date.parse(value) - now) / 1000)
+  if (seconds <= 0) return "待重置"
+  if (seconds >= 86400) return `${Math.floor(seconds / 86400)}天`
+  if (seconds >= 3600) return `${Math.floor(seconds / 3600)}时`
+  return `${Math.max(1, Math.floor(seconds / 60))}分`
+}
+
+function formatInlineSummary(weeklyPercent, weeklyResetsAt, probability48h, now) {
+  const quota = Number.isInteger(weeklyPercent) ? `${weeklyPercent}%` : "--"
+  const remaining = formatInlineRemaining(weeklyResetsAt, now)
+  const probability = Number.isInteger(probability48h) ? `${probability48h}%` : "--"
+  return `◔${quota} · ⏱︎${remaining} · ↻${probability}`
+}
+
 function formatClock(value) {
   const date = new Date(value)
   const hours = String(date.getHours()).padStart(2, "0")
@@ -319,9 +344,17 @@ function formatClock(value) {
   return `${hours}:${minutes}`
 }
 
-function buildMessageWidget(title, detail, strong = false) {
+function buildMessageWidget(title, detail, strong = false, inlineText = "◔-- · ⏱︎-- · ↻--") {
   const widget = new ListWidget()
   widget.setPadding(0, 0, 0, 0)
+  if (config.widgetFamily === "accessoryInline") {
+    const text = widget.addText(inlineText)
+    text.font = Font.semiboldSystemFont(13)
+    text.lineLimit = 1
+    text.minimumScaleFactor = 0.7
+    widget.refreshAfterDate = new Date(Date.now() + REFRESH_INTERVAL_MS)
+    return widget
+  }
   const titleText = widget.addText(title)
   titleText.font = Font.semiboldSystemFont(13)
   titleText.lineLimit = 1
@@ -358,7 +391,7 @@ async function finish(widget, presentPreview) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { validatePayload, isRecentDate }
+  module.exports = { validatePayload, isRecentDate, formatInlineSummary, buildMessageWidget }
 }
 
 if (!globalThis.__CODEX_WIDGET_TEST__) (async () => {
