@@ -13,7 +13,7 @@ A native macOS menu bar utility that shows remaining Codex usage, reset countdow
 - Shows the remaining percentage, exact reset time, and countdown for Codex usage windows.
 - Shows every usage window returned by Codex and the current plan type.
 - Uses `▶` for the number of tasks that are still active.
-- Uses `↻` for the primary 24-hour global bonus-reset probability. `⚡` is a separate fast Tibo signal and is never averaged into that probability.
+- Uses `↻48h` for the single next-48-hour global bonus-reset probability from Codex Reset Monitor.
 - Lists recent active tasks in the menu and shows explicit error states.
 - Refreshes every five seconds, supports an immediate manual refresh, and preserves the last successful result during temporary query failures.
 - Refreshes public forecasts independently every five minutes and hides primary forecast cache data after two hours.
@@ -38,7 +38,7 @@ Codex 90% · 4h 25m · ↻30% · ▶ 1
 | `↻30%` | Primary probability of a global bonus reset in the next 24 hours |
 | `▶ 1` | Number of tasks that are still active |
 
-Open the menu for every usage window, 24/48-hour forecasts, confidence, the separate `⚡` signal, recent task titles, errors, and update times. The **Phone Widget** submenu controls the read-only local feed and copies its address or access token.
+Open the menu for every usage window, the 48-hour forecast and source, recent task titles, errors, and update times. The **Phone Widget** submenu controls the read-only local feed and copies its address or access token.
 
 Global bonus-reset probabilities are public community forecasts. They express uncertainty and are neither an official schedule nor a guarantee.
 
@@ -78,7 +78,7 @@ The app queries usage and task metadata through a local Codex process. To identi
 
 All session content is processed in memory. It is not copied, stored in a project database, uploaded, or used for telemetry.
 
-Forecasting performs GET requests only to `codex-reset.com/api/forecast` and `codexreset.org/api/monitor-summary`; no personal usage, task, identity, or Codex credential is sent. `UserDefaults` stores the public primary-forecast cache and the phone-feed toggle, while the phone access token is stored in macOS Keychain. The default-off phone response contains aggregate values only.
+Forecasting performs GET requests only to `codexreset.org/api/monitor-summary` and displays only its next-48-hour probability; no personal usage, task, identity, or Codex credential is sent. `UserDefaults` stores the public forecast cache and phone-feed toggle, while the phone access token is stored in macOS Keychain. The default-off phone response contains aggregate values only.
 
 See the [English privacy notice](PRIVACY.en.md) for the complete statement.
 

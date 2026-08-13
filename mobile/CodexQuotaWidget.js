@@ -357,7 +357,11 @@ async function finish(widget, presentPreview) {
   Script.complete()
 }
 
-;(async () => {
+if (typeof module !== "undefined") {
+  module.exports = { validatePayload, isRecentDate }
+}
+
+if (!globalThis.__CODEX_WIDGET_TEST__) (async () => {
   try {
     await main()
   } catch (_) {

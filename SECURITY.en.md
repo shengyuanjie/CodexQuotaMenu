@@ -30,7 +30,7 @@ Do not submit account tokens, API keys, passwords, complete session logs, or ano
 
 ## External Forecast Boundary
 
-The app makes public GET requests only to `codex-reset.com/api/forecast` and `codexreset.org/api/monitor-summary`. It sends no personal usage, task, identity, session, or Codex credential data. Only the former supplies the primary probability; the latter can only trigger the separate `⚡` signal.
+The app makes public GET requests only to `codexreset.org/api/monitor-summary` and uses only its next-48-hour probability. It sends no personal usage, task, identity, session, or Codex credential data.
 
 ## Release Boundaries
 

@@ -2,7 +2,7 @@
 
 English | [简体中文](product-and-usage.md)
 
-Version: v1.6.0
+Version: v1.6.1
 
 System: macOS 14 or later
 
@@ -15,7 +15,7 @@ Codex Usage is a native macOS menu bar utility for checking:
 - remaining Codex usage;
 - reset dates and countdowns;
 - tasks that are currently active;
-- the primary probability of a global bonus reset, plus a separate fast Tibo signal.
+- the next-48-hour probability of a global bonus reset from Codex Reset Monitor.
 
 The app has no main window or Dock icon. Completed-task counts are intentionally omitted.
 
@@ -64,7 +64,7 @@ Choose **Refresh Now** or press `R` while the menu is open to refresh immediatel
 
 If a refresh fails after a successful result, the menu bar keeps the last result and the menu shows the error. Automatic reconnection attempts continue.
 
-Forecasts refresh independently every five minutes. `codex-reset.com/api/forecast` is the only primary probability source. `codexreset.org/api/monitor-summary` can only trigger the separate `⚡ Tibo` signal and is never averaged into the primary value. Primary data is marked cached after 15 minutes and hidden after two hours; either forecast source can fail without blocking personal quota or task refreshes.
+Forecasts refresh independently every five minutes from `codexreset.org/api/monitor-summary`. Data is marked cached after 15 minutes and hidden after two hours; forecast failure cannot block personal quota or task refreshes.
 
 These are public community forecasts, not an official reset schedule or guarantee.
 
@@ -105,13 +105,13 @@ The release archive uses the ASCII name `CodexQuotaMenu` to prevent GitHub from 
 Apple Silicon:
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.6.0-macOS-arm64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.6.1-macOS-arm64.zip.sha256
 ```
 
 Intel:
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.6.0-macOS-x86_64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.6.1-macOS-x86_64.zip.sha256
 ```
 
 An `OK` result confirms that the ZIP matches its checksum file. Download both files from the same official Release.

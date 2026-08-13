@@ -30,7 +30,7 @@
 
 ## 外部预测边界
 
-应用只向 `codex-reset.com/api/forecast` 和 `codexreset.org/api/monitor-summary` 发起公开 GET 请求，不发送个人用量、任务、身份、会话内容或 Codex 凭据。主概率只采用前者；后者只能触发独立的 `⚡` 信号。
+应用只向 `codexreset.org/api/monitor-summary` 发起公开 GET 请求，并只采用其未来48小时概率；不发送个人用量、任务、身份、会话内容或 Codex 凭据。
 
 ## 发布边界
 

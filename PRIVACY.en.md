@@ -20,12 +20,9 @@ The app does not analyze response text or tool-call contents to infer whether th
 
 ## Public Forecast Requests
 
-Every five minutes, the app independently requests:
+Every five minutes, the app requests `GET https://codexreset.org/api/monitor-summary` and reads only its next-48-hour probability.
 
-- `GET https://codex-reset.com/api/forecast`, the only source of the primary probability shown on the Mac or phone;
-- `GET https://codexreset.org/api/monitor-summary`, used only for the separate fast `⚡ Tibo` signal and never averaged into the primary probability.
-
-Requests contain only normal HTTP metadata, a JSON Accept header, and an app-version User-Agent. The app does not send personal Codex quota, plan, task, session, identity, or credential data to either site. Each source fails independently and cannot block local quota queries.
+Requests contain only normal HTTP metadata, a JSON Accept header, and an app-version User-Agent. The app does not send personal Codex quota, plan, task, session, identity, or credential data to the site. Forecast failure cannot block local quota queries.
 
 ## Data Handling
 
