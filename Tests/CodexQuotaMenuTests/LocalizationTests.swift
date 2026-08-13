@@ -80,4 +80,45 @@ final class LocalizationTests: XCTestCase {
             "Reading Codex usage timed out"
         )
     }
+
+    func testForecastDetailsAreLocalizedWithoutConfusingScheduledReset() {
+        let chinese = AppText(language: .simplifiedChinese)
+        let english = AppText(language: .english)
+
+        XCTAssertEqual(chinese.globalResetForecastHeading, "全局额外重置预测")
+        XCTAssertEqual(english.globalResetForecastHeading, "Global Bonus Reset Forecast")
+        XCTAssertEqual(english.forecast48hDescription(50), "Next 48 hours: 50%")
+        XCTAssertEqual(chinese.forecastStatusDescription(.fresh), "状态：实时")
+        XCTAssertEqual(english.forecastStatusDescription(.cached), "Status: Delayed data")
+        XCTAssertEqual(chinese.forecastSourceDescription, "来源：Codex Reset Monitor")
+        XCTAssertEqual(chinese.forecastUpdatedDescription("10:43:49", isCached: true), "预测更新：10:43:49 · 缓存")
+        XCTAssertEqual(english.forecastUpdatedDescription("10:43:49", isCached: false), "Forecast updated: 10:43:49")
+    }
+
+    func testUnavailableForecastDescriptionsDoNotInventPercentages() {
+        let chinese = AppText(language: .simplifiedChinese)
+        let english = AppText(language: .english)
+
+        XCTAssertEqual(chinese.forecast48hDescription(nil), "未来 48 小时：--")
+        XCTAssertEqual(english.forecastUpdatedDescription(nil, isCached: false), "Forecast updated: --")
+        XCTAssertEqual(chinese.forecastStatusDescription(.unavailable), "状态：暂不可用")
+    }
+
+    func testPhoneWidgetActionsAreLocalized() {
+        let chinese = AppText(language: .simplifiedChinese)
+        let english = AppText(language: .english)
+
+        XCTAssertEqual(chinese.phoneWidgetHeading, "手机小组件")
+        XCTAssertEqual(english.phoneWidgetHeading, "Phone Widget")
+        XCTAssertEqual(chinese.enableWidgetServerAction, "启用只读接口")
+        XCTAssertEqual(english.enableWidgetServerAction, "Enable Read-Only API")
+        XCTAssertEqual(chinese.copyWidgetAddressAction, "复制小组件地址")
+        XCTAssertEqual(english.copyWidgetAddressAction, "Copy Widget Address")
+        XCTAssertEqual(chinese.copyWidgetTokenAction, "复制访问令牌")
+        XCTAssertEqual(english.copyWidgetTokenAction, "Copy Access Token")
+        XCTAssertEqual(chinese.regenerateWidgetTokenAction, "重新生成访问令牌")
+        XCTAssertEqual(english.regenerateWidgetTokenAction, "Regenerate Access Token")
+        XCTAssertEqual(chinese.widgetServerFailed, "服务启动失败")
+        XCTAssertEqual(english.widgetServerFailed, "Service Failed to Start")
+    }
 }

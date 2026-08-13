@@ -1,6 +1,8 @@
 .DS_Store
 .build/
+.worktrees/
 dist/
 tmp/
+work/
 *.zip
 *.sha256

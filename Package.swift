@@ -9,7 +9,13 @@ let package = Package(
         .executable(name: "CodexQuotaMenu", targets: ["CodexQuotaMenu"])
     ],
     targets: [
-        .executableTarget(name: "CodexQuotaMenu"),
+        .executableTarget(
+            name: "CodexQuotaMenu",
+            linkerSettings: [
+                .linkedFramework("Network"),
+                .linkedFramework("Security")
+            ]
+        ),
         .testTarget(name: "CodexQuotaMenuTests", dependencies: ["CodexQuotaMenu"])
     ]
 )

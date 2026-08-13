@@ -2,7 +2,7 @@
 
 English | [简体中文](product-and-usage.md)
 
-Version: v1.5.3
+Version: v1.6.1
 
 System: macOS 14 or later
 
@@ -14,7 +14,8 @@ Codex Usage is a native macOS menu bar utility for checking:
 
 - remaining Codex usage;
 - reset dates and countdowns;
-- tasks that are currently active.
+- tasks that are currently active;
+- the next-48-hour probability of a global bonus reset from Codex Reset Monitor.
 
 The app has no main window or Dock icon. Completed-task counts are intentionally omitted.
 
@@ -25,13 +26,14 @@ The menu bar uses a text-only presentation with no extra icon before `Codex`, ke
 The English interface looks similar to:
 
 ```text
-Codex 90% · 4h 25m · ▶ 1
+Codex 90% · 4h 25m · ↻30% · ▶ 1
 ```
 
 | Item | Meaning |
 |---|---|
 | `Codex 90%` | Remaining percentage for the shortest usage window |
 | `4h 25m` | Time until that window resets |
+| `↻30%` | Primary probability of a global bonus reset in the next 24 hours |
 | `▶ 1` | Number of tasks that are still active |
 
 Open the menu to see every returned usage window, exact reset times, the Codex plan, task titles, the latest successful update time, and app actions.
@@ -61,6 +63,10 @@ This is high-frequency polling, not a server push. A state change normally appea
 Choose **Refresh Now** or press `R` while the menu is open to refresh immediately. Concurrent refresh requests are prevented.
 
 If a refresh fails after a successful result, the menu bar keeps the last result and the menu shows the error. Automatic reconnection attempts continue.
+
+Forecasts refresh independently every five minutes from `codexreset.org/api/monitor-summary`. Data is marked cached after 15 minutes and hidden after two hours; forecast failure cannot block personal quota or task refreshes.
+
+These are public community forecasts, not an official reset schedule or guarantee.
 
 ## Interface Language
 
@@ -99,13 +105,13 @@ The release archive uses the ASCII name `CodexQuotaMenu` to prevent GitHub from 
 Apple Silicon:
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.5.3-macOS-arm64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.6.1-macOS-arm64.zip.sha256
 ```
 
 Intel:
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.5.3-macOS-x86_64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.6.1-macOS-x86_64.zip.sha256
 ```
 
 An `OK` result confirms that the ZIP matches its checksum file. Download both files from the same official Release.
@@ -127,6 +133,15 @@ Do not disable macOS security features or run untrusted quarantine-removal comma
 
 Open **System Settings → General → Login Items**, click **+**, and select `Codex用量.app` from Applications.
 
+## iPhone Scriptable Lock-Screen Widget
+
+1. Choose **Phone Widget → Enable Read-Only API** in the Mac menu.
+2. Copy the widget address and access token separately. The full token is never displayed in the menu.
+3. Import [`mobile/CodexQuotaWidget.js`](../mobile/CodexQuotaWidget.js) into Scriptable and follow the [mobile setup guide](../mobile/README.md).
+4. Test in Scriptable, then add its accessory rectangular widget to the lock screen.
+
+Plain HTTP is intended only for a trusted LAN or an existing encrypted Shadowrocket/VPN home tunnel; never port-forward it. Prefer a DHCP-reserved Mac LAN address because `.local` may not resolve through a tunnel. The script suggests the earliest next refresh after five minutes, but iOS decides the actual schedule.
+
 ## Privacy and Security
 
 The app processes:
@@ -135,11 +150,13 @@ The app processes:
 - recent task identifiers, titles, timestamps, and runtime states;
 - local session-log paths returned by Codex;
 - up to the last 512 KB of relevant session logs;
-- the selected interface language.
+- the selected interface language;
+- public forecast values, status, and timestamps;
+- whether the phone feed is enabled and its access token.
 
-Session-log fragments may contain task titles, tool-call metadata, and the current response. They are processed in memory and are not copied, uploaded, or stored in a project database. The app does not read or save account tokens, passwords, or API keys and has no advertising, analytics, or telemetry.
+Session-log fragments may contain task titles, tool-call metadata, and the current response. They are processed in memory and are not copied, uploaded, or stored in a project database. The app does not read or save Codex account tokens, passwords, or API keys and has no advertising, analytics, or telemetry.
 
-The language preference is the only setting persisted by this app. It contains no task content or identity information.
+The app sends GET requests only to the documented `codexreset.org` public forecast endpoint and sends it no personal quota, task, identity, session, or Codex credential data. `UserDefaults` stores language, the phone-feed toggle, and the non-personal forecast cache; macOS Keychain stores the 32-byte phone token. Phone JSON excludes task titles, paths, and conversations. Scriptable stores its address and token in Scriptable Keychain and writes only non-sensitive JSON to its file cache.
 
 App Sandbox is not enabled because the app must launch a local Codex subprocess and read Codex session logs. The app does not request camera, microphone, contacts, calendar, location, photo-library, or Accessibility permissions.
 
@@ -181,11 +198,13 @@ To uninstall:
 2. Remove it from Login Items.
 3. Move `Codex用量.app` from Applications to Trash.
 
-The app creates no database or cache directory. To also remove the saved language preference:
+The app creates no user database or separate cache directory, but keeps public forecast cache and preferences in `UserDefaults` and the phone token in Keychain. To remove the preferences and forecast cache:
 
 ```sh
 defaults delete com.local.codexquotamenu
 ```
+
+To remove the phone token, delete Keychain service `com.local.codexquotamenu.widget` in Keychain Access. Scriptable's Keychain values and non-sensitive cache must be removed separately on the iPhone.
 
 Uninstalling this utility does not remove Codex, your Codex sign-in, or task history.
 

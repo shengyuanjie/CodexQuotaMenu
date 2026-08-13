@@ -11,6 +11,19 @@ final class UsageParserTests: XCTestCase {
         XCTAssertEqual(snapshot.plan, "plus")
     }
 
+    func testFindsWeeklyAndShortWindowsWithoutDependingOnArrayOrder() {
+        let weekly = RateLimitWindow(usedPercent: 18, durationMinutes: 10_080, resetsAt: nil)
+        let short = RateLimitWindow(usedPercent: 36, durationMinutes: 300, resetsAt: nil)
+
+        let forward = UsageSnapshot(windows: [weekly, short], plan: nil, fetchedAt: Date())
+        let reverse = UsageSnapshot(windows: [short, weekly], plan: nil, fetchedAt: Date())
+
+        XCTAssertEqual(forward.weeklyWindow, weekly)
+        XCTAssertEqual(reverse.weeklyWindow, weekly)
+        XCTAssertEqual(forward.shortWindow, short)
+        XCTAssertEqual(reverse.shortWindow, short)
+    }
+
     func testRejectsResponseWithoutWindows() {
         let json = #"{"id":2,"result":{"rateLimits":{"planType":"plus"}}}"#
         XCTAssertThrowsError(try UsageParser.parse(Data(json.utf8)))

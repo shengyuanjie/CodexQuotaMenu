@@ -64,6 +64,34 @@ struct AppText {
         language == .simplifiedChinese ? "当前任务" : "Current Tasks"
     }
 
+    var globalResetForecastHeading: String {
+        language == .simplifiedChinese ? "全局额外重置预测" : "Global Bonus Reset Forecast"
+    }
+
+    var phoneWidgetHeading: String {
+        language == .simplifiedChinese ? "手机小组件" : "Phone Widget"
+    }
+
+    var enableWidgetServerAction: String {
+        language == .simplifiedChinese ? "启用只读接口" : "Enable Read-Only API"
+    }
+
+    var copyWidgetAddressAction: String {
+        language == .simplifiedChinese ? "复制小组件地址" : "Copy Widget Address"
+    }
+
+    var copyWidgetTokenAction: String {
+        language == .simplifiedChinese ? "复制访问令牌" : "Copy Access Token"
+    }
+
+    var regenerateWidgetTokenAction: String {
+        language == .simplifiedChinese ? "重新生成访问令牌" : "Regenerate Access Token"
+    }
+
+    var widgetServerFailed: String {
+        language == .simplifiedChinese ? "服务启动失败" : "Service Failed to Start"
+    }
+
     var refreshAction: String {
         language == .simplifiedChinese ? "立即刷新" : "Refresh Now"
     }
@@ -144,6 +172,38 @@ struct AppText {
             return "更新：\(updateTime(date)) · 实时连接 / 5 秒校准"
         }
         return "Updated: \(updateTime(date)) · persistent connection / 5-second refresh"
+    }
+
+    func forecast48hDescription(_ probability: Int?) -> String {
+        let value = probability.map { "\($0)%" } ?? "--"
+        return language == .simplifiedChinese
+            ? "未来 48 小时：\(value)"
+            : "Next 48 hours: \(value)"
+    }
+
+    func forecastStatusDescription(_ status: ForecastDisplayStatus) -> String {
+        let value: String
+        switch (language, status) {
+        case (.simplifiedChinese, .fresh): value = "实时"
+        case (.simplifiedChinese, .cached): value = "数据延迟"
+        case (.simplifiedChinese, .unavailable): value = "暂不可用"
+        case (.english, .fresh): value = "Fresh"
+        case (.english, .cached): value = "Delayed data"
+        case (.english, .unavailable): value = "Unavailable"
+        }
+        return language == .simplifiedChinese ? "状态：\(value)" : "Status: \(value)"
+    }
+
+    var forecastSourceDescription: String {
+        language == .simplifiedChinese ? "来源：Codex Reset Monitor" : "Source: Codex Reset Monitor"
+    }
+
+    func forecastUpdatedDescription(_ time: String?, isCached: Bool) -> String {
+        let value = time ?? "--"
+        if language == .simplifiedChinese {
+            return "预测更新：\(value)" + (isCached ? " · 缓存" : "")
+        }
+        return "Forecast updated: \(value)" + (isCached ? " · cached" : "")
     }
 
     func runningDescription(_ count: Int) -> String {
