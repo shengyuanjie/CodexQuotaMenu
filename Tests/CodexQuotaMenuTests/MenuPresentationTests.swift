@@ -34,6 +34,17 @@ final class MenuPresentationTests: XCTestCase {
 
         XCTAssertEqual(title, "Codex 82% · ↻-- · ▶ 2")
     }
+
+    func testTitleStillShowsForecastWhenLocalUsageIsUnavailable() {
+        let title = MenuPresentation.title(
+            remainingPercent: nil,
+            resetText: nil,
+            forecast: forecast(probability24h: 30),
+            runningCount: nil
+        )
+
+        XCTAssertEqual(title, "Codex -- · ↻30%")
+    }
 }
 
 private extension MenuPresentationTests {

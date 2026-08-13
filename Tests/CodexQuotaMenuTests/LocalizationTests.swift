@@ -93,6 +93,8 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(english.forecastConfidenceDescription(.high), "Confidence: High")
         XCTAssertEqual(chinese.forecastStatusDescription(.recentlyReset), "状态：最近已全局重置")
         XCTAssertEqual(english.forecastStatusDescription(.cached), "Status: Delayed data")
+        XCTAssertEqual(chinese.forecastUpdatedDescription("10:43:49", isCached: true), "预测更新：10:43:49 · 缓存")
+        XCTAssertEqual(english.forecastUpdatedDescription("10:43:49", isCached: false), "Forecast updated: 10:43:49")
         XCTAssertEqual(chinese.strongSignalDescription, "⚡ Tibo 强信号，可能即将重置或正在落地")
         XCTAssertEqual(english.strongSignalDescription, "⚡ Strong Tibo signal: a reset may be imminent or landing")
     }
@@ -103,6 +105,7 @@ final class LocalizationTests: XCTestCase {
 
         XCTAssertEqual(chinese.forecast24hDescription(nil), "未来 24 小时：--")
         XCTAssertEqual(english.forecastConfidenceDescription(nil), "Confidence: --")
+        XCTAssertEqual(english.forecastUpdatedDescription(nil, isCached: false), "Forecast updated: --")
         XCTAssertEqual(chinese.forecastStatusDescription(.unavailable), "状态：暂无可信预测")
     }
 }

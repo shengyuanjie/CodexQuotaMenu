@@ -201,6 +201,14 @@ struct AppText {
         return language == .simplifiedChinese ? "状态：\(value)" : "Status: \(value)"
     }
 
+    func forecastUpdatedDescription(_ time: String?, isCached: Bool) -> String {
+        let value = time ?? "--"
+        if language == .simplifiedChinese {
+            return "预测更新：\(value)" + (isCached ? " · 缓存" : "")
+        }
+        return "Forecast updated: \(value)" + (isCached ? " · cached" : "")
+    }
+
     func runningDescription(_ count: Int) -> String {
         language == .simplifiedChinese
             ? "▶ 正常执行：\(count)"

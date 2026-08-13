@@ -1,11 +1,11 @@
 enum MenuPresentation {
     static func title(
-        remainingPercent: Int,
+        remainingPercent: Int?,
         resetText: String?,
         forecast: ForecastDisplaySnapshot,
-        runningCount: Int
+        runningCount: Int?
     ) -> String {
-        var parts = ["Codex \(remainingPercent)%"]
+        var parts = [remainingPercent.map { "Codex \($0)%" } ?? "Codex --"]
         if let resetText, !resetText.isEmpty {
             parts.append(resetText)
         }
@@ -14,7 +14,9 @@ enum MenuPresentation {
         } else {
             parts.append("↻--" + (forecast.strongSignal ? " ⚡" : ""))
         }
-        parts.append("▶ \(runningCount)")
+        if let runningCount {
+            parts.append("▶ \(runningCount)")
+        }
         return parts.joined(separator: " · ")
     }
 }
