@@ -37,7 +37,7 @@ enum WidgetToken {
     }
 }
 
-struct KeychainWidgetTokenStore: WidgetTokenStoring {
+struct KeychainWidgetTokenStore: WidgetTokenStoring, Sendable {
     static let service = "com.local.codexquotamenu.widget"
     static let account = "bearer-token"
 

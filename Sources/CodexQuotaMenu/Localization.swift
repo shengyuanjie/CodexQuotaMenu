@@ -74,6 +74,30 @@ struct AppText {
             : "⚡ Strong Tibo signal: a reset may be imminent or landing"
     }
 
+    var phoneWidgetHeading: String {
+        language == .simplifiedChinese ? "手机小组件" : "Phone Widget"
+    }
+
+    var enableWidgetServerAction: String {
+        language == .simplifiedChinese ? "启用只读接口" : "Enable Read-Only API"
+    }
+
+    var copyWidgetAddressAction: String {
+        language == .simplifiedChinese ? "复制小组件地址" : "Copy Widget Address"
+    }
+
+    var copyWidgetTokenAction: String {
+        language == .simplifiedChinese ? "复制访问令牌" : "Copy Access Token"
+    }
+
+    var regenerateWidgetTokenAction: String {
+        language == .simplifiedChinese ? "重新生成访问令牌" : "Regenerate Access Token"
+    }
+
+    var widgetServerFailed: String {
+        language == .simplifiedChinese ? "服务启动失败" : "Service Failed to Start"
+    }
+
     var refreshAction: String {
         language == .simplifiedChinese ? "立即刷新" : "Refresh Now"
     }

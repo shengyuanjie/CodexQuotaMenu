@@ -14,6 +14,7 @@
     <key>CFBundleVersion</key><string>13</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
+    <key>NSLocalNetworkUsageDescription</key><string>仅在您主动启用 iPhone 小组件时，通过本地网络提供只读的 Codex 余量与预测数据。</string>
     <key>NSHumanReadableCopyright</key><string>Local utility</string>
 </dict>
 </plist>

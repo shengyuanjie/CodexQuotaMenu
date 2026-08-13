@@ -108,4 +108,22 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(english.forecastUpdatedDescription(nil, isCached: false), "Forecast updated: --")
         XCTAssertEqual(chinese.forecastStatusDescription(.unavailable), "状态：暂无可信预测")
     }
+
+    func testPhoneWidgetActionsAreLocalized() {
+        let chinese = AppText(language: .simplifiedChinese)
+        let english = AppText(language: .english)
+
+        XCTAssertEqual(chinese.phoneWidgetHeading, "手机小组件")
+        XCTAssertEqual(english.phoneWidgetHeading, "Phone Widget")
+        XCTAssertEqual(chinese.enableWidgetServerAction, "启用只读接口")
+        XCTAssertEqual(english.enableWidgetServerAction, "Enable Read-Only API")
+        XCTAssertEqual(chinese.copyWidgetAddressAction, "复制小组件地址")
+        XCTAssertEqual(english.copyWidgetAddressAction, "Copy Widget Address")
+        XCTAssertEqual(chinese.copyWidgetTokenAction, "复制访问令牌")
+        XCTAssertEqual(english.copyWidgetTokenAction, "Copy Access Token")
+        XCTAssertEqual(chinese.regenerateWidgetTokenAction, "重新生成访问令牌")
+        XCTAssertEqual(english.regenerateWidgetTokenAction, "Regenerate Access Token")
+        XCTAssertEqual(chinese.widgetServerFailed, "服务启动失败")
+        XCTAssertEqual(english.widgetServerFailed, "Service Failed to Start")
+    }
 }

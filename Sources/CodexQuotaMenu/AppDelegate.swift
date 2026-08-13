@@ -20,6 +20,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastForecastAttempt: Date?
     private var languageSelection = AppLanguage.load()
     private let forecastRefreshGate = RefreshGate(interval: 300, manualMinimumInterval: 30)
+    private let widgetSnapshotStore = WidgetSnapshotStore()
+    private let widgetTokenStore = KeychainWidgetTokenStore()
+    private let widgetPreferences = WidgetPreferences()
+    private var widgetServer: WidgetServer?
+    private var widgetServerState = WidgetServerState.stopped
 
     private var text: AppText {
         AppText(language: languageSelection.resolved())
@@ -32,6 +37,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         statusItem.button?.title = text.loadingTitle
         rebuildMenu(message: text.loadingMessage)
+        if widgetPreferences.isServerEnabled {
+            startWidgetServer()
+        }
         loadCachedForecast()
         refreshLocal()
         refreshForecast(manual: false)
@@ -97,6 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func renderCurrentState() {
+        updateWidgetSnapshot()
         let window = lastSnapshot?.headlineWindow
         setMenuBarTitle(MenuPresentation.title(
             remainingPercent: window?.remainingPercent,
@@ -142,6 +151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func rebuildMenu(message: String) {
+        updateWidgetSnapshot()
         let menu = NSMenu()
         appendMessage(message, to: menu)
         appendActions(to: menu)
@@ -171,6 +181,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func appendActions(to menu: NSMenu) {
         menu.addItem(.separator())
+        appendWidgetMenu(to: menu)
+
         let languageItem = NSMenuItem(title: text.languageAction, action: nil, keyEquivalent: "")
         let languageMenu = NSMenu()
         for selection in AppLanguage.allCases {
@@ -193,6 +205,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let quitItem = NSMenuItem(title: text.quitAction, action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
+    }
+
+    private func appendWidgetMenu(to menu: NSMenu) {
+        let widgetItem = NSMenuItem(title: text.phoneWidgetHeading, action: nil, keyEquivalent: "")
+        let widgetMenu = NSMenu()
+
+        let toggleItem = NSMenuItem(
+            title: text.enableWidgetServerAction,
+            action: #selector(toggleWidgetServer),
+            keyEquivalent: ""
+        )
+        toggleItem.target = self
+        toggleItem.state = widgetPreferences.isServerEnabled ? .on : .off
+        widgetMenu.addItem(toggleItem)
+
+        widgetMenu.addItem(.separator())
+        let addressItem = NSMenuItem(
+            title: text.copyWidgetAddressAction,
+            action: #selector(copyWidgetAddress),
+            keyEquivalent: ""
+        )
+        addressItem.target = self
+        widgetMenu.addItem(addressItem)
+
+        let tokenItem = NSMenuItem(
+            title: text.copyWidgetTokenAction,
+            action: #selector(copyWidgetToken),
+            keyEquivalent: ""
+        )
+        tokenItem.target = self
+        widgetMenu.addItem(tokenItem)
+
+        let regenerateItem = NSMenuItem(
+            title: text.regenerateWidgetTokenAction,
+            action: #selector(regenerateWidgetToken),
+            keyEquivalent: ""
+        )
+        regenerateItem.target = self
+        widgetMenu.addItem(regenerateItem)
+
+        if widgetServerState == .failed {
+            widgetMenu.addItem(.separator())
+            widgetMenu.addItem(disabledItem("⚠ \(text.widgetServerFailed)"))
+        }
+
+        widgetItem.submenu = widgetMenu
+        menu.addItem(widgetItem)
     }
 
     private func appendTasks(_ snapshot: TaskSnapshot, to menu: NSMenu) {
@@ -223,6 +282,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc private func quit() { NSApplication.shared.terminate(nil) }
 
+    @objc private func toggleWidgetServer() {
+        if widgetPreferences.isServerEnabled {
+            widgetPreferences.isServerEnabled = false
+            widgetServer?.stop()
+            widgetServerState = .stopped
+            renderCurrentState()
+        } else {
+            startWidgetServer()
+        }
+    }
+
+    @objc private func copyWidgetAddress() {
+        copyToPasteboard("http://\(LocalNetworkAddress.current()):\(WidgetServer.port)")
+    }
+
+    @objc private func copyWidgetToken() {
+        do {
+            copyToPasteboard(try ensureWidgetToken())
+        } catch {
+            widgetServerState = .failed
+            renderCurrentState()
+        }
+    }
+
+    @objc private func regenerateWidgetToken() {
+        do {
+            let token = try WidgetToken.generate()
+            try widgetTokenStore.save(token)
+        } catch {
+            widgetServerState = .failed
+        }
+        renderCurrentState()
+    }
+
     @objc private func selectLanguage(_ sender: NSMenuItem) {
         guard let rawValue = sender.representedObject as? String,
               let selection = AppLanguage(rawValue: rawValue) else { return }
@@ -249,5 +342,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             FileHandle.standardError.write(Data("\(message)\n".utf8))
             exit(EXIT_FAILURE)
         }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        widgetServer?.stop()
+    }
+
+    private func updateWidgetSnapshot() {
+        let payload = WidgetPayloadBuilder.build(
+            usage: lastSnapshot,
+            tasks: lastTaskSnapshot,
+            forecast: lastForecastSnapshot,
+            generatedAt: Date()
+        )
+        if let data = try? JSONEncoder.widgetEncoder.encode(payload) {
+            widgetSnapshotStore.replace(with: data)
+        }
+    }
+
+    private func startWidgetServer() {
+        do {
+            _ = try ensureWidgetToken()
+            if widgetServer == nil {
+                widgetServer = makeWidgetServer()
+            }
+            widgetServerState = .starting
+            try widgetServer?.start()
+            widgetPreferences.isServerEnabled = true
+        } catch {
+            widgetPreferences.isServerEnabled = false
+            widgetServerState = .failed
+        }
+        renderCurrentState()
+    }
+
+    private func makeWidgetServer() -> WidgetServer {
+        let tokenStore = widgetTokenStore
+        let snapshotStore = widgetSnapshotStore
+        return WidgetServer(
+            tokenProvider: { (try? tokenStore.load()) ?? "" },
+            payloadProvider: { snapshotStore.current() },
+            stateHandler: { [weak self] state in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.widgetServerState = state
+                    if state == .failed {
+                        self.widgetPreferences.isServerEnabled = false
+                    }
+                    self.renderCurrentState()
+                }
+            }
+        )
+    }
+
+    private func ensureWidgetToken() throws -> String {
+        if let existing = try widgetTokenStore.load(),
+           existing.count == 64,
+           existing.allSatisfy({
+               ("0"..."9").contains(String($0)) || ("a"..."f").contains(String($0))
+           }) {
+            return existing
+        }
+        let token = try WidgetToken.generate()
+        try widgetTokenStore.save(token)
+        return token
+    }
+
+    private func copyToPasteboard(_ value: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(value, forType: .string)
     }
 }
