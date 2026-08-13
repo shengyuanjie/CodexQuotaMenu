@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Inline output order is exactly `◔85% · ⏱︎7天 · ↻23%`.
+- Inline output order is exactly `剩85% 余7天 Tibo23%`.
 - Only `config.widgetFamily == "accessoryInline"` uses the compact layout.
 - Do not change schema v2, Keychain keys, cache behavior, API authentication, or Mac service code.
 - Do not publish, push, tag, or create a release.
@@ -35,11 +35,11 @@ Import `formatInlineSummary` and add assertions for whole days, hours, minutes, 
 ```javascript
 const { validatePayload, isRecentDate, formatInlineSummary } = require("./CodexQuotaWidget.js")
 const fixedNow = Date.parse("2026-08-13T05:00:00Z")
-assert.equal(formatInlineSummary(85, "2026-08-20T05:00:00Z", 23, fixedNow), "◔85% · ⏱︎7天 · ↻23%")
-assert.equal(formatInlineSummary(85, "2026-08-13T08:40:00Z", 23, fixedNow), "◔85% · ⏱︎3时 · ↻23%")
-assert.equal(formatInlineSummary(85, "2026-08-13T05:40:00Z", 23, fixedNow), "◔85% · ⏱︎40分 · ↻23%")
-assert.equal(formatInlineSummary(85, "2026-08-13T04:59:00Z", 23, fixedNow), "◔85% · ⏱︎待重置 · ↻23%")
-assert.equal(formatInlineSummary(null, null, null, fixedNow), "◔-- · ⏱︎-- · ↻--")
+assert.equal(formatInlineSummary(85, "2026-08-20T05:00:00Z", 23, fixedNow), "剩85% 余7天 Tibo23%")
+assert.equal(formatInlineSummary(85, "2026-08-13T08:40:00Z", 23, fixedNow), "剩85% 余3时 Tibo23%")
+assert.equal(formatInlineSummary(85, "2026-08-13T05:40:00Z", 23, fixedNow), "剩85% 余40分 Tibo23%")
+assert.equal(formatInlineSummary(85, "2026-08-13T04:59:00Z", 23, fixedNow), "剩85% 余待重置 Tibo23%")
+assert.equal(formatInlineSummary(null, null, null, fixedNow), "剩-- 余-- Tibo--")
 ```
 
 - [ ] **Step 2: Run the test and verify RED**
@@ -70,11 +70,11 @@ function formatInlineSummary(weeklyPercent, weeklyResetsAt, probability48h, now)
   const quota = Number.isInteger(weeklyPercent) ? `${weeklyPercent}%` : "--"
   const remaining = formatInlineRemaining(weeklyResetsAt, now)
   const probability = Number.isInteger(probability48h) ? `${probability48h}%` : "--"
-  return `◔${quota} · ⏱︎${remaining} · ↻${probability}`
+  return `剩${quota} 余${remaining} Tibo${probability}`
 }
 ```
 
-Compute the inline summary from already freshness-filtered values in `buildQuotaWidget`. Extend `buildMessageWidget` with an `inlineText` argument defaulting to `◔-- · ⏱︎-- · ↻--`; when `config.widgetFamily === "accessoryInline"`, add only that text, set a single-line font, set `refreshAfterDate`, and return before building the rectangular title/detail nodes. Export `formatInlineSummary` for Node tests.
+Compute the inline summary from already freshness-filtered values in `buildQuotaWidget`. Extend `buildMessageWidget` with an `inlineText` argument defaulting to `剩-- 余-- Tibo--`; when `config.widgetFamily === "accessoryInline"`, add only that text, set a single-line font, set `refreshAfterDate`, and return before building the rectangular title/detail nodes. Export `formatInlineSummary` for Node tests.
 
 - [ ] **Step 4: Run the complete Scriptable tests and syntax check**
 
@@ -138,4 +138,4 @@ Run Node syntax and contract tests against the installed copy, and confirm `prob
 
 - [ ] **Step 4: Hand off real-device validation**
 
-Ask the user to let iCloud finish syncing, return to lock-screen customization, and verify the top line is fully visible as `◔xx% · ⏱︎x天/时/分 · ↻xx%`. Do not claim the lock-screen result before the user supplies a real-device observation.
+Ask the user to let iCloud finish syncing, return to lock-screen customization, and verify the top line is fully visible as `剩xx% 余x天/时/分 Tiboxx%`. Do not claim the lock-screen result before the user supplies a real-device observation.

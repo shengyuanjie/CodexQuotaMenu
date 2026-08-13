@@ -30,11 +30,11 @@ assert.throws(() => validatePayload({ schemaVersion: 1 }), /schema_v2_required/)
 assert.equal(isRecentDate(new Date(Date.now() - 2 * 60 * 60 * 1000 - 1).toISOString(), Date.now()), false)
 
 const fixedNow = Date.parse("2026-08-13T05:00:00Z")
-assert.equal(formatInlineSummary(85, "2026-08-20T05:00:00Z", 23, fixedNow), "◔85% · ⏱︎7天 · ↻23%")
-assert.equal(formatInlineSummary(85, "2026-08-13T08:40:00Z", 23, fixedNow), "◔85% · ⏱︎3时 · ↻23%")
-assert.equal(formatInlineSummary(85, "2026-08-13T05:40:00Z", 23, fixedNow), "◔85% · ⏱︎40分 · ↻23%")
-assert.equal(formatInlineSummary(85, "2026-08-13T04:59:00Z", 23, fixedNow), "◔85% · ⏱︎待重置 · ↻23%")
-assert.equal(formatInlineSummary(null, null, null, fixedNow), "◔-- · ⏱︎-- · ↻--")
+assert.equal(formatInlineSummary(85, "2026-08-20T05:00:00Z", 23, fixedNow), "剩85% 余7天 Tibo23%")
+assert.equal(formatInlineSummary(85, "2026-08-13T08:40:00Z", 23, fixedNow), "剩85% 余3时 Tibo23%")
+assert.equal(formatInlineSummary(85, "2026-08-13T05:40:00Z", 23, fixedNow), "剩85% 余40分 Tibo23%")
+assert.equal(formatInlineSummary(85, "2026-08-13T04:59:00Z", 23, fixedNow), "剩85% 余待重置 Tibo23%")
+assert.equal(formatInlineSummary(null, null, null, fixedNow), "剩-- 余-- Tibo--")
 
 const renderedTexts = []
 globalThis.config = { widgetFamily: "accessoryInline" }
@@ -50,8 +50,8 @@ globalThis.ListWidget = class {
   }
 }
 globalThis.Font = { semiboldSystemFont: size => ({ size }) }
-const inlineWidget = buildMessageWidget("Codex 周余量 85%", "7天后恢复 · ↻48h 23%", false, "◔85% · ⏱︎7天 · ↻23%")
+const inlineWidget = buildMessageWidget("Codex 周余量 85%", "7天后恢复 · ↻48h 23%", false, "剩85% 余7天 Tibo23%")
 assert.equal(renderedTexts.length, 1)
-assert.equal(renderedTexts[0].value, "◔85% · ⏱︎7天 · ↻23%")
+assert.equal(renderedTexts[0].value, "剩85% 余7天 Tibo23%")
 assert.equal(inlineWidget.refreshAfterDate instanceof Date, true)
 console.log("Scriptable schema v2 and inline checks passed")

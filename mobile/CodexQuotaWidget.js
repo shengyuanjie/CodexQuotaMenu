@@ -334,7 +334,7 @@ function formatInlineSummary(weeklyPercent, weeklyResetsAt, probability48h, now)
   const quota = Number.isInteger(weeklyPercent) ? `${weeklyPercent}%` : "--"
   const remaining = formatInlineRemaining(weeklyResetsAt, now)
   const probability = Number.isInteger(probability48h) ? `${probability48h}%` : "--"
-  return `◔${quota} · ⏱︎${remaining} · ↻${probability}`
+  return `剩${quota} 余${remaining} Tibo${probability}`
 }
 
 function formatClock(value) {
@@ -344,7 +344,7 @@ function formatClock(value) {
   return `${hours}:${minutes}`
 }
 
-function buildMessageWidget(title, detail, strong = false, inlineText = "◔-- · ⏱︎-- · ↻--") {
+function buildMessageWidget(title, detail, strong = false, inlineText = "剩-- 余-- Tibo--") {
   const widget = new ListWidget()
   widget.setPadding(0, 0, 0, 0)
   if (config.widgetFamily === "accessoryInline") {
