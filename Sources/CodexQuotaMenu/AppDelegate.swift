@@ -164,15 +164,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let forecast = lastForecastSnapshot
         menu.addItem(.separator())
         menu.addItem(disabledItem(text.globalResetForecastHeading))
-        menu.addItem(disabledItem(text.forecast24hDescription(forecast.probability24h)))
         menu.addItem(disabledItem(text.forecast48hDescription(forecast.probability48h)))
-        menu.addItem(disabledItem(text.forecastConfidenceDescription(forecast.confidence)))
         menu.addItem(disabledItem(text.forecastStatusDescription(forecast.status)))
         let updateTime = forecast.updatedAt.map(text.updateTime)
         menu.addItem(disabledItem(text.forecastUpdatedDescription(updateTime, isCached: forecast.isCached)))
-        if forecast.strongSignal {
-            menu.addItem(disabledItem(text.strongSignalDescription))
-        }
+        menu.addItem(disabledItem(text.forecastSourceDescription))
     }
 
     private func appendActions(to menu: NSMenu) {

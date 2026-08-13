@@ -9,11 +9,7 @@ enum MenuPresentation {
         if let resetText, !resetText.isEmpty {
             parts.append(resetText)
         }
-        if let probability = forecast.probability24h {
-            parts.append("↻\(probability)%" + (forecast.strongSignal ? " ⚡" : ""))
-        } else {
-            parts.append("↻--" + (forecast.strongSignal ? " ⚡" : ""))
-        }
+        parts.append(forecast.probability48h.map { "↻48h \($0)%" } ?? "↻48h --")
         if let runningCount {
             parts.append("▶ \(runningCount)")
         }

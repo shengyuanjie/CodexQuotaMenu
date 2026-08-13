@@ -12,7 +12,7 @@ final class WidgetSnapshotStore: @unchecked Sendable {
             generatedAt: Date()
         )
         snapshot = (try? JSONEncoder.widgetEncoder.encode(payload)) ?? Data(
-            #"{"forecast":null,"forecastStatus":"unavailable","generatedAt":"1970-01-01T00:00:00Z","quota":null,"quotaStatus":"unavailable","schemaVersion":1,"tasks":{"runningCount":0}}"#.utf8
+            #"{"forecast":null,"forecastStatus":"unavailable","generatedAt":"1970-01-01T00:00:00Z","quota":null,"quotaStatus":"unavailable","schemaVersion":2,"tasks":{"runningCount":0}}"#.utf8
         )
     }
 

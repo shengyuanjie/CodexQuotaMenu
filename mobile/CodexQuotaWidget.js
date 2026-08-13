@@ -154,10 +154,10 @@ function requestFailure(code, statusCode) {
 }
 
 function validatePayload(raw) {
-  if (!isObject(raw) || raw.schemaVersion !== 1) throw new Error("schema")
+  if (!isObject(raw) || raw.schemaVersion !== 2) throw new Error("schema_v2_required")
   const generatedAt = requiredDate(raw.generatedAt)
   const quotaStatuses = ["fresh", "unavailable"]
-  const forecastStatuses = ["recentlyReset", "strongSignal", "forecast", "cached", "unavailable"]
+  const forecastStatuses = ["fresh", "cached", "unavailable"]
   if (!quotaStatuses.includes(raw.quotaStatus)) throw new Error("quota_status")
   if (!forecastStatuses.includes(raw.forecastStatus)) throw new Error("forecast_status")
   if (!isObject(raw.tasks) || !isNonnegativeInteger(raw.tasks.runningCount)) {
@@ -170,7 +170,7 @@ function validatePayload(raw) {
   if (raw.forecastStatus !== "unavailable" && forecast == null) throw new Error("forecast")
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt,
     quotaStatus: raw.quotaStatus,
     quota,
@@ -191,23 +191,14 @@ function sanitizeQuota(raw) {
 }
 
 function sanitizeForecast(raw) {
-  if (!isObject(raw) || raw.source !== "codex-reset.com") throw new Error("forecast")
-  const confidence = raw.confidence == null ? null : raw.confidence
-  if (confidence !== null && !["low", "medium", "high"].includes(confidence)) {
-    throw new Error("confidence")
-  }
-  if (typeof raw.strongSignal !== "boolean" || typeof raw.isCached !== "boolean") {
-    throw new Error("forecast_flags")
-  }
+  if (!isObject(raw) || raw.source !== "codexreset.org") throw new Error("forecast")
+  if (typeof raw.calibrationState !== "string" || typeof raw.isCached !== "boolean") throw new Error("forecast_flags")
   return {
-    probability24h: nullablePercent(raw.probability24h),
     probability48h: nullablePercent(raw.probability48h),
-    confidence,
-    strongSignal: raw.strongSignal,
-    lastResetAt: nullableDate(raw.lastResetAt),
+    calibrationState: raw.calibrationState,
     updatedAt: nullableDate(raw.updatedAt),
     isCached: raw.isCached,
-    source: "codex-reset.com"
+    source: "codexreset.org"
   }
 }
 
@@ -277,23 +268,16 @@ function buildQuotaWidget(result) {
   if (expiredOffline) return buildMessageWidget(title, "Mac 离线 · 数据已过期")
 
   const forecast = payload.forecast
-  const generatedAge = now - Date.parse(payload.generatedAt)
-  const strongSignalUsable = forecast?.strongSignal === true
-    && generatedAge >= -FUTURE_TOLERANCE_MS
-    && generatedAge <= FORECAST_MAX_AGE_MS
   const probabilityUsable = forecast?.updatedAt
     ? isRecentDate(forecast.updatedAt, now)
     : false
-  const probabilityText = probabilityUsable && Number.isInteger(forecast?.probability24h)
-    ? `↻24h ${forecast.probability24h}%`
+  const probabilityText = probabilityUsable && Number.isInteger(forecast?.probability48h)
+    ? `↻48h ${forecast.probability48h}%`
     : null
 
   let detail
   let strong = false
-  if (strongSignalUsable) {
-    detail = ["⚡ Tibo 重置信号", probabilityText].filter(Boolean).join(" · ")
-    strong = true
-  } else {
+  {
     const parts = []
     if (result.offline) parts.push("Mac 离线")
     const remaining = quota?.weeklyResetsAt ? formatRemaining(quota.weeklyResetsAt, now) : null
@@ -302,7 +286,7 @@ function buildQuotaWidget(result) {
       const updateTime = formatClock(forecast.updatedAt)
       parts.push(`预测缓存 ${updateTime}`)
     }
-    if (probabilityText) parts.push(probabilityText)
+    parts.push(probabilityText || "↻48h --")
     detail = parts.length > 0 ? parts.join(" · ") : "余量或预测暂不可用"
   }
   return buildMessageWidget(title, detail, strong)

@@ -2,45 +2,33 @@ import XCTest
 @testable import CodexQuotaMenu
 
 final class ForecastClientTests: XCTestCase {
-    func testPrimaryRequestUsesExactPublicAPIContract() async throws {
-        let json = #"{"updated_at":"2026-08-13T02:43:49Z","probabilities":{"rounded_24h":30,"rounded_48h":50},"confidence":"medium","last_reset_at":null}"#
+    func testRequestUsesExactResetMonitorContract() async throws {
+        let json = #"{"reset":{"calibrationState":"experimental","score48h":82,"unit":"probability"}}"#
         let loader = RecordingHTTPDataLoader(data: Data(json.utf8), statusCode: 200)
-        let client = ForecastClient(loader: loader, appVersion: "1.6.0")
+        let client = ForecastClient(loader: loader, appVersion: "1.6.1")
+        let now = Date(timeIntervalSince1970: 123_456)
 
-        let value = try await client.fetchPrimary()
+        let value = try await client.fetch(now: now)
 
-        XCTAssertEqual(value.probability24h, 30)
+        XCTAssertEqual(value.probability48h, 82)
+        XCTAssertEqual(value.fetchedAt, now)
         let request = try XCTUnwrap(loader.requests.first)
-        XCTAssertEqual(request.url?.absoluteString, "https://codex-reset.com/api/forecast")
+        XCTAssertEqual(request.url?.absoluteString, "https://codexreset.org/api/monitor-summary")
         XCTAssertEqual(request.httpMethod, "GET")
         XCTAssertEqual(request.timeoutInterval, 10)
         XCTAssertEqual(request.cachePolicy, .reloadIgnoringLocalCacheData)
         XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/json")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "CodexQuotaMenu/1.6.0")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "CodexQuotaMenu/1.6.1")
         XCTAssertNil(request.httpBody)
-    }
-
-    func testFastRequestUsesExactPublicAPIContract() async throws {
-        let json = #"{"reset":{"calibrationState":"experimental","score48h":99,"unit":"probability"}}"#
-        let loader = RecordingHTTPDataLoader(data: Data(json.utf8), statusCode: 200)
-        let client = ForecastClient(loader: loader, appVersion: "1.6.0")
-        let now = Date(timeIntervalSince1970: 123_456)
-
-        let value = try await client.fetchFast(now: now)
-
-        XCTAssertEqual(value.fetchedAt, now)
-        XCTAssertEqual(
-            loader.requests.first?.url?.absoluteString,
-            "https://codexreset.org/api/monitor-summary"
-        )
+        XCTAssertEqual(loader.requests.count, 1)
     }
 
     func testRejectsNonSuccessHTTPStatus() async {
         let loader = RecordingHTTPDataLoader(data: Data("server error".utf8), statusCode: 503)
-        let client = ForecastClient(loader: loader, appVersion: "1.6.0")
+        let client = ForecastClient(loader: loader, appVersion: "1.6.1")
 
         do {
-            _ = try await client.fetchPrimary()
+            _ = try await client.fetch(now: Date(timeIntervalSince1970: 1))
             XCTFail("Expected the request to fail")
         } catch {
             XCTAssertEqual(error as? ForecastNetworkError, .httpStatus(503))

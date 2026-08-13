@@ -4,7 +4,7 @@ import XCTest
 
 final class WidgetHTTPTests: XCTestCase {
     private let token = "top-secret-token"
-    private let payload = Data(#"{"schemaVersion":1}"#.utf8)
+    private let payload = Data(#"{"schemaVersion":2}"#.utf8)
 
     func testAuthorizedGetReturnsPayloadWithExactContentLength() throws {
         let response = respond(

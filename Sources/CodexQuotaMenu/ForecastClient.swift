@@ -5,8 +5,7 @@ protocol HTTPDataLoading {
 }
 
 protocol ForecastFetching {
-    func fetchPrimary() async throws -> PrimaryForecast
-    func fetchFast(now: Date) async throws -> FastForecastSignal
+    func fetch(now: Date) async throws -> ResetForecast
 }
 
 enum ForecastNetworkError: Error, Equatable {
@@ -37,8 +36,7 @@ final class URLSessionHTTPDataLoader: HTTPDataLoading {
 }
 
 final class ForecastClient: ForecastFetching {
-    private static let primaryURL = URL(string: "https://codex-reset.com/api/forecast")!
-    private static let fastURL = URL(string: "https://codexreset.org/api/monitor-summary")!
+    private static let forecastURL = URL(string: "https://codexreset.org/api/monitor-summary")!
 
     private let loader: HTTPDataLoading
     private let appVersion: String
@@ -48,14 +46,9 @@ final class ForecastClient: ForecastFetching {
         self.appVersion = appVersion
     }
 
-    func fetchPrimary() async throws -> PrimaryForecast {
-        let data = try await load(Self.primaryURL)
-        return try ForecastParser.parsePrimary(data)
-    }
-
-    func fetchFast(now: Date) async throws -> FastForecastSignal {
-        let data = try await load(Self.fastURL)
-        return try ForecastParser.parseFast(data, fetchedAt: now)
+    func fetch(now: Date) async throws -> ResetForecast {
+        let data = try await load(Self.forecastURL)
+        return try ForecastParser.parse(data, fetchedAt: now)
     }
 
     private func load(_ url: URL) async throws -> Data {

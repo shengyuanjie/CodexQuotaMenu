@@ -3,14 +3,14 @@ import XCTest
 @testable import CodexQuotaMenu
 
 final class WidgetSnapshotStoreTests: XCTestCase {
-    func testDefaultSnapshotIsUnavailableSchemaVersionOnePayload() throws {
+    func testDefaultSnapshotIsUnavailableSchemaVersionTwoPayload() throws {
         let store = WidgetSnapshotStore()
 
         let object = try XCTUnwrap(
             JSONSerialization.jsonObject(with: store.current()) as? [String: Any]
         )
 
-        XCTAssertEqual(object["schemaVersion"] as? Int, 1)
+        XCTAssertEqual(object["schemaVersion"] as? Int, 2)
         XCTAssertEqual(object["quotaStatus"] as? String, "unavailable")
         XCTAssertEqual(object["forecastStatus"] as? String, "unavailable")
         XCTAssertTrue(object["quota"] is NSNull)

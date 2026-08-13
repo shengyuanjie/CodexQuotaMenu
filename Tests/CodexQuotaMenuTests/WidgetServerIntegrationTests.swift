@@ -7,7 +7,7 @@ final class WidgetServerIntegrationTests: XCTestCase {
         let ready = expectation(description: "listener ready")
         let startState = ListenerStartState()
         let token = "test-token-not-a-production-secret"
-        let payload = Data(#"{"schemaVersion":1}"#.utf8)
+        let payload = Data(#"{"schemaVersion":2}"#.utf8)
         let server = WidgetServer(
             tokenProvider: { token },
             payloadProvider: { payload },

@@ -17,11 +17,8 @@ struct WidgetTaskSummary: Encodable {
 }
 
 struct WidgetForecast: Encodable {
-    let probability24h: Int?
     let probability48h: Int?
-    let confidence: ForecastConfidence?
-    let strongSignal: Bool
-    let lastResetAt: Date?
+    let calibrationState: String?
     let updatedAt: Date?
     let isCached: Bool
     let source: String
@@ -86,18 +83,15 @@ enum WidgetPayloadBuilder {
             widgetForecast = nil
         } else {
             widgetForecast = WidgetForecast(
-                probability24h: forecast.probability24h,
                 probability48h: forecast.probability48h,
-                confidence: forecast.confidence,
-                strongSignal: forecast.strongSignal,
-                lastResetAt: forecast.lastResetAt,
+                calibrationState: forecast.calibrationState,
                 updatedAt: forecast.updatedAt,
                 isCached: forecast.isCached,
-                source: "codex-reset.com"
+                source: "codexreset.org"
             )
         }
         return WidgetPayload(
-            schemaVersion: 1,
+            schemaVersion: 2,
             generatedAt: generatedAt,
             quotaStatus: usage == nil ? .unavailable : .fresh,
             quota: quota,

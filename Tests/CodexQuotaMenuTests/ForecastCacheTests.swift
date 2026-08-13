@@ -2,22 +2,18 @@ import XCTest
 @testable import CodexQuotaMenu
 
 final class ForecastCacheTests: XCTestCase {
-    func testPersistsPrimaryForecastAcrossCacheInstances() {
+    func testPersistsResetMonitorForecastAndRemovesLegacyCache() {
         let suiteName = "CodexQuotaMenuTests.ForecastCache.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        let expected = PrimaryForecast(
-            probability24h: 30,
-            probability48h: 50,
-            confidence: .medium,
-            updatedAt: Date(timeIntervalSince1970: 123_456),
-            lastResetAt: Date(timeIntervalSince1970: 120_000)
-        )
+        defaults.set(Data("legacy".utf8), forKey: UserDefaultsForecastCache.legacyStorageKey)
+        let expected = ResetForecast(probability48h: 82, calibrationState: "experimental", fetchedAt: Date(timeIntervalSince1970: 123_456))
 
-        UserDefaultsForecastCache(defaults: defaults).save(expected)
-        let loaded = UserDefaultsForecastCache(defaults: defaults).load()
+        let cache = UserDefaultsForecastCache(defaults: defaults)
+        cache.save(expected)
 
-        XCTAssertEqual(loaded, expected)
+        XCTAssertNil(defaults.data(forKey: UserDefaultsForecastCache.legacyStorageKey))
+        XCTAssertEqual(UserDefaultsForecastCache(defaults: defaults).load(), expected)
     }
 
     func testReturnsNilForMissingOrCorruptedCache() {
@@ -25,9 +21,7 @@ final class ForecastCacheTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let cache = UserDefaultsForecastCache(defaults: defaults)
-
         XCTAssertNil(cache.load())
-
         defaults.set(Data("not-json".utf8), forKey: UserDefaultsForecastCache.storageKey)
         XCTAssertNil(cache.load())
     }
