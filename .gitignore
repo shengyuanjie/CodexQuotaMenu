@@ -3,5 +3,6 @@
 .worktrees/
 dist/
 tmp/
+work/
 *.zip
 *.sha256
