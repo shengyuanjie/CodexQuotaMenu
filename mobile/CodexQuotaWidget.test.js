@@ -4,8 +4,61 @@ const {
   validatePayload,
   isRecentDate,
   formatInlineSummary,
-  buildMessageWidget
+  buildMessageWidget,
+  resolveRunMode,
+  nextRefreshDate,
+  makeRefreshDiagnostic,
+  pruneRefreshDiagnostics,
+  appendRefreshDiagnostic
 } = require("./CodexQuotaWidget.js")
+
+assert.equal(resolveRunMode({ runsInWidget: true, runsInApp: false }, "refresh"), "widget")
+assert.equal(resolveRunMode({ runsInWidget: false, runsInApp: true }, " refresh "), "refresh")
+assert.equal(resolveRunMode({ runsInWidget: false, runsInApp: true }, null), "app")
+
+const scheduleBase = Date.parse("2026-08-13T05:00:00.000Z")
+assert.equal(nextRefreshDate(scheduleBase).toISOString(), "2026-08-13T05:05:00.000Z")
+
+const diagnostic = makeRefreshDiagnostic({
+  completedAt: "2026-08-13T05:00:01.000Z",
+  runMode: "refresh",
+  offline: false,
+  errorCode: null,
+  statusCode: 200,
+  durationMs: 875,
+  token: "must-not-leak",
+  responseBody: "must-not-leak"
+})
+assert.deepEqual(diagnostic, {
+  completedAt: "2026-08-13T05:00:01.000Z",
+  runMode: "refresh",
+  source: "live",
+  outcome: "success",
+  statusCode: 200,
+  durationMs: 875
+})
+assert.equal(JSON.stringify(diagnostic).includes("must-not-leak"), false)
+
+const retentionNow = Date.parse("2026-08-13T05:00:00.000Z")
+const retained = pruneRefreshDiagnostics([
+  { completedAt: "2026-08-10T04:59:59.999Z", runMode: "widget" },
+  ...Array.from({ length: 205 }, (_, index) => ({
+    completedAt: new Date(retentionNow - (205 - index) * 1000).toISOString(),
+    runMode: "widget"
+  }))
+], retentionNow)
+assert.equal(retained.length, 200)
+assert.equal(retained.at(-1).completedAt, "2026-08-13T04:59:59.000Z")
+
+let storedLog = null
+const memoryManager = {
+  documentsDirectory: () => "/documents",
+  joinPath: (base, name) => `${base}/${name}`,
+  fileExists: () => false,
+  writeString: (_, value) => { storedLog = value }
+}
+appendRefreshDiagnostic(diagnostic, memoryManager)
+assert.deepEqual(JSON.parse(storedLog), [diagnostic])
 
 const now = new Date().toISOString()
 const valid = validatePayload({

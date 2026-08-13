@@ -4,9 +4,12 @@
 const KEY_BASE_URL = "com.local.codexquotamenu.base-url"
 const KEY_TOKEN = "com.local.codexquotamenu.access-token"
 const CACHE_FILE = "CodexQuotaWidget-cache-v1.json"
+const DIAGNOSTIC_FILE = "CodexQuotaWidget-refresh-log-v1.json"
 const FORECAST_MAX_AGE_MS = 2 * 60 * 60 * 1000
 const FUTURE_TOLERANCE_MS = 5 * 60 * 1000
-const REFRESH_INTERVAL_MS = 15 * 60 * 1000
+const REFRESH_INTERVAL_MS = 5 * 60 * 1000
+const DIAGNOSTIC_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000
+const DIAGNOSTIC_MAX_ENTRIES = 200
 
 async function main() {
   let credentials = loadCredentials()
@@ -30,6 +33,60 @@ async function main() {
     await presentConnectionError(result.errorCode, result.statusCode)
   }
   await finish(widget, config.runsInApp)
+}
+
+function resolveRunMode(runtimeConfig, widgetParameter) {
+  if (runtimeConfig?.runsInWidget) return "widget"
+  return String(widgetParameter || "").trim().toLowerCase() === "refresh"
+    ? "refresh"
+    : "app"
+}
+
+function nextRefreshDate(now) {
+  return new Date(Number(now) + REFRESH_INTERVAL_MS)
+}
+
+function makeRefreshDiagnostic(input) {
+  const errorCodes = ["unauthorized", "invalid_payload", "http", "network"]
+  const outcome = input.errorCode == null
+    ? "success"
+    : (errorCodes.includes(input.errorCode) ? input.errorCode : "error")
+  return {
+    completedAt: input.completedAt,
+    runMode: ["widget", "refresh", "app"].includes(input.runMode) ? input.runMode : "app",
+    source: input.offline ? (input.hasPayload ? "cache" : "none") : "live",
+    outcome,
+    statusCode: Number.isInteger(input.statusCode) ? input.statusCode : null,
+    durationMs: Math.max(0, Math.round(Number(input.durationMs) || 0))
+  }
+}
+
+function pruneRefreshDiagnostics(entries, now) {
+  const cutoff = Number(now) - DIAGNOSTIC_MAX_AGE_MS
+  return (Array.isArray(entries) ? entries : [])
+    .filter(entry => {
+      const completedTime = Date.parse(entry?.completedAt)
+      return Number.isFinite(completedTime) && completedTime >= cutoff && completedTime <= Number(now)
+    })
+    .sort((left, right) => Date.parse(left.completedAt) - Date.parse(right.completedAt))
+    .slice(-DIAGNOSTIC_MAX_ENTRIES)
+}
+
+function appendRefreshDiagnostic(entry, manager = FileManager.local()) {
+  try {
+    const path = manager.joinPath(manager.documentsDirectory(), DIAGNOSTIC_FILE)
+    let entries = []
+    if (manager.fileExists(path)) {
+      const parsed = JSON.parse(manager.readString(path))
+      if (Array.isArray(parsed)) entries = parsed
+    }
+    const now = Number.isFinite(Date.parse(entry?.completedAt))
+      ? Date.parse(entry.completedAt)
+      : Date.now()
+    manager.writeString(path, JSON.stringify(pruneRefreshDiagnostics([...entries, entry], now)))
+  } catch (_) {
+    // Diagnostic failures must never block a valid widget render.
+  }
 }
 
 function loadCredentials() {
@@ -352,7 +409,7 @@ function buildMessageWidget(title, detail, strong = false, inlineText = "å‰©-- ä
     text.font = Font.semiboldSystemFont(13)
     text.lineLimit = 1
     text.minimumScaleFactor = 0.7
-    widget.refreshAfterDate = new Date(Date.now() + REFRESH_INTERVAL_MS)
+    widget.refreshAfterDate = nextRefreshDate(Date.now())
     return widget
   }
   const titleText = widget.addText(title)
@@ -364,7 +421,7 @@ function buildMessageWidget(title, detail, strong = false, inlineText = "å‰©-- ä
   detailText.lineLimit = 1
   detailText.minimumScaleFactor = 0.7
   if (strong) detailText.textColor = new Color("#FFD60A")
-  widget.refreshAfterDate = new Date(Date.now() + REFRESH_INTERVAL_MS)
+  widget.refreshAfterDate = nextRefreshDate(Date.now())
   return widget
 }
 
@@ -391,7 +448,17 @@ async function finish(widget, presentPreview) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { validatePayload, isRecentDate, formatInlineSummary, buildMessageWidget }
+  module.exports = {
+    validatePayload,
+    isRecentDate,
+    formatInlineSummary,
+    buildMessageWidget,
+    resolveRunMode,
+    nextRefreshDate,
+    makeRefreshDiagnostic,
+    pruneRefreshDiagnostics,
+    appendRefreshDiagnostic
+  }
 }
 
 if (!globalThis.__CODEX_WIDGET_TEST__) (async () => {
