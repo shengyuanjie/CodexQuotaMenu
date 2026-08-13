@@ -22,7 +22,17 @@ struct UsageSnapshot: Equatable {
     let fetchedAt: Date
 
     var headlineWindow: RateLimitWindow? {
+        shortWindow
+    }
+
+    var shortWindow: RateLimitWindow? {
         windows.min { ($0.durationMinutes ?? Int.max) < ($1.durationMinutes ?? Int.max) }
+    }
+
+    var weeklyWindow: RateLimitWindow? {
+        windows
+            .filter { ($0.durationMinutes ?? 0) >= 10_000 }
+            .max { ($0.durationMinutes ?? 0) < ($1.durationMinutes ?? 0) }
     }
 }
 
