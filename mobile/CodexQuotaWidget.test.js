@@ -85,11 +85,11 @@ assert.throws(() => validatePayload({ schemaVersion: 1 }), /schema_v2_required/)
 assert.equal(isRecentDate(new Date(Date.now() - 2 * 60 * 60 * 1000 - 1).toISOString(), Date.now()), false)
 
 const fixedNow = Date.parse("2026-08-13T05:00:00Z")
-assert.equal(formatInlineSummary(85, "2026-08-20T05:00:00Z", 23, fixedNow), "剩85% 余7天 Tibo23%")
-assert.equal(formatInlineSummary(85, "2026-08-13T08:40:00Z", 23, fixedNow), "剩85% 余3时 Tibo23%")
-assert.equal(formatInlineSummary(85, "2026-08-13T05:40:00Z", 23, fixedNow), "剩85% 余40分 Tibo23%")
-assert.equal(formatInlineSummary(85, "2026-08-13T04:59:00Z", 23, fixedNow), "剩85% 余待重置 Tibo23%")
-assert.equal(formatInlineSummary(null, null, null, fixedNow), "剩-- 余-- Tibo--")
+assert.equal(formatInlineSummary(85, "2026-08-20T05:00:00Z", 23, fixedNow), "剩85% 余7天 刷23%")
+assert.equal(formatInlineSummary(85, "2026-08-13T08:40:00Z", 23, fixedNow), "剩85% 余3时 刷23%")
+assert.equal(formatInlineSummary(85, "2026-08-13T05:40:00Z", 23, fixedNow), "剩85% 余40分 刷23%")
+assert.equal(formatInlineSummary(85, "2026-08-13T04:59:00Z", 23, fixedNow), "剩85% 余待重置 刷23%")
+assert.equal(formatInlineSummary(null, null, null, fixedNow), "剩-- 余-- 刷--")
 
 const validLivePayload = validatePayload({
   schemaVersion: 2,
@@ -120,7 +120,7 @@ assert.deepEqual(formatRefreshFeedback({
   statusCode: 200
 }, fixedNow), {
   title: "实时刷新成功",
-  message: "剩85% 余7天 Tibo23%\n锁屏重绘时间由 iOS 决定。"
+  message: "剩85% 余7天 刷23%\n锁屏重绘时间由 iOS 决定。"
 })
 
 assert.deepEqual(formatRefreshFeedback({
@@ -131,7 +131,7 @@ assert.deepEqual(formatRefreshFeedback({
   statusCode: null
 }, fixedNow), {
   title: "实时连接失败",
-  message: "已使用本地缓存：剩85% 余7天 Tibo23%\n请检查 Shadowrocket 回家链路。"
+  message: "已使用本地缓存：剩85% 余7天 刷23%\n请检查 Shadowrocket 回家链路。"
 })
 
 assert.deepEqual(formatRefreshFeedback({
@@ -171,8 +171,8 @@ globalThis.ListWidget = class {
   }
 }
 globalThis.Font = { semiboldSystemFont: size => ({ size }) }
-const inlineWidget = buildMessageWidget("Codex 周余量 85%", "7天后恢复 · ↻48h 23%", false, "剩85% 余7天 Tibo23%")
+const inlineWidget = buildMessageWidget("Codex 周余量 85%", "7天后恢复 · ↻48h 23%", false, "剩85% 余7天 刷23%")
 assert.equal(renderedTexts.length, 1)
-assert.equal(renderedTexts[0].value, "剩85% 余7天 Tibo23%")
+assert.equal(renderedTexts[0].value, "剩85% 余7天 刷23%")
 assert.equal(inlineWidget.refreshAfterDate instanceof Date, true)
 console.log("Scriptable schema v2 and inline checks passed")

@@ -432,18 +432,18 @@ function formatInlineSummary(weeklyPercent, weeklyResetsAt, probability48h, now)
   const quota = Number.isInteger(weeklyPercent) ? `${weeklyPercent}%` : "--"
   const remaining = formatInlineRemaining(weeklyResetsAt, now)
   const probability = Number.isInteger(probability48h) ? `${probability48h}%` : "--"
-  return `剩${quota} 余${remaining} Tibo${probability}`
+  return `剩${quota} 余${remaining} 刷${probability}`
 }
 
 function inlineSummaryForResult(result, now) {
-  if (!result?.payload) return "剩-- 余-- Tibo--"
+  if (!result?.payload) return "剩-- 余-- 刷--"
   const payload = result.payload
   const receivedTime = Date.parse(result.receivedAt || payload.generatedAt)
   const cacheAge = now - receivedTime
   if (result.offline && (
     cacheAge < -FUTURE_TOLERANCE_MS ||
     cacheAge > FORECAST_MAX_AGE_MS
-  )) return "剩-- 余-- Tibo--"
+  )) return "剩-- 余-- 刷--"
 
   const quota = payload.quotaStatus === "fresh" ? payload.quota : null
   const forecast = payload.forecast
@@ -538,7 +538,7 @@ function formatClock(value) {
   return `${hours}:${minutes}`
 }
 
-function buildMessageWidget(title, detail, strong = false, inlineText = "剩-- 余-- Tibo--") {
+function buildMessageWidget(title, detail, strong = false, inlineText = "剩-- 余-- 刷--") {
   const widget = new ListWidget()
   widget.setPadding(0, 0, 0, 0)
   if (config.widgetFamily === "accessoryInline") {
