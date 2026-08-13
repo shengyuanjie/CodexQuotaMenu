@@ -47,7 +47,7 @@ assert.equal(formatInlineSummary(null, null, null, fixedNow), "剩-- 余-- Tibo-
 Run:
 
 ```bash
-/Users/shengyuanjie/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node mobile/CodexQuotaWidget.test.js
+/Users/example/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node mobile/CodexQuotaWidget.test.js
 ```
 
 Expected: FAIL because `formatInlineSummary` is not exported or defined.
@@ -81,8 +81,8 @@ Compute the inline summary from already freshness-filtered values in `buildQuota
 Run:
 
 ```bash
-/Users/shengyuanjie/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node mobile/CodexQuotaWidget.test.js
-/Users/shengyuanjie/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check mobile/CodexQuotaWidget.js
+/Users/example/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node mobile/CodexQuotaWidget.test.js
+/Users/example/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check mobile/CodexQuotaWidget.js
 ```
 
 Expected: test prints `Scriptable schema v2 and inline checks passed`; syntax check exits 0 without output.
@@ -97,8 +97,8 @@ git commit -m "fix: fit quota summary in inline lock screen widget"
 ### Task 2: Deploy and verify the mobile artifact
 
 **Files:**
-- Modify: `/Users/shengyuanjie/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js`
-- Modify: `/Users/shengyuanjie/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js`
+- Modify: `/Users/example/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js`
+- Modify: `/Users/example/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js`
 
 **Interfaces:**
 - Consumes: tested `mobile/CodexQuotaWidget.js` from Task 1.
@@ -109,7 +109,7 @@ git commit -m "fix: fit quota summary in inline lock screen widget"
 Run:
 
 ```bash
-cp mobile/CodexQuotaWidget.js /Users/shengyuanjie/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js
+cp mobile/CodexQuotaWidget.js /Users/example/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js
 ```
 
 Do not change the delivery README.
@@ -119,7 +119,7 @@ Do not change the delivery README.
 Run with the required filesystem approval:
 
 ```bash
-install -m 600 mobile/CodexQuotaWidget.js "/Users/shengyuanjie/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js"
+install -m 600 mobile/CodexQuotaWidget.js "/Users/example/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js"
 ```
 
 Do not read, copy, or modify the Scriptable Keychain token.
@@ -129,9 +129,9 @@ Do not read, copy, or modify the Scriptable Keychain token.
 Run SHA-256 and byte-comparison checks across the worktree, delivery, and iCloud copies:
 
 ```bash
-cmp -s mobile/CodexQuotaWidget.js /Users/shengyuanjie/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js
-cmp -s mobile/CodexQuotaWidget.js "/Users/shengyuanjie/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js"
-shasum -a 256 mobile/CodexQuotaWidget.js /Users/shengyuanjie/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js "/Users/shengyuanjie/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js"
+cmp -s mobile/CodexQuotaWidget.js /Users/example/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js
+cmp -s mobile/CodexQuotaWidget.js "/Users/example/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js"
+shasum -a 256 mobile/CodexQuotaWidget.js /Users/example/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js "/Users/example/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js"
 ```
 
 Run Node syntax and contract tests against the installed copy, and confirm `probability24h`, `confidence`, `strongSignal`, `lastResetAt`, `codex-reset.com`, embedded Bearer values, and 64-hex token-shaped strings are absent.

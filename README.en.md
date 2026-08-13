@@ -16,7 +16,7 @@ A native macOS menu bar utility that shows remaining Codex usage, reset countdow
 - Uses `↻48h` for the single next-48-hour global bonus-reset probability from Codex Reset Monitor.
 - Lists recent active tasks in the menu and shows explicit error states.
 - Refreshes every five seconds, supports an immediate manual refresh, and preserves the last successful result during temporary query failures.
-- Refreshes public forecasts independently every five minutes and hides primary forecast cache data after two hours.
+- Refreshes the public forecast independently every five minutes and hides cached forecast data after two hours.
 - Provides an optional, default-off, token-protected local feed for an iPhone Scriptable lock-screen widget.
 - Uses a text-only menu-bar display without a leading icon for a cleaner appearance.
 - Supports Follow System, Simplified Chinese, and English interface languages.
@@ -70,7 +70,7 @@ Do not download builds from unofficial mirror sites. Public release archives are
 
 To start the app at login, open **System Settings → General → Login Items**, click **+**, and select `Codex用量.app` from Applications.
 
-The app queries local usage and tasks every five seconds and refreshes public forecasts independently every five minutes. These are polling intervals, not server pushes. Scriptable's 15-minute refresh date is also only an iOS scheduling suggestion and is not guaranteed.
+The app queries local usage and tasks every five seconds and refreshes public forecasts independently every five minutes. These are polling intervals, not server pushes. Scriptable suggests the earliest next refresh after five minutes, but iOS does not guarantee that schedule.
 
 ## Privacy
 
@@ -86,7 +86,7 @@ See the [English privacy notice](PRIVACY.en.md) for the complete statement.
 
 - App Sandbox is not enabled because the app must start a local Codex subprocess and read Codex session logs.
 - Release builds use Hardened Runtime and ad-hoc signing, but are not trusted by Gatekeeper like a notarized Developer ID build.
-- Codex itself may connect to OpenAI normally. This utility additionally contacts only the two documented public forecast endpoints and sends them no personal data.
+- Codex itself may connect to OpenAI normally. This utility additionally contacts only the documented `codexreset.org` public forecast endpoint and sends it no personal data.
 - Plain HTTP for the phone feed is intended only for a trusted LAN or an existing encrypted VPN/home tunnel. Never port-forward it to the public internet.
 - See the [English security policy](SECURITY.en.md) for responsible vulnerability reporting.
 

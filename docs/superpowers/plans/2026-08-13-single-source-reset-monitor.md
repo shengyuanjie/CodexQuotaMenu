@@ -309,7 +309,7 @@ Run installed `--check`, fetch the public monitor-summary endpoint, wait for the
 
 - [ ] **Step 8: Refresh user-facing outputs and hand off to the phone task**
 
-Place the v1.6.1 app, Scriptable script, and mobile README under `/Users/shengyuanjie/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/`. Send the non-secret paths and schema-v2 migration note to task `019ff8d9-0e94-7543-8f9d-779a527b5b7e`; never send the Bearer token.
+Place the v1.6.1 app, Scriptable script, and mobile README under `/Users/example/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/`. Send the non-secret paths and schema-v2 migration note to task `<codex-task-id>`; never send the Bearer token.
 
 - [ ] **Step 9: Commit documentation and version metadata**
 

@@ -100,7 +100,7 @@ assert.deepEqual(JSON.parse(storedLog), [diagnostic])
 Run:
 
 ```bash
-/Users/shengyuanjie/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node mobile/CodexQuotaWidget.test.js
+/Users/example/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node mobile/CodexQuotaWidget.test.js
 ```
 
 Expected: FAIL because the new helpers are not exported or defined.
@@ -145,8 +145,8 @@ Implement `pruneRefreshDiagnostics` by filtering valid dates newer than `now - D
 Run:
 
 ```bash
-/Users/shengyuanjie/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node mobile/CodexQuotaWidget.test.js
-/Users/shengyuanjie/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check mobile/CodexQuotaWidget.js
+/Users/example/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node mobile/CodexQuotaWidget.test.js
+/Users/example/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check mobile/CodexQuotaWidget.js
 ```
 
 Expected: both exit 0; the test prints its success line.
@@ -239,7 +239,7 @@ assert.deepEqual(calculateRefreshStats([
 Run:
 
 ```bash
-/Users/shengyuanjie/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node mobile/CodexQuotaWidget.test.js
+/Users/example/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node mobile/CodexQuotaWidget.test.js
 ```
 
 Expected: FAIL because `formatRefreshFeedback` is not exported or defined.
@@ -289,8 +289,8 @@ Change the refresh section from 15 minutes to a five-minute earliest request, st
 Run:
 
 ```bash
-/Users/shengyuanjie/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node mobile/CodexQuotaWidget.test.js
-/Users/shengyuanjie/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check mobile/CodexQuotaWidget.js
+/Users/example/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node mobile/CodexQuotaWidget.test.js
+/Users/example/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check mobile/CodexQuotaWidget.js
 swift test
 git diff --check
 ```
@@ -307,9 +307,9 @@ git commit -m "feat: add Scriptable tap refresh mode"
 ### Task 3: Refresh the delivery and installed Scriptable copies
 
 **Files:**
-- Modify: `/Users/shengyuanjie/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js`
-- Modify: `/Users/shengyuanjie/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/README.md`
-- Modify: `/Users/shengyuanjie/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js`
+- Modify: `/Users/example/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js`
+- Modify: `/Users/example/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/README.md`
+- Modify: `/Users/example/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js`
 
 **Interfaces:**
 - Consumes: verified Task 2 source and README.
@@ -318,24 +318,24 @@ git commit -m "feat: add Scriptable tap refresh mode"
 - [ ] **Step 1: Update the delivery directory**
 
 ```bash
-install -m 600 mobile/CodexQuotaWidget.js /Users/shengyuanjie/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js
-install -m 600 mobile/README.md /Users/shengyuanjie/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/README.md
+install -m 600 mobile/CodexQuotaWidget.js /Users/example/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js
+install -m 600 mobile/README.md /Users/example/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/README.md
 ```
 
 - [ ] **Step 2: Update the installed Scriptable iCloud copy**
 
 ```bash
-install -m 600 mobile/CodexQuotaWidget.js "/Users/shengyuanjie/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js"
+install -m 600 mobile/CodexQuotaWidget.js "/Users/example/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js"
 ```
 
 - [ ] **Step 3: Verify byte identity and secret boundaries**
 
 ```bash
-cmp -s mobile/CodexQuotaWidget.js /Users/shengyuanjie/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js
-cmp -s mobile/README.md /Users/shengyuanjie/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/README.md
-cmp -s mobile/CodexQuotaWidget.js "/Users/shengyuanjie/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js"
-shasum -a 256 mobile/CodexQuotaWidget.js /Users/shengyuanjie/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js "/Users/shengyuanjie/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js"
-rg -n "Bearer [0-9a-f]{64}|Authorization: Bearer|must-not-leak" mobile /Users/shengyuanjie/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile || true
+cmp -s mobile/CodexQuotaWidget.js /Users/example/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js
+cmp -s mobile/README.md /Users/example/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/README.md
+cmp -s mobile/CodexQuotaWidget.js "/Users/example/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js"
+shasum -a 256 mobile/CodexQuotaWidget.js /Users/example/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js "/Users/example/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js"
+rg -n "Bearer [0-9a-f]{64}|Authorization: Bearer|must-not-leak" mobile /Users/example/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile || true
 git status --short --branch
 ```
 

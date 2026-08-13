@@ -30,12 +30,12 @@ Requests contain only normal HTTP metadata, a JSON Accept header, and an app-ver
 - The app does not create its own user database.
 - The app does not write, copy, or upload Codex session content.
 - The app does not read or save Codex account tokens, passwords, or API keys.
-- The app implements no telemetry, crash reporting, or user-data upload. Network behavior is limited to the two documented public forecast GETs, the user-enabled local read-only feed, and Codex's own normal connections.
+- The app implements no telemetry, crash reporting, or user-data upload. Network behavior is limited to the documented `codexreset.org` public forecast GET, the user-enabled local read-only feed, and Codex's own normal connections.
 - In-memory query results are released when the app exits.
 
 The app stores locally:
 
-- macOS `UserDefaults`: interface language, the phone-feed toggle, and the public primary-forecast cache, which is hidden after two hours;
+- macOS `UserDefaults`: interface language, the phone-feed toggle, and the public forecast cache, which is hidden after two hours;
 - macOS Keychain: the 32-byte random access token created when the phone feed is first enabled;
 - process memory: the latest personal quota, task summary, and generated phone JSON snapshot.
 

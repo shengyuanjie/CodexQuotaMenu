@@ -34,6 +34,41 @@ final class ForecastClientTests: XCTestCase {
             XCTAssertEqual(error as? ForecastNetworkError, .httpStatus(503))
         }
     }
+
+    func testRejectsForecastResponseLargerThan64KiB() async {
+        let loader = RecordingHTTPDataLoader(
+            data: Data(repeating: 0x41, count: 65_537),
+            statusCode: 200
+        )
+        let client = ForecastClient(loader: loader, appVersion: "1.6.1")
+
+        do {
+            _ = try await client.fetch(now: Date(timeIntervalSince1970: 1))
+            XCTFail("Expected oversized response to be rejected")
+        } catch {
+            XCTAssertEqual(error as? ForecastNetworkError, .responseTooLarge)
+        }
+    }
+
+    func testBoundedReceiverRejectsOneOversizedChunk() {
+        var accumulator = BoundedDataAccumulator(capacity: 65_536)
+
+        XCTAssertThrowsError(try accumulator.append(Data(repeating: 0x41, count: 65_537))) { error in
+            XCTAssertEqual(error as? ForecastNetworkError, .responseTooLarge)
+        }
+        XCTAssertEqual(accumulator.data.count, 0)
+    }
+
+    func testBoundedReceiverRejectsCumulativeOverflowAcrossChunks() throws {
+        var accumulator = BoundedDataAccumulator(capacity: 65_536)
+
+        try accumulator.append(Data(repeating: 0x41, count: 32_768))
+        try accumulator.append(Data(repeating: 0x42, count: 32_768))
+        XCTAssertThrowsError(try accumulator.append(Data([0x43]))) { error in
+            XCTAssertEqual(error as? ForecastNetworkError, .responseTooLarge)
+        }
+        XCTAssertEqual(accumulator.data.count, 65_536)
+    }
 }
 
 private final class RecordingHTTPDataLoader: HTTPDataLoading {

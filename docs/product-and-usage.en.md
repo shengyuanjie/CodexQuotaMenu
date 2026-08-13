@@ -140,7 +140,7 @@ Open **System Settings → General → Login Items**, click **+**, and select `C
 3. Import [`mobile/CodexQuotaWidget.js`](../mobile/CodexQuotaWidget.js) into Scriptable and follow the [mobile setup guide](../mobile/README.md).
 4. Test in Scriptable, then add its accessory rectangular widget to the lock screen.
 
-Plain HTTP is intended only for a trusted LAN or an existing encrypted Shadowrocket/VPN home tunnel; never port-forward it. Prefer a DHCP-reserved Mac LAN address because `.local` may not resolve through a tunnel. The script suggests a 15-minute refresh, but iOS decides the actual schedule.
+Plain HTTP is intended only for a trusted LAN or an existing encrypted Shadowrocket/VPN home tunnel; never port-forward it. Prefer a DHCP-reserved Mac LAN address because `.local` may not resolve through a tunnel. The script suggests the earliest next refresh after five minutes, but iOS decides the actual schedule.
 
 ## Privacy and Security
 
@@ -156,7 +156,7 @@ The app processes:
 
 Session-log fragments may contain task titles, tool-call metadata, and the current response. They are processed in memory and are not copied, uploaded, or stored in a project database. The app does not read or save Codex account tokens, passwords, or API keys and has no advertising, analytics, or telemetry.
 
-The app sends GET requests only to the two documented public forecast endpoints and sends them no personal quota, task, identity, session, or Codex credential data. `UserDefaults` stores language, the phone-feed toggle, and the non-personal primary cache; macOS Keychain stores the 32-byte phone token. Phone JSON excludes task titles, paths, and conversations. Scriptable stores its address and token in Scriptable Keychain and writes only non-sensitive JSON to its file cache.
+The app sends GET requests only to the documented `codexreset.org` public forecast endpoint and sends it no personal quota, task, identity, session, or Codex credential data. `UserDefaults` stores language, the phone-feed toggle, and the non-personal forecast cache; macOS Keychain stores the 32-byte phone token. Phone JSON excludes task titles, paths, and conversations. Scriptable stores its address and token in Scriptable Keychain and writes only non-sensitive JSON to its file cache.
 
 App Sandbox is not enabled because the app must launch a local Codex subprocess and read Codex session logs. The app does not request camera, microphone, contacts, calendar, location, photo-library, or Accessibility permissions.
 

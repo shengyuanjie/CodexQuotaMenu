@@ -12,9 +12,29 @@ enum WidgetServerError: Error {
     case invalidPort
 }
 
+struct WidgetConnectionAdmission {
+    let capacity: Int
+    private(set) var activeCount = 0
+
+    mutating func tryAcquire() -> Bool {
+        guard activeCount < capacity else { return false }
+        activeCount += 1
+        return true
+    }
+
+    mutating func release() {
+        activeCount = max(0, activeCount - 1)
+    }
+
+    mutating func reset() {
+        activeCount = 0
+    }
+}
+
 final class WidgetServer: @unchecked Sendable {
     static let port: UInt16 = 47_821
     static let requestTimeout: TimeInterval = 5
+    static let maximumConcurrentConnections = 32
 
     private let tokenProvider: @Sendable () -> String
     private let payloadProvider: @Sendable () -> Data
@@ -22,6 +42,8 @@ final class WidgetServer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.local.codexquotamenu.widget-server")
     private var listener: NWListener?
     private var connections: [ObjectIdentifier: NWConnection] = [:]
+    private var timeoutWorkItems: [ObjectIdentifier: DispatchWorkItem] = [:]
+    private var admission = WidgetConnectionAdmission(capacity: maximumConcurrentConnections)
 
     init(
         tokenProvider: @escaping @Sendable () -> String,
@@ -68,6 +90,9 @@ final class WidgetServer: @unchecked Sendable {
         queue.sync {
             let activeConnections = Array(connections.values)
             connections.removeAll()
+            timeoutWorkItems.values.forEach { $0.cancel() }
+            timeoutWorkItems.removeAll()
+            admission.reset()
             for connection in activeConnections {
                 connection.stateUpdateHandler = nil
                 connection.cancel()
@@ -101,6 +126,10 @@ final class WidgetServer: @unchecked Sendable {
     }
 
     private func accept(_ connection: NWConnection) {
+        guard admission.tryAcquire() else {
+            connection.cancel()
+            return
+        }
         let identifier = ObjectIdentifier(connection)
         connections[identifier] = connection
         connection.stateUpdateHandler = { [weak self, weak connection] state in
@@ -113,11 +142,13 @@ final class WidgetServer: @unchecked Sendable {
         }
         connection.start(queue: queue)
 
-        queue.asyncAfter(deadline: .now() + Self.requestTimeout) { [weak self, weak connection] in
+        let timeout = DispatchWorkItem { [weak self, weak connection] in
             guard let self, let connection,
                   self.connections[identifier] != nil else { return }
             self.finish(connection)
         }
+        timeoutWorkItems[identifier] = timeout
+        queue.asyncAfter(deadline: .now() + Self.requestTimeout, execute: timeout)
         receive(from: connection, accumulated: Data())
     }
 
@@ -162,6 +193,8 @@ final class WidgetServer: @unchecked Sendable {
     private func finish(_ connection: NWConnection) {
         let identifier = ObjectIdentifier(connection)
         guard connections.removeValue(forKey: identifier) != nil else { return }
+        timeoutWorkItems.removeValue(forKey: identifier)?.cancel()
+        admission.release()
         connection.stateUpdateHandler = nil
         connection.cancel()
     }

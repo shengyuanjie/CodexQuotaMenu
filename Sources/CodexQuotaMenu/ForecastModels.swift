@@ -4,6 +4,12 @@ struct ResetForecast: Codable, Equatable {
     let probability48h: Int
     let calibrationState: String
     let fetchedAt: Date
+
+    var isValid: Bool {
+        (0...100).contains(probability48h) &&
+        !calibrationState.isEmpty &&
+        calibrationState.count <= 64
+    }
 }
 
 enum ForecastParsingError: Error, Equatable {
@@ -17,7 +23,15 @@ enum ForecastParser {
             let wire = try JSONDecoder().decode(MonitorSummary.self, from: data)
             guard wire.reset.unit == "probability" else { throw ForecastParsingError.invalidResponse }
             guard (0...100).contains(wire.reset.score48h) else { throw ForecastParsingError.probabilityOutOfRange }
-            return ResetForecast(probability48h: wire.reset.score48h, calibrationState: wire.reset.calibrationState, fetchedAt: fetchedAt)
+            let forecast = ResetForecast(
+                probability48h: wire.reset.score48h,
+                calibrationState: wire.reset.calibrationState,
+                fetchedAt: fetchedAt
+            )
+            guard forecast.isValid else {
+                throw ForecastParsingError.invalidResponse
+            }
+            return forecast
         } catch let error as ForecastParsingError {
             throw error
         } catch {

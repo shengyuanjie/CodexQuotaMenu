@@ -50,4 +50,15 @@ final class ForecastParserTests: XCTestCase {
             )
         }
     }
+
+    func testRejectsCalibrationStateLongerThan64Characters() {
+        let oversizedState = String(repeating: "a", count: 65)
+        let fixture = #"{"reset":{"calibrationState":"\#(oversizedState)","score48h":82,"unit":"probability"}}"#
+
+        XCTAssertThrowsError(
+            try ForecastParser.parse(Data(fixture.utf8), fetchedAt: Date(timeIntervalSince1970: 1))
+        ) { error in
+            XCTAssertEqual(error as? ForecastParsingError, .invalidResponse)
+        }
+    }
 }

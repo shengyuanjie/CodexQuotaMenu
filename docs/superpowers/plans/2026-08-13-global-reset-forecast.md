@@ -829,7 +829,7 @@ Codex 周余量 82%
 Run:
 
 ```sh
-/Users/shengyuanjie/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check mobile/CodexQuotaWidget.js
+/Users/example/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check mobile/CodexQuotaWidget.js
 rg -n "token|Authorization|writeString|Keychain" mobile/CodexQuotaWidget.js
 git add mobile/CodexQuotaWidget.js mobile/README.md
 git commit -m "feat: add the Scriptable quota widget"
@@ -966,7 +966,7 @@ Expected: 签名验证通过；无编译机用户路径或真实 Bearer token；
 
 ### Step 2：把手机交付物发送到既有 Codex 任务
 
-向任务 `019ff8d9-0e94-7543-8f9d-779a527b5b7e` 发送：
+向任务 `<codex-task-id>` 发送：
 
 - `mobile/CodexQuotaWidget.js` 的本地绝对路径。
 - `mobile/README.md` 的配置步骤。

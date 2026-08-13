@@ -47,7 +47,7 @@ Change live, cached, and rendered text expectations from `Tibo23%` to `刷23%`.
 Run:
 
 ```bash
-/Users/shengyuanjie/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node mobile/CodexQuotaWidget.test.js
+/Users/example/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node mobile/CodexQuotaWidget.test.js
 ```
 
 Expected: FAIL with actual text still containing `Tibo`.
@@ -69,8 +69,8 @@ Update `mobile/README.md` only where it describes the current visible summary, a
 Run:
 
 ```bash
-/Users/shengyuanjie/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node mobile/CodexQuotaWidget.test.js
-/Users/shengyuanjie/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check mobile/CodexQuotaWidget.js
+/Users/example/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node mobile/CodexQuotaWidget.test.js
+/Users/example/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check mobile/CodexQuotaWidget.js
 git diff --check
 ```
 
@@ -86,9 +86,9 @@ git commit -m "style: rename Scriptable refresh label"
 ### Task 2: Synchronize verified mobile artifacts
 
 **Files:**
-- Modify: `/Users/shengyuanjie/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js`
-- Modify: `/Users/shengyuanjie/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/README.md`
-- Modify: `/Users/shengyuanjie/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js`
+- Modify: `/Users/example/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js`
+- Modify: `/Users/example/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/README.md`
+- Modify: `/Users/example/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js`
 
 **Interfaces:**
 - Consumes: tested Task 1 source and README.
@@ -97,18 +97,18 @@ git commit -m "style: rename Scriptable refresh label"
 - [ ] **Step 1: Install the delivery and iCloud copies**
 
 ```bash
-install -m 600 mobile/CodexQuotaWidget.js /Users/shengyuanjie/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js
-install -m 600 mobile/README.md /Users/shengyuanjie/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/README.md
-install -m 600 mobile/CodexQuotaWidget.js "/Users/shengyuanjie/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js"
+install -m 600 mobile/CodexQuotaWidget.js /Users/example/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js
+install -m 600 mobile/README.md /Users/example/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/README.md
+install -m 600 mobile/CodexQuotaWidget.js "/Users/example/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js"
 ```
 
 - [ ] **Step 2: Verify identity, visible output, and secret boundaries**
 
 ```bash
-cmp -s mobile/CodexQuotaWidget.js /Users/shengyuanjie/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js
-cmp -s mobile/README.md /Users/shengyuanjie/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/README.md
-cmp -s mobile/CodexQuotaWidget.js "/Users/shengyuanjie/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js"
-shasum -a 256 mobile/CodexQuotaWidget.js /Users/shengyuanjie/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js "/Users/shengyuanjie/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js"
+cmp -s mobile/CodexQuotaWidget.js /Users/example/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js
+cmp -s mobile/README.md /Users/example/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/README.md
+cmp -s mobile/CodexQuotaWidget.js "/Users/example/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js"
+shasum -a 256 mobile/CodexQuotaWidget.js /Users/example/Documents/Codex/2026-08-13/w/outputs/CodexQuotaMenu-v1.6.1-local/mobile/CodexQuotaWidget.js "/Users/example/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/CodexQuotaWidget.js"
 rg -n "Tibo" mobile/CodexQuotaWidget.js mobile/CodexQuotaWidget.test.js mobile/README.md
 ```
 

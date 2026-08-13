@@ -11,10 +11,12 @@ protocol ForecastFetching {
 enum ForecastNetworkError: Error, Equatable {
     case httpStatus(Int)
     case invalidResponse
+    case responseTooLarge
 }
 
 final class URLSessionHTTPDataLoader: HTTPDataLoading {
-    private let session: URLSession
+    static let maximumResponseBytes = 64 * 1_024
+    private let configuration: URLSessionConfiguration
 
     init() {
         let configuration = URLSessionConfiguration.ephemeral
@@ -23,15 +25,100 @@ final class URLSessionHTTPDataLoader: HTTPDataLoading {
         configuration.httpCookieStorage = nil
         configuration.urlCredentialStorage = nil
         configuration.timeoutIntervalForRequest = 10
-        session = URLSession(configuration: configuration)
+        configuration.timeoutIntervalForResource = 15
+        self.configuration = configuration
     }
 
     func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        let (data, response) = try await session.data(for: request)
-        guard let response = response as? HTTPURLResponse else {
-            throw ForecastNetworkError.invalidResponse
+        let receiver = BoundedHTTPReceiver(
+            configuration: configuration,
+            maximumBytes: Self.maximumResponseBytes
+        )
+        return try await receiver.load(request)
+    }
+}
+
+struct BoundedDataAccumulator {
+    let capacity: Int
+    private(set) var data = Data()
+
+    mutating func append(_ chunk: Data) throws {
+        guard chunk.count <= capacity,
+              data.count <= capacity - chunk.count else {
+            throw ForecastNetworkError.responseTooLarge
         }
-        return (data, response)
+        data.append(chunk)
+    }
+}
+
+private final class BoundedHTTPReceiver: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private let configuration: URLSessionConfiguration
+    private let maximumBytes: Int
+    private var accumulator: BoundedDataAccumulator
+    private var response: HTTPURLResponse?
+    private var oversized = false
+    private var continuation: CheckedContinuation<(Data, HTTPURLResponse), Error>?
+    private var session: URLSession?
+
+    init(configuration: URLSessionConfiguration, maximumBytes: Int) {
+        self.configuration = configuration
+        self.maximumBytes = maximumBytes
+        accumulator = BoundedDataAccumulator(capacity: maximumBytes)
+    }
+
+    func load(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+            let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+            self.session = session
+            session.dataTask(with: request).resume()
+        }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive response: URLResponse,
+        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+    ) {
+        guard let http = response as? HTTPURLResponse else {
+            completionHandler(.cancel)
+            return
+        }
+        self.response = http
+        if response.expectedContentLength > Int64(maximumBytes) {
+            oversized = true
+            completionHandler(.cancel)
+        } else {
+            completionHandler(.allow)
+        }
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive chunk: Data) {
+        guard !oversized else { return }
+        do {
+            try accumulator.append(chunk)
+        } catch {
+            oversized = true
+            dataTask.cancel()
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        guard let continuation else { return }
+        self.continuation = nil
+        self.session = nil
+        session.finishTasksAndInvalidate()
+
+        if oversized {
+            continuation.resume(throwing: ForecastNetworkError.responseTooLarge)
+        } else if let error {
+            continuation.resume(throwing: error)
+        } else if let response {
+            continuation.resume(returning: (accumulator.data, response))
+        } else {
+            continuation.resume(throwing: ForecastNetworkError.invalidResponse)
+        }
     }
 }
 
@@ -61,6 +148,9 @@ final class ForecastClient: ForecastFetching {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("CodexQuotaMenu/\(appVersion)", forHTTPHeaderField: "User-Agent")
         let (data, response) = try await loader.data(for: request)
+        guard data.count <= URLSessionHTTPDataLoader.maximumResponseBytes else {
+            throw ForecastNetworkError.responseTooLarge
+        }
         guard (200...299).contains(response.statusCode) else {
             throw ForecastNetworkError.httpStatus(response.statusCode)
         }

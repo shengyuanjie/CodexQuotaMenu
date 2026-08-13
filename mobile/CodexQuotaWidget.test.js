@@ -82,6 +82,21 @@ const valid = validatePayload({
 assert.equal(valid.forecast.probability48h, 82)
 assert.equal(valid.forecast.source, "codexreset.org")
 assert.throws(() => validatePayload({ schemaVersion: 1 }), /schema_v2_required/)
+assert.throws(() => validatePayload({
+  schemaVersion: 2,
+  generatedAt: now,
+  quotaStatus: "unavailable",
+  quota: null,
+  tasks: { runningCount: 0 },
+  forecastStatus: "fresh",
+  forecast: {
+    probability48h: 82,
+    calibrationState: "a".repeat(65),
+    updatedAt: now,
+    isCached: false,
+    source: "codexreset.org"
+  }
+}), /forecast_flags/)
 assert.equal(isRecentDate(new Date(Date.now() - 2 * 60 * 60 * 1000 - 1).toISOString(), Date.now()), false)
 
 const fixedNow = Date.parse("2026-08-13T05:00:00Z")

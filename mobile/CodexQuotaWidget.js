@@ -279,7 +279,12 @@ function sanitizeQuota(raw) {
 
 function sanitizeForecast(raw) {
   if (!isObject(raw) || raw.source !== "codexreset.org") throw new Error("forecast")
-  if (typeof raw.calibrationState !== "string" || typeof raw.isCached !== "boolean") throw new Error("forecast_flags")
+  if (
+    typeof raw.calibrationState !== "string" ||
+    raw.calibrationState.length === 0 ||
+    raw.calibrationState.length > 64 ||
+    typeof raw.isCached !== "boolean"
+  ) throw new Error("forecast_flags")
   return {
     probability48h: nullablePercent(raw.probability48h),
     calibrationState: raw.calibrationState,
