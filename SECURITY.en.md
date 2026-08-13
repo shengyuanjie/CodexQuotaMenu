@@ -19,9 +19,23 @@ A useful report may include:
 
 Do not submit account tokens, API keys, passwords, complete session logs, or another person's personal information.
 
+## Phone Feed Security Boundary
+
+- The phone feed is off by default and accepts only `GET /v1/widget`. It cannot refresh or control Codex, execute tasks, or read conversations.
+- First enablement generates a 32-byte token with the system secure random source and stores it in macOS Keychain. The token is sent only in the `Authorization: Bearer` header.
+- Requests are limited to 8 KiB and closed if incomplete after five seconds. Error responses never echo the token, request headers, or internal error stacks.
+- JSON contains only personal quota, reset dates, running-task count, and public forecast summaries—never task titles, paths, conversations, or Codex credentials.
+- The Mac service uses plain HTTP and is suitable only for a trusted LAN or an existing encrypted VPN/home tunnel. Never port-forward or expose port `47821` to the public internet.
+- If a token may have leaked, regenerate it immediately from the menu. The old token becomes invalid at once. Never include a real token in a vulnerability report.
+
+## External Forecast Boundary
+
+The app makes public GET requests only to `codex-reset.com/api/forecast` and `codexreset.org/api/monitor-summary`. It sends no personal usage, task, identity, session, or Codex credential data. Only the former supplies the primary probability; the latter can only trigger the separate `⚡` signal.
+
 ## Release Boundaries
 
 - The project currently has no Apple Developer certificate. Releases use Hardened Runtime and an ad-hoc signature but are not notarized.
 - Public releases should be built only by this repository's GitHub Actions workflow from version tags.
 - Every app archive is published with a matching SHA-256 file.
 - Release auditing rejects binaries containing build-machine user paths or common credential patterns.
+- Automated tests use fixed fixtures and do not access a real Keychain or third-party forecast endpoint.

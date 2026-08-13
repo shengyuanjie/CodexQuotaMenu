@@ -2,7 +2,7 @@
 
 English | [简体中文](README.md)
 
-A native macOS menu bar utility that shows your remaining Codex usage, reset countdown, and the number of currently active tasks.
+A native macOS menu bar utility that shows remaining Codex usage, reset countdowns, global bonus-reset probability, and active tasks, with an optional read-only Scriptable lock-screen widget feed.
 
 ![App icon](Resources/AppIcon-1024.png)
 
@@ -13,8 +13,11 @@ A native macOS menu bar utility that shows your remaining Codex usage, reset cou
 - Shows the remaining percentage, exact reset time, and countdown for Codex usage windows.
 - Shows every usage window returned by Codex and the current plan type.
 - Uses `▶` for the number of tasks that are still active.
+- Uses `↻` for the primary 24-hour global bonus-reset probability. `⚡` is a separate fast Tibo signal and is never averaged into that probability.
 - Lists recent active tasks in the menu and shows explicit error states.
 - Refreshes every five seconds, supports an immediate manual refresh, and preserves the last successful result during temporary query failures.
+- Refreshes public forecasts independently every five minutes and hides primary forecast cache data after two hours.
+- Provides an optional, default-off, token-protected local feed for an iPhone Scriptable lock-screen widget.
 - Uses a text-only menu-bar display without a leading icon for a cleaner appearance.
 - Supports Follow System, Simplified Chinese, and English interface languages.
 - Reuses your existing local Codex sign-in; no account token needs to be provided to this project.
@@ -25,16 +28,19 @@ Completed tasks are not included in the menu bar counts, and no completed-task c
 ## Menu Bar Display
 
 ```text
-Codex 90% · 4h 25m · ▶ 1
+Codex 90% · 4h 25m · ↻30% · ▶ 1
 ```
 
 | Display | Meaning |
 |---|---|
 | `Codex 90%` | Remaining percentage for the shortest usage window |
 | `4h 25m` | Time until that window resets |
+| `↻30%` | Primary probability of a global bonus reset in the next 24 hours |
 | `▶ 1` | Number of tasks that are still active |
 
-Click the menu bar item to see all usage windows, plan type, recent task titles, error count, last update time, and the Refresh Now, Language, and Quit actions.
+Open the menu for every usage window, 24/48-hour forecasts, confidence, the separate `⚡` signal, recent task titles, errors, and update times. The **Phone Widget** submenu controls the read-only local feed and copies its address or access token.
+
+Global bonus-reset probabilities are public community forecasts. They express uncertainty and are neither an official schedule nor a guarantee.
 
 The app no longer classifies tasks as waiting for user action and does not analyze response text to infer intent. Any task still marked active by Codex is counted under `▶`; a detected completion marker removes it from the count.
 
@@ -59,17 +65,20 @@ Do not download builds from unofficial mirror sites. Public release archives are
 2. Read the remaining usage, reset countdown, and `▶` active-task count directly from the menu bar.
 3. Click the item for details. Choose **Refresh Now**, or press `R` while the menu is open, to query immediately.
 4. Choose **Language** to switch instantly between Follow System, Simplified Chinese, and English.
-5. Choose **Quit**, or press `Q` while the menu is open, to stop the app and its local status queries.
+5. For an iPhone lock-screen display, follow the [Scriptable setup guide](mobile/README.md) and enable the **Phone Widget** read-only feed.
+6. Choose **Quit**, or press `Q` while the menu is open, to stop all queries and the phone feed.
 
 To start the app at login, open **System Settings → General → Login Items**, click **+**, and select `Codex用量.app` from Applications.
 
-The app keeps a local Codex connection and queries every five seconds. “Real time” here means frequent automatic refreshes rather than a server push; changes normally appear after the next refresh.
+The app queries local usage and tasks every five seconds and refreshes public forecasts independently every five minutes. These are polling intervals, not server pushes. Scriptable's 15-minute refresh date is also only an iOS scheduling suggestion and is not guaranteed.
 
 ## Privacy
 
 The app queries usage and task metadata through a local Codex process. To identify whether a task is still active or completed, it may read up to the last 512 KB of relevant local Codex session logs. It no longer analyzes response text to infer user intent.
 
-All such content is processed in memory. It is not copied, stored in a project database, uploaded, or used for telemetry. The only setting persisted by this app is the selected interface language.
+All session content is processed in memory. It is not copied, stored in a project database, uploaded, or used for telemetry.
+
+Forecasting performs GET requests only to `codex-reset.com/api/forecast` and `codexreset.org/api/monitor-summary`; no personal usage, task, identity, or Codex credential is sent. `UserDefaults` stores the public primary-forecast cache and the phone-feed toggle, while the phone access token is stored in macOS Keychain. The default-off phone response contains aggregate values only.
 
 See the [English privacy notice](PRIVACY.en.md) for the complete statement.
 
@@ -77,7 +86,8 @@ See the [English privacy notice](PRIVACY.en.md) for the complete statement.
 
 - App Sandbox is not enabled because the app must start a local Codex subprocess and read Codex session logs.
 - Release builds use Hardened Runtime and ad-hoc signing, but are not trusted by Gatekeeper like a notarized Developer ID build.
-- Codex itself may connect to OpenAI as part of its normal operation; this utility does not implement its own upload service.
+- Codex itself may connect to OpenAI normally. This utility additionally contacts only the two documented public forecast endpoints and sends them no personal data.
+- Plain HTTP for the phone feed is intended only for a trusted LAN or an existing encrypted VPN/home tunnel. Never port-forward it to the public internet.
 - See the [English security policy](SECURITY.en.md) for responsible vulnerability reporting.
 
 ## Troubleshooting
