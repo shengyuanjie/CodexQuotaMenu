@@ -143,7 +143,7 @@ enum TaskParser {
         try? handle.seek(toOffset: size > tailSize ? size - tailSize : 0)
         let data: Data
         do { data = try handle.readToEnd() ?? Data() } catch { return nil }
-        guard let text = String(data: data, encoding: .utf8) else { return nil }
+        let text = String(decoding: data, as: UTF8.self)
 
         let signals = logSignals(from: text)
         if let lifecycleState = signals.lifecycleState {
