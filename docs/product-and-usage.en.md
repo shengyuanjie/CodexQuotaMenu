@@ -2,7 +2,7 @@
 
 English | [简体中文](product-and-usage.md)
 
-Version: v1.6.1
+Version: v1.6.2
 
 System: macOS 14 or later
 
@@ -44,7 +44,7 @@ The app queries up to the 50 most recently updated Codex tasks. Each task catego
 
 ### `▶` Active
 
-A task is counted as active when Codex reports it as active, or when its recent session log has not completed and was updated within the last 30 minutes.
+A task is counted as active when Codex reports it as active, when the latest structured lifecycle event is `task_started`, or when lifecycle markers are outside the read window but recent activity remains in the log. Incomplete logs that receive no updates for more than 30 minutes are excluded.
 
 The app no longer separates “running” from “waiting for user action,” and it does not inspect response text to infer whether you need to approve, choose, enter information, upload, or reply. This removes the false-positive-prone `⏸` classification.
 
@@ -104,14 +104,16 @@ The release archive uses the ASCII name `CodexQuotaMenu` to prevent GitHub from 
 
 Apple Silicon:
 
+Use the following filenames to verify the official v1.6.2 release assets:
+
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.6.1-macOS-arm64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.6.2-macOS-arm64.zip.sha256
 ```
 
 Intel:
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.6.1-macOS-x86_64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.6.2-macOS-x86_64.zip.sha256
 ```
 
 An `OK` result confirms that the ZIP matches its checksum file. Download both files from the same official Release.

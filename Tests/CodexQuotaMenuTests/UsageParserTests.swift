@@ -148,4 +148,71 @@ final class UsageParserTests: XCTestCase {
         try Data(log.utf8).write(to: url)
         XCTAssertEqual(TaskParser.stateFromLog(path: url.path, now: Date()), .running)
     }
+
+    func testTaskStartedAfterPreviousCompletionInLargeLogIsRunning() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let oversizedEarlierRecord = """
+        {"type":"response_item","payload":{"type":"custom_tool_call_output","output":"\(String(repeating: "x", count: 600_000))"}}
+        """
+        let currentTurn = """
+        {"type":"event_msg","payload":{"type":"task_complete"}}
+        {"type":"event_msg","payload":{"type":"thread_settings_applied"}}
+        {"type":"event_msg","payload":{"type":"task_started"}}
+        {"type":"turn_context","payload":{}}
+        {"type":"response_item","payload":{"type":"reasoning"}}
+        """
+        try Data((oversizedEarlierRecord + currentTurn).utf8).write(to: url)
+
+        XCTAssertEqual(TaskParser.stateFromLog(path: url.path, now: Date()), .running)
+    }
+
+    func testTaskLifecycleSurvivesTailStartingInsideUTF8Character() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let currentTurn = Data("""
+
+        {"type":"event_msg","payload":{"type":"task_complete"}}
+        {"type":"event_msg","payload":{"type":"task_started"}}
+        {"type":"response_item","payload":{"type":"reasoning"}}
+        """.utf8)
+        let tailSize = 512 * 1_024
+        let prefixSize = tailSize + 1 - currentTurn.count
+        var log = Data([0xE4, 0xB8, 0xAD])
+        log.append(Data(repeating: 0x78, count: prefixSize - log.count))
+        log.append(currentTurn)
+        try log.write(to: url)
+
+        XCTAssertEqual(TaskParser.stateFromLog(path: url.path, now: Date()), .running)
+    }
+
+    func testTaskStartedLogOlderThanThirtyMinutesIsNotRunning() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let now = Date()
+        let log = """
+        {"type":"event_msg","payload":{"type":"task_started"}}
+        {"type":"response_item","payload":{"type":"reasoning"}}
+        """
+        try Data(log.utf8).write(to: url)
+        try FileManager.default.setAttributes(
+            [.modificationDate: now.addingTimeInterval(-1_801)],
+            ofItemAtPath: url.path
+        )
+
+        XCTAssertNil(TaskParser.stateFromLog(path: url.path, now: now))
+    }
+
+    func testTaskCompleteAfterTaskStartedRemainsCompleted() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let log = """
+        {"type":"event_msg","payload":{"type":"task_started"}}
+        {"type":"response_item","payload":{"type":"reasoning"}}
+        {"type":"event_msg","payload":{"type":"task_complete"}}
+        """
+        try Data(log.utf8).write(to: url)
+
+        XCTAssertEqual(TaskParser.stateFromLog(path: url.path, now: Date()), .completed)
+    }
 }
