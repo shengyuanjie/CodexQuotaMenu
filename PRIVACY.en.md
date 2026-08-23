@@ -13,7 +13,7 @@ The app starts `codex app-server --stdio` through a Codex executable already ins
 - Codex usage percentages, reset times, and plan type;
 - recent task identifiers, titles, update times, and runtime states;
 - local session-log paths returned by Codex;
-- up to the last 512 KB of each relevant session log, used only to identify the latest user message, completion markers, and whether the task log has been active recently.
+- up to the last 512 KB of each relevant session log, used only to identify structured lifecycle events such as task starts, user messages, and task completions, plus whether the log has been active recently.
 
 Session-log fragments may include task titles, tool-call metadata, and text from the current response.
 The app does not analyze response text or tool-call contents to infer whether the user needs to approve, choose, enter information, upload, or reply.

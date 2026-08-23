@@ -145,20 +145,19 @@ enum TaskParser {
         do { data = try handle.readToEnd() ?? Data() } catch { return nil }
         guard let text = String(data: data, encoding: .utf8) else { return nil }
 
-        let lastUser = text.range(of: #""type":"user_message""#, options: .backwards)?.lowerBound
-        let lastComplete = text.range(of: #""type":"task_complete""#, options: .backwards)?.lowerBound
-        if let lastUser, lastComplete == nil || lastUser > lastComplete! {
-            // 正在执行的日志会持续写入；过久未更新的未完成日志视为中断，不误报为运行中。
-            guard now.timeIntervalSince(modifiedAt) <= 1_800 else { return nil }
-            return .running
+        let signals = logSignals(from: text)
+        if let lifecycleState = signals.lifecycleState {
+            if lifecycleState == .running,
+               now.timeIntervalSince(modifiedAt) > 1_800 {
+                // 过久未更新的未完成日志视为中断，不误报为运行中。
+                return nil
+            }
+            return lifecycleState
         }
-        if lastComplete != nil {
-            return .completed
-        }
-        // 长任务可能让本次 user_message 落在 512 KB 读取窗口之外；只要日志近期仍在
-        // 写入且末尾没有 task_complete，就视为运行中。
+        // 长任务可能让生命周期标志落在 512 KB 读取窗口之外；只要日志近期仍在
+        // 写入且末尾存在活动记录，就视为运行中。
         if now.timeIntervalSince(modifiedAt) <= 1_800,
-           text.contains(#""type":"response_item""#) || text.contains(#""type":"event_msg""#) {
+           signals.hasActivity {
             return .running
         }
         return nil
@@ -166,6 +165,35 @@ enum TaskParser {
 }
 
 private extension TaskParser {
+    struct LogSignals {
+        var lifecycleState: TaskState?
+        var hasActivity = false
+    }
+
+    static func logSignals(from text: String) -> LogSignals {
+        var signals = LogSignals()
+        for line in text.split(separator: "\n") {
+            guard let data = line.data(using: .utf8),
+                  let record = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let recordType = record["type"] as? String else { continue }
+            if recordType == "event_msg" || recordType == "response_item" {
+                signals.hasActivity = true
+            }
+            guard recordType == "event_msg",
+                  let payload = record["payload"] as? [String: Any],
+                  let eventType = payload["type"] as? String else { continue }
+            switch eventType {
+            case "user_message", "task_started":
+                signals.lifecycleState = .running
+            case "task_complete":
+                signals.lifecycleState = .completed
+            default:
+                break
+            }
+        }
+        return signals
+    }
+
     static func compactTitle(_ title: String) -> String {
         let singleLine = title.replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)

@@ -74,7 +74,7 @@ The app queries local usage and tasks every five seconds and refreshes public fo
 
 ## Privacy
 
-The app queries usage and task metadata through a local Codex process. To identify whether a task is still active or completed, it may read up to the last 512 KB of relevant local Codex session logs. It no longer analyzes response text to infer user intent.
+The app queries usage and task metadata through a local Codex process. To identify whether a task is still active or completed, it may parse structured lifecycle events from up to the last 512 KB of relevant local Codex session logs. It no longer analyzes response text to infer user intent.
 
 All session content is processed in memory. It is not copied, stored in a project database, uploaded, or used for telemetry.
 

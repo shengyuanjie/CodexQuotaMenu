@@ -148,4 +148,22 @@ final class UsageParserTests: XCTestCase {
         try Data(log.utf8).write(to: url)
         XCTAssertEqual(TaskParser.stateFromLog(path: url.path, now: Date()), .running)
     }
+
+    func testTaskStartedAfterPreviousCompletionInLargeLogIsRunning() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let oversizedEarlierRecord = """
+        {"type":"response_item","payload":{"type":"custom_tool_call_output","output":"\(String(repeating: "x", count: 600_000))"}}
+        """
+        let currentTurn = """
+        {"type":"event_msg","payload":{"type":"task_complete"}}
+        {"type":"event_msg","payload":{"type":"thread_settings_applied"}}
+        {"type":"event_msg","payload":{"type":"task_started"}}
+        {"type":"turn_context","payload":{}}
+        {"type":"response_item","payload":{"type":"reasoning"}}
+        """
+        try Data((oversizedEarlierRecord + currentTurn).utf8).write(to: url)
+
+        XCTAssertEqual(TaskParser.stateFromLog(path: url.path, now: Date()), .running)
+    }
 }
