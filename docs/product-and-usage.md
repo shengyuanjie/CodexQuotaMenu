@@ -2,7 +2,7 @@
 
 [English](product-and-usage.en.md) | 简体中文
 
-适用版本：v1.6.2（本地测试版，尚未发布）
+适用版本：v1.6.2
 
 适用系统：macOS 14 或更高版本
 
@@ -165,7 +165,7 @@ uname -m
 
 Apple Silicon：
 
-> v1.6.2 尚未发布；以下文件名用于正式发布后的校验。
+以下文件名用于校验 v1.6.2 的正式发布资产：
 
 ```sh
 shasum -a 256 -c CodexQuotaMenu-v1.6.2-macOS-arm64.zip.sha256

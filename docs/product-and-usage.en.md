@@ -2,7 +2,7 @@
 
 English | [简体中文](product-and-usage.md)
 
-Version: v1.6.2 (local test build, not yet released)
+Version: v1.6.2
 
 System: macOS 14 or later
 
@@ -104,7 +104,7 @@ The release archive uses the ASCII name `CodexQuotaMenu` to prevent GitHub from 
 
 Apple Silicon:
 
-> v1.6.2 is not yet published. The filenames below apply after an official release.
+Use the following filenames to verify the official v1.6.2 release assets:
 
 ```sh
 shasum -a 256 -c CodexQuotaMenu-v1.6.2-macOS-arm64.zip.sha256
