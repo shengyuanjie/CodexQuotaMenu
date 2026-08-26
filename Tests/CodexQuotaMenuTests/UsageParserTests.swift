@@ -24,6 +24,14 @@ final class UsageParserTests: XCTestCase {
         XCTAssertEqual(reverse.shortWindow, short)
     }
 
+    func testWeeklyWindowIsNotDuplicatedAsShortWindow() {
+        let weekly = RateLimitWindow(usedPercent: 38, durationMinutes: 10_080, resetsAt: nil)
+        let snapshot = UsageSnapshot(windows: [weekly], plan: nil, fetchedAt: Date())
+
+        XCTAssertEqual(snapshot.weeklyWindow, weekly)
+        XCTAssertNil(snapshot.shortWindow)
+    }
+
     func testRejectsResponseWithoutWindows() {
         let json = #"{"id":2,"result":{"rateLimits":{"planType":"plus"}}}"#
         XCTAssertThrowsError(try UsageParser.parse(Data(json.utf8)))
