@@ -10,26 +10,27 @@ enum MenuPresentation {
     ) -> String {
         let shortPercent = shortRemainingPercent.map { "\($0)%" } ?? "--"
         let weeklyPercent = weeklyRemainingPercent.map { "\($0)%" } ?? "--"
-        let forecastPercent = forecast.probability48h.map { "\($0)%" } ?? "--"
-
         let shortPart: String
         let weeklyPart: String
-        let forecastPart: String
+        let encouragement: String
         switch language {
         case .simplifiedChinese:
             shortPart = "晌\(shortPercent)" + (shortResetText.map { "余\($0)" } ?? "")
             weeklyPart = "周\(weeklyPercent)" + (weeklyResetText.map { "余\($0)" } ?? "")
-            forecastPart = "重置率\(forecastPercent)"
+            encouragement = "冲冲冲～使劲蹬啊～"
         case .english:
             shortPart = "5h\(shortPercent)" + (shortResetText.map { " left\($0)" } ?? "")
             weeklyPart = "W\(weeklyPercent)" + (weeklyResetText.map { " left\($0)" } ?? "")
-            forecastPart = "Reset\(forecastPercent)"
+            encouragement = "Go go go~ Pedal harder~"
         }
 
-        var parts = ["Codex", shortPart, weeklyPart, forecastPart]
+        let quotaParts = forecast.probability48h.map { $0 >= 80 } == true
+            ? [encouragement]
+            : [shortPart, weeklyPart]
+        var parts = ["Codex"] + quotaParts
         if let runningCount {
             parts.append("▶\(runningCount)")
         }
-        return parts.joined(separator: " ")
+        return parts.joined(separator: "  ")
     }
 }

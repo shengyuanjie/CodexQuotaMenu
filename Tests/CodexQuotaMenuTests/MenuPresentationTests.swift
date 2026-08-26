@@ -2,33 +2,63 @@ import XCTest
 @testable import CodexQuotaMenu
 
 final class MenuPresentationTests: XCTestCase {
-    func testChineseTitleShowsShortWindowBeforeWeeklyWindowInCompactFormat() {
+    func testChineseTitleUsesWiderSpacingAndHidesForecastBelowEightyPercent() {
         XCTAssertEqual(
             MenuPresentation.title(
                 shortRemainingPercent: 81,
                 shortResetText: "3时",
                 weeklyRemainingPercent: 62,
                 weeklyResetText: "2天",
-                forecast: forecast(27),
+                forecast: forecast(79),
                 runningCount: 2,
                 language: .simplifiedChinese
             ),
-            "Codex 晌81%余3时 周62%余2天 重置率27% ▶2"
+            "Codex  晌81%余3时  周62%余2天  ▶2"
         )
     }
 
-    func testEnglishTitleUsesCompactLocalizedLabels() {
+    func testEnglishTitleUsesWiderSpacingAndHidesForecastBelowEightyPercent() {
         XCTAssertEqual(
             MenuPresentation.title(
                 shortRemainingPercent: 81,
                 shortResetText: "3h",
                 weeklyRemainingPercent: 62,
                 weeklyResetText: "2d",
-                forecast: forecast(27),
+                forecast: forecast(79),
                 runningCount: 2,
                 language: .english
             ),
-            "Codex 5h81% left3h W62% left2d Reset27% ▶2"
+            "Codex  5h81% left3h  W62% left2d  ▶2"
+        )
+    }
+
+    func testChineseTitleReplacesQuotaDetailsAtEightyPercentForecast() {
+        XCTAssertEqual(
+            MenuPresentation.title(
+                shortRemainingPercent: 81,
+                shortResetText: "3时",
+                weeklyRemainingPercent: 62,
+                weeklyResetText: "2天",
+                forecast: forecast(80),
+                runningCount: 2,
+                language: .simplifiedChinese
+            ),
+            "Codex  冲冲冲～使劲蹬啊～  ▶2"
+        )
+    }
+
+    func testEnglishTitleReplacesQuotaDetailsAtEightyPercentForecast() {
+        XCTAssertEqual(
+            MenuPresentation.title(
+                shortRemainingPercent: 81,
+                shortResetText: "3h",
+                weeklyRemainingPercent: 62,
+                weeklyResetText: "2d",
+                forecast: forecast(80),
+                runningCount: 2,
+                language: .english
+            ),
+            "Codex  Go go go~ Pedal harder~  ▶2"
         )
     }
 
@@ -43,7 +73,7 @@ final class MenuPresentationTests: XCTestCase {
                 runningCount: nil,
                 language: .simplifiedChinese
             ),
-            "Codex 晌-- 周-- 重置率--"
+            "Codex  晌--  周--"
         )
     }
 
