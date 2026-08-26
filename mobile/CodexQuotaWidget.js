@@ -396,6 +396,8 @@ function buildQuotaWidget(result) {
     detail = parts.length > 0 ? parts.join(" · ") : "余量或预测暂不可用"
   }
   const inlineText = formatInlineSummary(
+    quota?.shortRemainingPercent ?? null,
+    quota?.shortResetsAt || null,
     weeklyPercent,
     quota?.weeklyResetsAt || null,
     probabilityValue,
@@ -433,7 +435,25 @@ function formatInlineRemaining(value, now) {
   return `${Math.max(1, Math.floor(seconds / 60))}分`
 }
 
-function formatInlineSummary(weeklyPercent, weeklyResetsAt, probability48h, now) {
+function formatInlineSummary(
+  shortPercent,
+  shortResetsAt,
+  weeklyPercent,
+  weeklyResetsAt,
+  probability48h,
+  now
+) {
+  if (Number.isInteger(probability48h) && probability48h >= 80) {
+    return "冲冲冲～使劲蹬啊～"
+  }
+  const shortQuota = Number.isInteger(shortPercent) ? `${shortPercent}%` : "--"
+  const shortRemaining = formatInlineRemaining(shortResetsAt, now)
+  const weeklyQuota = Number.isInteger(weeklyPercent) ? `${weeklyPercent}%` : "--"
+  const weeklyRemaining = formatInlineRemaining(weeklyResetsAt, now)
+  return `晌${shortQuota}·${shortRemaining}  周${weeklyQuota}·${weeklyRemaining}`
+}
+
+function formatRefreshSummary(weeklyPercent, weeklyResetsAt, probability48h, now) {
   const quota = Number.isInteger(weeklyPercent) ? `${weeklyPercent}%` : "--"
   const remaining = formatInlineRemaining(weeklyResetsAt, now)
   const probability = Number.isInteger(probability48h) ? `${probability48h}%` : "--"
@@ -455,7 +475,7 @@ function inlineSummaryForResult(result, now) {
   const probability48h = forecast?.updatedAt && isRecentDate(forecast.updatedAt, now) && Number.isInteger(forecast.probability48h)
     ? forecast.probability48h
     : null
-  return formatInlineSummary(
+  return formatRefreshSummary(
     quota?.weeklyRemainingPercent ?? null,
     quota?.weeklyResetsAt || null,
     probability48h,
@@ -543,7 +563,7 @@ function formatClock(value) {
   return `${hours}:${minutes}`
 }
 
-function buildMessageWidget(title, detail, strong = false, inlineText = "剩-- 余-- 刷--") {
+function buildMessageWidget(title, detail, strong = false, inlineText = "晌--·--  周--·--") {
   const widget = new ListWidget()
   widget.setPadding(0, 0, 0, 0)
   if (config.widgetFamily === "accessoryInline") {

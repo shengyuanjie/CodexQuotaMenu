@@ -100,11 +100,18 @@ assert.throws(() => validatePayload({
 assert.equal(isRecentDate(new Date(Date.now() - 2 * 60 * 60 * 1000 - 1).toISOString(), Date.now()), false)
 
 const fixedNow = Date.parse("2026-08-13T05:00:00Z")
-assert.equal(formatInlineSummary(85, "2026-08-20T05:00:00Z", 23, fixedNow), "剩85% 余7天 刷23%")
-assert.equal(formatInlineSummary(85, "2026-08-13T08:40:00Z", 23, fixedNow), "剩85% 余3时 刷23%")
-assert.equal(formatInlineSummary(85, "2026-08-13T05:40:00Z", 23, fixedNow), "剩85% 余40分 刷23%")
-assert.equal(formatInlineSummary(85, "2026-08-13T04:59:00Z", 23, fixedNow), "剩85% 余待重置 刷23%")
-assert.equal(formatInlineSummary(null, null, null, fixedNow), "剩-- 余-- 刷--")
+assert.equal(
+  formatInlineSummary(81, "2026-08-13T08:40:00Z", 62, "2026-08-15T05:00:00Z", 79, fixedNow),
+  "晌81%·3时  周62%·2天"
+)
+assert.equal(
+  formatInlineSummary(81, "2026-08-13T08:40:00Z", 62, "2026-08-15T05:00:00Z", 80, fixedNow),
+  "冲冲冲～使劲蹬啊～"
+)
+assert.equal(
+  formatInlineSummary(null, null, null, null, null, fixedNow),
+  "晌--·--  周--·--"
+)
 
 const validLivePayload = validatePayload({
   schemaVersion: 2,
@@ -186,8 +193,8 @@ globalThis.ListWidget = class {
   }
 }
 globalThis.Font = { semiboldSystemFont: size => ({ size }) }
-const inlineWidget = buildMessageWidget("Codex 周余量 85%", "7天后恢复 · ↻48h 23%", false, "剩85% 余7天 刷23%")
+const inlineWidget = buildMessageWidget("Codex 周余量 85%", "7天后恢复 · ↻48h 23%", false, "晌81%·3时  周62%·2天")
 assert.equal(renderedTexts.length, 1)
-assert.equal(renderedTexts[0].value, "剩85% 余7天 刷23%")
+assert.equal(renderedTexts[0].value, "晌81%·3时  周62%·2天")
 assert.equal(inlineWidget.refreshAfterDate instanceof Date, true)
 console.log("Scriptable schema v2 and inline checks passed")

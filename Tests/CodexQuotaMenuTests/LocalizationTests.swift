@@ -70,6 +70,18 @@ final class LocalizationTests: XCTestCase {
         )
     }
 
+    func testCompactRemainingTimeFloorsToLargestUsefulUnit() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let chinese = AppText(language: .simplifiedChinese)
+        let english = AppText(language: .english)
+
+        XCTAssertEqual(chinese.compactRemaining(until: now.addingTimeInterval(2 * 86_400 + 4 * 3_600 + 59 * 60), now: now), "2天")
+        XCTAssertEqual(chinese.compactRemaining(until: now.addingTimeInterval(3 * 3_600 + 26 * 60), now: now), "3时")
+        XCTAssertEqual(chinese.compactRemaining(until: now.addingTimeInterval(42 * 60 + 59), now: now), "42分")
+        XCTAssertEqual(english.compactRemaining(until: now.addingTimeInterval(2 * 86_400 + 4 * 3_600), now: now), "2d")
+        XCTAssertEqual(english.compactRemaining(until: now.addingTimeInterval(3 * 3_600 + 26 * 60), now: now), "3h")
+    }
+
     func testKnownErrorsAreLocalized() {
         XCTAssertEqual(
             AppText(language: .simplifiedChinese).errorDescription(UsageError.timedOut),

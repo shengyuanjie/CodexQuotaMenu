@@ -2,17 +2,78 @@ import XCTest
 @testable import CodexQuotaMenu
 
 final class MenuPresentationTests: XCTestCase {
-    func testTitleShowsOnlyThe48HourProbability() {
+    func testChineseTitleUsesWiderSpacingAndHidesForecastBelowEightyPercent() {
         XCTAssertEqual(
-            MenuPresentation.title(remainingPercent: 97, resetText: "6天23时", forecast: forecast(82), runningCount: 2),
-            "Codex 97% · 6天23时 · ↻48h 82% · ▶ 2"
+            MenuPresentation.title(
+                shortRemainingPercent: 81,
+                shortResetText: "3时",
+                weeklyRemainingPercent: 62,
+                weeklyResetText: "2天",
+                forecast: forecast(79),
+                runningCount: 2,
+                language: .simplifiedChinese
+            ),
+            "Codex  晌81%余3时  周62%余2天  ▶2"
         )
     }
 
-    func testTitleShowsUnavailable48HourProbability() {
+    func testEnglishTitleUsesWiderSpacingAndHidesForecastBelowEightyPercent() {
         XCTAssertEqual(
-            MenuPresentation.title(remainingPercent: nil, resetText: nil, forecast: .unavailable, runningCount: nil),
-            "Codex -- · ↻48h --"
+            MenuPresentation.title(
+                shortRemainingPercent: 81,
+                shortResetText: "3h",
+                weeklyRemainingPercent: 62,
+                weeklyResetText: "2d",
+                forecast: forecast(79),
+                runningCount: 2,
+                language: .english
+            ),
+            "Codex  5h81% left3h  W62% left2d  ▶2"
+        )
+    }
+
+    func testChineseTitleReplacesQuotaDetailsAtEightyPercentForecast() {
+        XCTAssertEqual(
+            MenuPresentation.title(
+                shortRemainingPercent: 81,
+                shortResetText: "3时",
+                weeklyRemainingPercent: 62,
+                weeklyResetText: "2天",
+                forecast: forecast(80),
+                runningCount: 2,
+                language: .simplifiedChinese
+            ),
+            "Codex  冲冲冲～使劲蹬啊～  ▶2"
+        )
+    }
+
+    func testEnglishTitleReplacesQuotaDetailsAtEightyPercentForecast() {
+        XCTAssertEqual(
+            MenuPresentation.title(
+                shortRemainingPercent: 81,
+                shortResetText: "3h",
+                weeklyRemainingPercent: 62,
+                weeklyResetText: "2d",
+                forecast: forecast(80),
+                runningCount: 2,
+                language: .english
+            ),
+            "Codex  Go go go~ Pedal harder~  ▶2"
+        )
+    }
+
+    func testTitleOmitsUnavailableResetTimesAndTaskCount() {
+        XCTAssertEqual(
+            MenuPresentation.title(
+                shortRemainingPercent: nil,
+                shortResetText: nil,
+                weeklyRemainingPercent: nil,
+                weeklyResetText: nil,
+                forecast: .unavailable,
+                runningCount: nil,
+                language: .simplifiedChinese
+            ),
+            "Codex  晌--  周--"
         )
     }
 

@@ -1,18 +1,36 @@
 enum MenuPresentation {
     static func title(
-        remainingPercent: Int?,
-        resetText: String?,
+        shortRemainingPercent: Int?,
+        shortResetText: String?,
+        weeklyRemainingPercent: Int?,
+        weeklyResetText: String?,
         forecast: ForecastDisplaySnapshot,
-        runningCount: Int?
+        runningCount: Int?,
+        language: DisplayLanguage
     ) -> String {
-        var parts = [remainingPercent.map { "Codex \($0)%" } ?? "Codex --"]
-        if let resetText, !resetText.isEmpty {
-            parts.append(resetText)
+        let shortPercent = shortRemainingPercent.map { "\($0)%" } ?? "--"
+        let weeklyPercent = weeklyRemainingPercent.map { "\($0)%" } ?? "--"
+        let shortPart: String
+        let weeklyPart: String
+        let encouragement: String
+        switch language {
+        case .simplifiedChinese:
+            shortPart = "晌\(shortPercent)" + (shortResetText.map { "余\($0)" } ?? "")
+            weeklyPart = "周\(weeklyPercent)" + (weeklyResetText.map { "余\($0)" } ?? "")
+            encouragement = "冲冲冲～使劲蹬啊～"
+        case .english:
+            shortPart = "5h\(shortPercent)" + (shortResetText.map { " left\($0)" } ?? "")
+            weeklyPart = "W\(weeklyPercent)" + (weeklyResetText.map { " left\($0)" } ?? "")
+            encouragement = "Go go go~ Pedal harder~"
         }
-        parts.append(forecast.probability48h.map { "↻48h \($0)%" } ?? "↻48h --")
+
+        let quotaParts = forecast.probability48h.map { $0 >= 80 } == true
+            ? [encouragement]
+            : [shortPart, weeklyPart]
+        var parts = ["Codex"] + quotaParts
         if let runningCount {
-            parts.append("▶ \(runningCount)")
+            parts.append("▶\(runningCount)")
         }
-        return parts.joined(separator: " · ")
+        return parts.joined(separator: "  ")
     }
 }

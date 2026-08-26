@@ -26,7 +26,12 @@ struct UsageSnapshot: Equatable {
     }
 
     var shortWindow: RateLimitWindow? {
-        windows.min { ($0.durationMinutes ?? Int.max) < ($1.durationMinutes ?? Int.max) }
+        windows
+            .filter { duration in
+                guard let minutes = duration.durationMinutes else { return false }
+                return minutes < 10_000
+            }
+            .min { ($0.durationMinutes ?? Int.max) < ($1.durationMinutes ?? Int.max) }
     }
 
     var weeklyWindow: RateLimitWindow? {
