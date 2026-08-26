@@ -259,6 +259,20 @@ struct AppText {
         return language == .simplifiedChinese ? "\(minutes)分" : "\(minutes)m"
     }
 
+    func compactRemaining(until date: Date, now: Date = Date()) -> String {
+        let seconds = max(0, Int(date.timeIntervalSince(now)))
+        if seconds >= 86_400 {
+            let days = seconds / 86_400
+            return language == .simplifiedChinese ? "\(days)天" : "\(days)d"
+        }
+        if seconds >= 3_600 {
+            let hours = seconds / 3_600
+            return language == .simplifiedChinese ? "\(hours)时" : "\(hours)h"
+        }
+        let minutes = seconds / 60
+        return language == .simplifiedChinese ? "\(minutes)分" : "\(minutes)m"
+    }
+
     func longRemaining(until date: Date, now: Date = Date()) -> String {
         let remaining = shortRemaining(until: date, now: now)
         return language == .simplifiedChinese ? "还剩 \(remaining)" : "\(remaining) remaining"

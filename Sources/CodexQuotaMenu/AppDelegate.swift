@@ -102,12 +102,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func renderCurrentState() {
         updateWidgetSnapshot()
-        let window = lastSnapshot?.headlineWindow
+        let now = Date()
+        let shortWindow = lastSnapshot?.shortWindow
+        let weeklyWindow = lastSnapshot?.weeklyWindow
         setMenuBarTitle(MenuPresentation.title(
-            remainingPercent: window?.remainingPercent,
-            resetText: window?.resetsAt.map { text.shortRemaining(until: $0) },
+            shortRemainingPercent: shortWindow?.remainingPercent,
+            shortResetText: shortWindow?.resetsAt.map { text.compactRemaining(until: $0, now: now) },
+            weeklyRemainingPercent: weeklyWindow?.remainingPercent,
+            weeklyResetText: weeklyWindow?.resetsAt.map { text.compactRemaining(until: $0, now: now) },
             forecast: lastForecastSnapshot,
-            runningCount: lastTaskSnapshot?.running.count
+            runningCount: lastTaskSnapshot?.running.count,
+            language: text.language
         ))
 
         let menu = NSMenu()
