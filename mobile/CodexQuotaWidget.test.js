@@ -101,8 +101,16 @@ assert.equal(isRecentDate(new Date(Date.now() - 2 * 60 * 60 * 1000 - 1).toISOStr
 
 const fixedNow = Date.parse("2026-08-13T05:00:00Z")
 assert.equal(
-  formatInlineSummary(81, "2026-08-13T08:40:00Z", 62, "2026-08-15T05:00:00Z", 79, fixedNow),
-  "晌81%·3时  周62%·2天"
+  formatInlineSummary(99, "2026-08-13T05:22:30Z", 99, "2026-08-14T03:30:00Z", 79, fixedNow),
+  "晌99·22分  周99·22时"
+)
+assert.equal(
+  formatInlineSummary(100, "2026-08-13T05:22:30Z", 100, "2026-08-14T03:30:00Z", 79, fixedNow),
+  "晌满·22分  周满·22时"
+)
+assert.equal(
+  formatInlineSummary(81, "2026-08-13T04:59:59Z", 62, "2026-08-13T05:00:00Z", 79, fixedNow),
+  "晌81·待  周62·待"
 )
 assert.equal(
   formatInlineSummary(81, "2026-08-13T08:40:00Z", 62, "2026-08-15T05:00:00Z", 80, fixedNow),
@@ -193,8 +201,8 @@ globalThis.ListWidget = class {
   }
 }
 globalThis.Font = { semiboldSystemFont: size => ({ size }) }
-const inlineWidget = buildMessageWidget("Codex 周余量 85%", "7天后恢复 · ↻48h 23%", false, "晌81%·3时  周62%·2天")
+const inlineWidget = buildMessageWidget("Codex 周余量 85%", "7天后恢复 · ↻48h 23%", false, "晌81·3时  周62·2天")
 assert.equal(renderedTexts.length, 1)
-assert.equal(renderedTexts[0].value, "晌81%·3时  周62%·2天")
+assert.equal(renderedTexts[0].value, "晌81·3时  周62·2天")
 assert.equal(inlineWidget.refreshAfterDate instanceof Date, true)
 console.log("Scriptable schema v2 and inline checks passed")
