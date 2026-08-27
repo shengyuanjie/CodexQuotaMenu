@@ -435,6 +435,16 @@ function formatInlineRemaining(value, now) {
   return `${Math.max(1, Math.floor(seconds / 60))}分`
 }
 
+function formatCompactInlineRemaining(value, now) {
+  const remaining = formatInlineRemaining(value, now)
+  return remaining === "待重置" ? "待" : remaining
+}
+
+function formatCompactInlineQuota(value) {
+  if (!Number.isInteger(value)) return "--"
+  return value === 100 ? "满" : String(value)
+}
+
 function formatInlineSummary(
   shortPercent,
   shortResetsAt,
@@ -446,10 +456,10 @@ function formatInlineSummary(
   if (Number.isInteger(probability48h) && probability48h >= 80) {
     return "冲冲冲～使劲蹬啊～"
   }
-  const shortQuota = Number.isInteger(shortPercent) ? `${shortPercent}%` : "--"
-  const shortRemaining = formatInlineRemaining(shortResetsAt, now)
-  const weeklyQuota = Number.isInteger(weeklyPercent) ? `${weeklyPercent}%` : "--"
-  const weeklyRemaining = formatInlineRemaining(weeklyResetsAt, now)
+  const shortQuota = formatCompactInlineQuota(shortPercent)
+  const shortRemaining = formatCompactInlineRemaining(shortResetsAt, now)
+  const weeklyQuota = formatCompactInlineQuota(weeklyPercent)
+  const weeklyRemaining = formatCompactInlineRemaining(weeklyResetsAt, now)
   return `晌${shortQuota}·${shortRemaining}  周${weeklyQuota}·${weeklyRemaining}`
 }
 
