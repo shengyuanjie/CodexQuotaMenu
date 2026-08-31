@@ -5,6 +5,7 @@ enum MenuPresentation {
         weeklyRemainingPercent: Int?,
         weeklyResetText: String?,
         forecast: ForecastDisplaySnapshot,
+        resetCelebrationActive: Bool? = nil,
         runningCount: Int?,
         language: DisplayLanguage
     ) -> String {
@@ -24,7 +25,9 @@ enum MenuPresentation {
             encouragement = "Go go go~ Pedal harder~"
         }
 
-        let quotaParts = forecast.probability48h.map { $0 >= 80 } == true
+        let showEncouragement = resetCelebrationActive
+            ?? (forecast.probability48h.map { $0 >= 80 } == true)
+        let quotaParts = showEncouragement
             ? [encouragement]
             : [shortPart, weeklyPart]
         var parts = ["Codex"] + quotaParts

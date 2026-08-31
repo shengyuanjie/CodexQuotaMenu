@@ -255,6 +255,10 @@ function validatePayload(raw) {
   const forecast = raw.forecast == null ? null : sanitizeForecast(raw.forecast)
   if (raw.quotaStatus === "fresh" && quota == null) throw new Error("quota")
   if (raw.forecastStatus !== "unavailable" && forecast == null) throw new Error("forecast")
+  const resetCelebrationActive = raw.resetCelebrationActive === undefined
+    ? (Number.isInteger(forecast?.probability48h) && forecast.probability48h >= 80)
+    : raw.resetCelebrationActive
+  if (typeof resetCelebrationActive !== "boolean") throw new Error("reset_celebration")
 
   return {
     schemaVersion: 2,
@@ -263,7 +267,8 @@ function validatePayload(raw) {
     quota,
     tasks: { runningCount: raw.tasks.runningCount },
     forecastStatus: raw.forecastStatus,
-    forecast
+    forecast,
+    resetCelebrationActive
   }
 }
 
@@ -400,7 +405,7 @@ function buildQuotaWidget(result) {
     quota?.shortResetsAt || null,
     weeklyPercent,
     quota?.weeklyResetsAt || null,
-    probabilityValue,
+    payload.resetCelebrationActive,
     now
   )
   return buildMessageWidget(title, detail, strong, inlineText)
@@ -450,10 +455,10 @@ function formatInlineSummary(
   shortResetsAt,
   weeklyPercent,
   weeklyResetsAt,
-  probability48h,
+  resetCelebrationActive,
   now
 ) {
-  if (Number.isInteger(probability48h) && probability48h >= 80) {
+  if (resetCelebrationActive) {
     return "冲冲冲～使劲蹬啊～"
   }
   const shortQuota = formatCompactInlineQuota(shortPercent)

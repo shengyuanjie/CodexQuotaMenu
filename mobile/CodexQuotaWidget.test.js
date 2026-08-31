@@ -81,6 +81,7 @@ const valid = validatePayload({
 
 assert.equal(valid.forecast.probability48h, 82)
 assert.equal(valid.forecast.source, "codexreset.org")
+assert.equal(valid.resetCelebrationActive, true)
 assert.throws(() => validatePayload({ schemaVersion: 1 }), /schema_v2_required/)
 assert.throws(() => validatePayload({
   schemaVersion: 2,
@@ -101,24 +102,51 @@ assert.equal(isRecentDate(new Date(Date.now() - 2 * 60 * 60 * 1000 - 1).toISOStr
 
 const fixedNow = Date.parse("2026-08-13T05:00:00Z")
 assert.equal(
-  formatInlineSummary(99, "2026-08-13T05:22:30Z", 99, "2026-08-14T03:30:00Z", 79, fixedNow),
+  formatInlineSummary(99, "2026-08-13T05:22:30Z", 99, "2026-08-14T03:30:00Z", false, fixedNow),
   "晌99·22分  周99·22时"
 )
 assert.equal(
-  formatInlineSummary(100, "2026-08-13T05:22:30Z", 100, "2026-08-14T03:30:00Z", 79, fixedNow),
+  formatInlineSummary(100, "2026-08-13T05:22:30Z", 100, "2026-08-14T03:30:00Z", false, fixedNow),
   "晌满·22分  周满·22时"
 )
 assert.equal(
-  formatInlineSummary(81, "2026-08-13T04:59:59Z", 62, "2026-08-13T05:00:00Z", 79, fixedNow),
+  formatInlineSummary(81, "2026-08-13T04:59:59Z", 62, "2026-08-13T05:00:00Z", false, fixedNow),
   "晌81·待  周62·待"
 )
 assert.equal(
-  formatInlineSummary(81, "2026-08-13T08:40:00Z", 62, "2026-08-15T05:00:00Z", 80, fixedNow),
+  formatInlineSummary(81, "2026-08-13T08:40:00Z", 62, "2026-08-15T05:00:00Z", true, fixedNow),
   "冲冲冲～使劲蹬啊～"
 )
 assert.equal(
-  formatInlineSummary(null, null, null, null, null, fixedNow),
+  formatInlineSummary(null, null, null, null, false, fixedNow),
   "晌--·--  周--·--"
+)
+
+const resetCompletedPayload = validatePayload({
+  schemaVersion: 2,
+  generatedAt: "2026-08-13T05:00:00.000Z",
+  quotaStatus: "fresh",
+  quota: {
+    weeklyRemainingPercent: 100,
+    weeklyResetsAt: "2026-08-20T05:00:00.000Z",
+    shortRemainingPercent: 100,
+    shortResetsAt: "2026-08-13T10:00:00.000Z"
+  },
+  tasks: { runningCount: 0 },
+  forecastStatus: "fresh",
+  forecast: {
+    probability48h: 90,
+    calibrationState: "experimental",
+    updatedAt: "2026-08-13T05:00:00.000Z",
+    isCached: false,
+    source: "codexreset.org"
+  },
+  resetCelebrationActive: false
+})
+assert.equal(resetCompletedPayload.resetCelebrationActive, false)
+assert.equal(
+  formatInlineSummary(100, "2026-08-13T10:00:00Z", 100, "2026-08-20T05:00:00Z", resetCompletedPayload.resetCelebrationActive, fixedNow),
+  "晌满·5时  周满·7天"
 )
 
 const validLivePayload = validatePayload({

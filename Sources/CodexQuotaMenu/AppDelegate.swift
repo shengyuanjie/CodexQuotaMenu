@@ -20,6 +20,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastForecastAttempt: Date?
     private var languageSelection = AppLanguage.load()
     private let forecastRefreshGate = RefreshGate(interval: 300, manualMinimumInterval: 30)
+    private let resetCelebrationStateStore = UserDefaultsResetCelebrationStateStore()
+    private lazy var resetCelebrationState = resetCelebrationStateStore.load()
     private let widgetSnapshotStore = WidgetSnapshotStore()
     private let widgetTokenStore = KeychainWidgetTokenStore()
     private let widgetPreferences = WidgetPreferences()
@@ -101,16 +103,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func renderCurrentState() {
-        updateWidgetSnapshot()
         let now = Date()
         let shortWindow = lastSnapshot?.shortWindow
         let weeklyWindow = lastSnapshot?.weeklyWindow
+        let celebration = ResetCelebrationPolicy.evaluate(
+            state: resetCelebrationState,
+            probability48h: lastForecastSnapshot.probability48h,
+            observation: resetQuotaObservation(shortWindow: shortWindow, weeklyWindow: weeklyWindow)
+        )
+        if celebration.state != resetCelebrationState {
+            resetCelebrationState = celebration.state
+            resetCelebrationStateStore.save(celebration.state)
+        }
+        updateWidgetSnapshot(resetCelebrationActive: celebration.isActive)
         setMenuBarTitle(MenuPresentation.title(
             shortRemainingPercent: shortWindow?.remainingPercent,
             shortResetText: shortWindow?.resetsAt.map { text.compactRemaining(until: $0, now: now) },
             weeklyRemainingPercent: weeklyWindow?.remainingPercent,
             weeklyResetText: weeklyWindow?.resetsAt.map { text.compactRemaining(until: $0, now: now) },
             forecast: lastForecastSnapshot,
+            resetCelebrationActive: celebration.isActive,
             runningCount: lastTaskSnapshot?.running.count,
             language: text.language
         ))
@@ -152,7 +164,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func rebuildMenu(message: String) {
-        updateWidgetSnapshot()
+        updateWidgetSnapshot(resetCelebrationActive: false)
         let menu = NSMenu()
         appendMessage(message, to: menu)
         appendActions(to: menu)
@@ -325,16 +337,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         widgetServer?.stop()
     }
 
-    private func updateWidgetSnapshot() {
+    private func updateWidgetSnapshot(resetCelebrationActive: Bool) {
         let payload = WidgetPayloadBuilder.build(
             usage: lastSnapshot,
             tasks: lastTaskSnapshot,
             forecast: lastForecastSnapshot,
+            resetCelebrationActive: resetCelebrationActive,
             generatedAt: Date()
         )
         if let data = try? JSONEncoder.widgetEncoder.encode(payload) {
             widgetSnapshotStore.replace(with: data)
         }
+    }
+
+    private func resetQuotaObservation(
+        shortWindow: RateLimitWindow?,
+        weeklyWindow: RateLimitWindow?
+    ) -> ResetQuotaObservation? {
+        guard let shortWindow,
+              let shortResetsAt = shortWindow.resetsAt,
+              let weeklyWindow,
+              let weeklyResetsAt = weeklyWindow.resetsAt else {
+            return nil
+        }
+        return ResetQuotaObservation(
+            shortRemainingPercent: shortWindow.remainingPercent,
+            shortResetsAt: shortResetsAt,
+            weeklyRemainingPercent: weeklyWindow.remainingPercent,
+            weeklyResetsAt: weeklyResetsAt
+        )
     }
 
     private func startWidgetServer() {
