@@ -17,6 +17,7 @@ A native macOS menu bar utility that shows remaining Codex usage, reset countdow
 - Lists recent active tasks in the menu and shows explicit error states.
 - Refreshes every five seconds, supports an immediate manual refresh, and preserves the last successful result during temporary query failures.
 - Refreshes the public forecast independently every five minutes and hides cached forecast data after two hours.
+- Shows an encouragement message at an 80% reset probability, then restores normal quota details on both devices after detecting that both quota windows entered their next reset cycle.
 - Provides an optional, default-off, token-protected local feed for an iPhone Scriptable lock-screen widget.
 - Uses a text-only menu-bar display without a leading icon for a cleaner appearance.
 - Supports Follow System, Simplified Chinese, and English interface languages.

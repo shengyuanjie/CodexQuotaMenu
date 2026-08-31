@@ -32,6 +32,7 @@ struct WidgetPayload: Encodable {
     let tasks: WidgetTaskSummary
     let forecastStatus: ForecastDisplayStatus
     let forecast: WidgetForecast?
+    let resetCelebrationActive: Bool
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion
@@ -41,6 +42,7 @@ struct WidgetPayload: Encodable {
         case tasks
         case forecastStatus
         case forecast
+        case resetCelebrationActive
     }
 
     func encode(to encoder: Encoder) throws {
@@ -55,6 +57,7 @@ struct WidgetPayload: Encodable {
         }
         try container.encode(tasks, forKey: .tasks)
         try container.encode(forecastStatus, forKey: .forecastStatus)
+        try container.encode(resetCelebrationActive, forKey: .resetCelebrationActive)
         if let forecast {
             try container.encode(forecast, forKey: .forecast)
         } else {
@@ -68,6 +71,7 @@ enum WidgetPayloadBuilder {
         usage: UsageSnapshot?,
         tasks: TaskSnapshot?,
         forecast: ForecastDisplaySnapshot,
+        resetCelebrationActive: Bool = false,
         generatedAt: Date
     ) -> WidgetPayload {
         let quota = usage.map { snapshot in
@@ -97,7 +101,8 @@ enum WidgetPayloadBuilder {
             quota: quota,
             tasks: WidgetTaskSummary(runningCount: tasks?.running.count ?? 0),
             forecastStatus: forecast.status,
-            forecast: widgetForecast
+            forecast: widgetForecast,
+            resetCelebrationActive: resetCelebrationActive
         )
     }
 }

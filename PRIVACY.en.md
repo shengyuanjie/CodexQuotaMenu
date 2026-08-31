@@ -35,7 +35,7 @@ Requests contain only normal HTTP metadata, a JSON Accept header, and an app-ver
 
 The app stores locally:
 
-- macOS `UserDefaults`: interface language, the phone-feed toggle, and the public forecast cache, which is hidden after two hours;
+- macOS `UserDefaults`: interface language, the phone-feed toggle, the public forecast cache, and the two quota summaries and reset times used to detect completion of the current reset cycle. This state remains local; forecast data is hidden after two hours;
 - macOS Keychain: the 32-byte random access token created when the phone feed is first enabled;
 - process memory: the latest personal quota, task summary, and generated phone JSON snapshot.
 
@@ -58,7 +58,7 @@ The app does not request camera, microphone, contacts, calendar, location, photo
 
 Quit the app to stop all reads and the local service, or disable the phone feed independently. If a token may have leaked, regenerate it in the menu; the old token becomes invalid immediately.
 
-To uninstall, remove `Codex用量.app`. To remove the language, toggle, and public forecast cache from `UserDefaults`, run:
+To uninstall, remove `Codex用量.app`. To remove the language, toggle, public forecast cache, and reset-detection state from `UserDefaults`, run:
 
 ```sh
 defaults delete com.local.codexquotamenu

@@ -35,7 +35,7 @@ Codex 用量菜单栏以本地处理为原则，不运营公网服务，不包�
 
 应用会在本机保存：
 
-- macOS `UserDefaults`：界面语言、手机接口开关，以及不含个人数据的公开预测缓存；预测超过两小时后不再显示；
+- macOS `UserDefaults`：界面语言、手机接口开关、不含个人数据的公开预测缓存，以及用于判断本轮重置是否完成的两组余量和重置时间；这些状态只保存在本机，预测超过两小时后不再显示；
 - macOS Keychain：首次启用手机接口时生成的 32 字节随机访问令牌；
 - 进程内存：最近一次个人余量、任务汇总和已生成的手机 JSON 快照。
 
@@ -58,7 +58,7 @@ Codex 子进程可能按照 Codex 产品本身的正常工作方式连接 OpenAI
 
 停止所有读取和本机服务的方式是退出应用；也可以单独关闭“手机小组件”接口。疑似泄露时可重新生成令牌，旧令牌立即失效。
 
-卸载时删除 `Codex用量.app`。如需同时移除 `UserDefaults` 中的语言、开关和预测缓存，可运行 `defaults delete com.local.codexquotamenu`。Keychain 令牌不会因删除应用而自动消失，可在“钥匙串访问”中搜索服务 `com.local.codexquotamenu.widget` 并手动删除。iPhone 上的 Scriptable Keychain 和缓存由 Scriptable 管理，需要在手机上另行移除。
+卸载时删除 `Codex用量.app`。如需同时移除 `UserDefaults` 中的语言、开关、预测缓存和重置检测状态，可运行 `defaults delete com.local.codexquotamenu`。Keychain 令牌不会因删除应用而自动消失，可在“钥匙串访问”中搜索服务 `com.local.codexquotamenu.widget` 并手动删除。iPhone 上的 Scriptable Keychain 和缓存由 Scriptable 管理，需要在手机上另行移除。
 
 ## 项目关系
 

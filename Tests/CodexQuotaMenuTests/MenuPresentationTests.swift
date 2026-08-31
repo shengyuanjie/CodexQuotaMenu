@@ -10,6 +10,7 @@ final class MenuPresentationTests: XCTestCase {
                 weeklyRemainingPercent: 62,
                 weeklyResetText: "2天",
                 forecast: forecast(79),
+                resetCelebrationActive: false,
                 runningCount: 2,
                 language: .simplifiedChinese
             ),
@@ -25,6 +26,7 @@ final class MenuPresentationTests: XCTestCase {
                 weeklyRemainingPercent: 62,
                 weeklyResetText: "2d",
                 forecast: forecast(79),
+                resetCelebrationActive: false,
                 runningCount: 2,
                 language: .english
             ),
@@ -40,6 +42,7 @@ final class MenuPresentationTests: XCTestCase {
                 weeklyRemainingPercent: 62,
                 weeklyResetText: "2天",
                 forecast: forecast(80),
+                resetCelebrationActive: true,
                 runningCount: 2,
                 language: .simplifiedChinese
             ),
@@ -55,10 +58,27 @@ final class MenuPresentationTests: XCTestCase {
                 weeklyRemainingPercent: 62,
                 weeklyResetText: "2d",
                 forecast: forecast(80),
+                resetCelebrationActive: true,
                 runningCount: 2,
                 language: .english
             ),
             "Codex  Go go go~ Pedal harder~  ▶2"
+        )
+    }
+
+    func testCompletedResetRestoresQuotaDetailsWhileForecastRemainsHigh() {
+        XCTAssertEqual(
+            MenuPresentation.title(
+                shortRemainingPercent: 100,
+                shortResetText: "5时",
+                weeklyRemainingPercent: 100,
+                weeklyResetText: "7天",
+                forecast: forecast(90),
+                resetCelebrationActive: false,
+                runningCount: 0,
+                language: .simplifiedChinese
+            ),
+            "Codex  晌100%余5时  周100%余7天  ▶0"
         )
     }
 
@@ -70,6 +90,7 @@ final class MenuPresentationTests: XCTestCase {
                 weeklyRemainingPercent: nil,
                 weeklyResetText: nil,
                 forecast: .unavailable,
+                resetCelebrationActive: false,
                 runningCount: nil,
                 language: .simplifiedChinese
             ),
