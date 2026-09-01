@@ -15,7 +15,7 @@
 - First launch is empty; do not prefill 06:00 or 11:02.
 - Only exact names matching `CodexQuotaMenu · HH:mm` are managed.
 - Never write, move, rename, or delete files under `~/.codex/automations`.
-- Never adopt or modify existing unprefixed tasks.
+- Never adopt or modify any task whose complete name does not exactly match `CodexQuotaMenu · HH:mm`; sharing the prefix alone is insufficient.
 - Managed tasks are daily standalone cron, local projectless, `gpt-5.6-luna`, reasoning `low`, and failures-only notifications.
 - The activation prompt prohibits file reads, tool calls, and unrelated work.
 - Show “已同步” / “Synced” only after local read-only verification.
@@ -301,8 +301,13 @@ struct CodexAutomationReader {
             guard let source = try? String(contentsOf: file, encoding: .utf8) else {
                 return .unavailable("an automation file is unreadable")
             }
-            guard source.contains(ManagedAutomationPolicy.namePrefix) else { continue }
-            guard let parsed = Self.parse(source), parsed.version == 1 else {
+            guard let fields = try? StringFieldMap(source: source),
+                  let name = fields.string("name") else {
+                return .unavailable("an automation file has an ambiguous format")
+            }
+            guard ManagedAutomationPolicy.managedTime(from: name) != nil
+                    || ManagedAutomationPolicy.isMalformedPrefixedName(name) else { continue }
+            guard let parsed = Self.parse(fields), parsed.version == 1 else {
                 return .unavailable("managed automation has an unsupported format")
             }
             tasks.append(parsed)
@@ -484,7 +489,7 @@ func testPromptIsSortedScopedAndUsesFixedConfiguration() throws {
 func testEmptyPromptDeletesManagedTasksOnly() throws {
     let prompt = try SyncPromptBuilder.build(entries: [], timeZoneIdentifier: "Asia/Shanghai")
     XCTAssertTrue(prompt.contains("期望时间列表为空"))
-    XCTAssertTrue(prompt.contains("删除全部受管任务"))
+    XCTAssertTrue(prompt.contains("仅删除完整名称严格匹配"))
     XCTAssertFalse(prompt.contains("6点激活 Codex 用量窗口"))
 }
 ```
@@ -502,11 +507,11 @@ enum SyncPromptBuilder {
             "- \(ManagedAutomationPolicy.name(for: $0.time))：每天 \($0.time.displayValue)"
         }
         let desired = lines.isEmpty
-            ? "期望时间列表为空；删除全部受管任务。"
+            ? "期望时间列表为空；仅删除完整名称严格匹配“\(ManagedAutomationPolicy.exactNameFormat)”的受管任务。"
             : (["期望任务："] + lines).joined(separator: "\n")
         return """
         请使用 Codex 官方计划任务功能完成一次幂等对账。
-        只管理名称严格以“\(ManagedAutomationPolicy.namePrefix)”开头的计划任务；不要修改任何其他计划任务。
+        只管理完整名称严格匹配“\(ManagedAutomationPolicy.exactNameFormat)”的计划任务；仅共享前缀的名称保持不变，不得删除、修改或合并。不要修改任何其他计划任务。
         \(desired)
         每个期望时间必须恰好有一个独立的 standalone cron 任务，时区为 \(timeZoneIdentifier)，执行环境为 local，目标为 projectless，模型为 \(ManagedAutomationPolicy.model)，推理强度为 \(ManagedAutomationPolicy.reasoningEffort)，通知策略为 \(ManagedAutomationPolicy.notificationPolicy)。任务提示词必须精确为：\(ManagedAutomationPolicy.activationPrompt)
         创建缺少的任务，修正不一致配置，删除期望列表之外的受管任务，并合并重复受管任务。完成后简短列出结果；不要修改任何其他计划任务。
@@ -830,7 +835,7 @@ git commit -m "feat: add activation schedule settings window"
 - Modify: `PRIVACY.en.md`
 
 **Interfaces:**
-- Documents the ownership prefix, one-confirmation flow, read-only local access, and inability to prove an individual run.
+- Documents exact-format name ownership, the one-confirmation flow, read-only local access, and inability to prove an individual run.
 
 - [ ] **Step 1: Update Chinese and English usage**
 
@@ -843,7 +848,7 @@ Add and translate:
 只有修改时间时才需再次同步；退出 CodexQuotaMenu 不影响后台任务。
 ```
 
-Document empty-first-launch, empty-list cleanup of prefixed tasks only, silent success, and no adoption of existing unprefixed tasks.
+Document empty-first-launch, empty-list cleanup of exact-format managed tasks only, silent success, and no adoption of names that merely share the prefix.
 
 - [ ] **Step 2: Update privacy and limitations**
 

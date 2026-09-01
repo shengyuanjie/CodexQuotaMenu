@@ -29,8 +29,12 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
     private let textProvider: () -> AppText
     private let pasteboardWriter: PasteboardWriter
     private let urlOpener: URLOpener
+    private let nowProvider: @MainActor () -> Date
+    private let calendarProvider: @MainActor () -> Calendar
+    private let refreshInterval: TimeInterval
     private var refreshTimer: Timer?
     private var inlineError: String?
+    private var suppressImmediateFocusRefresh = false
 
     private let headingLabel = NSTextField(labelWithString: "")
     private let emptyLabel = NSTextField(wrappingLabelWithString: "")
@@ -52,12 +56,18 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
         model: ActivationScheduleSettingsModel,
         textProvider: @escaping () -> AppText,
         pasteboardWriter: @escaping PasteboardWriter = ActivationScheduleWindowController.writePasteboard,
-        urlOpener: @escaping URLOpener = { NSWorkspace.shared.open($0) }
+        urlOpener: @escaping URLOpener = { NSWorkspace.shared.open($0) },
+        refreshInterval: TimeInterval = 10,
+        nowProvider: @escaping @MainActor () -> Date = Date.init,
+        calendarProvider: @escaping @MainActor () -> Calendar = { .current }
     ) {
         self.model = model
         self.textProvider = textProvider
         self.pasteboardWriter = pasteboardWriter
         self.urlOpener = urlOpener
+        self.refreshInterval = refreshInterval
+        self.nowProvider = nowProvider
+        self.calendarProvider = calendarProvider
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 420),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -69,17 +79,24 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
         window.delegate = self
         window.center()
         buildViewHierarchy()
+        model.stateDidChange = { [weak self] in
+            self?.render()
+        }
         render()
     }
 
     required init?(coder: NSCoder) { nil }
 
     func showWindowAndRefresh() {
-        refreshActualState()
+        suppressImmediateFocusRefresh = true
+        requestRefresh(clearFeedback: true)
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
         startRefreshTimer()
+        DispatchQueue.main.async { [weak self] in
+            self?.suppressImmediateFocusRefresh = false
+        }
     }
 
     func updateLanguage() {
@@ -87,12 +104,13 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
     }
 
     func refreshActualState() {
-        model.refreshActualState()
-        render()
+        requestRefresh(clearFeedback: true)
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
-        refreshActualState()
+        if !suppressImmediateFocusRefresh {
+            requestRefresh(clearFeedback: false)
+        }
         startRefreshTimer()
     }
 
@@ -101,9 +119,17 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
     }
 
     @discardableResult
-    func performSync(timeZoneIdentifier: String = TimeZone.current.identifier) -> Bool {
-        guard model.loadError == nil,
-              let prompt = try? model.makeSyncPrompt(timeZoneIdentifier: timeZoneIdentifier) else {
+    func performSync() -> Bool {
+        performSync { try model.makeSyncPrompt() }
+    }
+
+    @discardableResult
+    func performSync(timeZoneIdentifier: String) -> Bool {
+        performSync { try model.makeSyncPrompt(timeZoneIdentifier: timeZoneIdentifier) }
+    }
+
+    private func performSync(_ promptBuilder: () throws -> String) -> Bool {
+        guard model.loadError == nil, let prompt = try? promptBuilder() else {
             syncFeedback = .unavailable
             render()
             return false
@@ -123,6 +149,14 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
         syncFeedback = .copiedAndOpened
         render()
         return true
+    }
+
+    private func requestRefresh(clearFeedback: Bool) {
+        if clearFeedback {
+            syncFeedback = .none
+        }
+        model.refreshActualState()
+        render()
     }
 
     static func statusText(for state: AutomationSyncState, text: AppText) -> String {
@@ -257,14 +291,16 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
         addButton.title = text.addActivationTimeAction
         refreshButton.title = text.refreshActivationStatusAction
         syncButton.title = text.syncToCodexAction
-        syncButton.isEnabled = model.loadError == nil
+        let canMutate = model.loadError == nil
+        addButton.isEnabled = canMutate
+        syncButton.isEnabled = canMutate
 
         for view in rowsStack.arrangedSubviews {
             rowsStack.removeArrangedSubview(view)
             view.removeFromSuperview()
         }
         for entry in model.entries {
-            let row = makeRow(for: entry, text: text)
+            let row = makeRow(for: entry, text: text, isEnabled: canMutate)
             rowsStack.addArrangedSubview(row)
             row.widthAnchor.constraint(equalTo: rowsStack.widthAnchor).isActive = true
         }
@@ -292,10 +328,15 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
         }
     }
 
-    private func makeRow(for entry: ActivationScheduleEntry, text: AppText) -> NSView {
+    private func makeRow(
+        for entry: ActivationScheduleEntry,
+        text: AppText,
+        isEnabled: Bool
+    ) -> NSView {
         let checkbox = ActivationScheduleCheckbox(checkboxWithTitle: text.activationEnabledLabel, target: self, action: #selector(toggleEntry(_:)))
         checkbox.state = entry.isEnabled ? .on : .off
         checkbox.representedObject = entry.id
+        checkbox.isEnabled = isEnabled
 
         let picker = ActivationScheduleDatePicker()
         picker.datePickerStyle = .textFieldAndStepper
@@ -305,10 +346,12 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
         picker.target = self
         picker.action = #selector(changeTime(_:))
         picker.representedObject = entry.id
+        picker.isEnabled = isEnabled
         picker.widthAnchor.constraint(equalToConstant: 110).isActive = true
 
         let delete = ActivationScheduleButton(title: text.deleteActivationTimeAction, target: self, action: #selector(deleteEntry(_:)))
         delete.representedObject = entry.id
+        delete.isEnabled = isEnabled
 
         let spacer = NSView()
         let row = NSStackView(views: [checkbox, picker, spacer, delete])
@@ -319,39 +362,57 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
     }
 
     private func date(for time: ActivationTime) -> Date {
-        Calendar.current.date(from: DateComponents(
-            calendar: Calendar.current,
-            timeZone: TimeZone.current,
+        let calendar = calendarProvider()
+        return calendar.date(from: DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
             year: 2001,
             month: 1,
             day: 1,
             hour: time.hour,
             minute: time.minute
-        )) ?? Date()
+        )) ?? nowProvider()
     }
 
     private func entryID(from representedObject: Any?) -> UUID? {
         representedObject as? UUID
     }
 
-    private func handleMutation(_ operation: () throws -> Void) {
+    @discardableResult
+    private func handleMutation(_ operation: () throws -> Void) -> Bool {
         do {
             try operation()
             inlineError = nil
             syncFeedback = .none
+            render()
+            return true
         } catch ActivationScheduleError.duplicateTime {
             inlineError = textProvider().duplicateActivationTimeError
         } catch {
             inlineError = textProvider().activationSaveFailedError
         }
         render()
+        return false
     }
 
     @objc private func addTime() {
-        let components = Calendar.current.dateComponents([.hour, .minute], from: Date())
-        guard let hour = components.hour,
-              let minute = components.minute,
-              let time = try? ActivationTime(hour: hour, minute: minute) else { return }
+        guard model.loadError == nil else { return }
+        let calendar = calendarProvider()
+        let components = calendar.dateComponents([.hour, .minute], from: nowProvider())
+        guard let hour = components.hour, let minute = components.minute else { return }
+        let occupiedMinutes = Set(model.entries.map { $0.time.hour * 60 + $0.time.minute })
+        let startingMinute = hour * 60 + minute
+        guard let availableMinute = (0..<1_440)
+            .map({ (startingMinute + $0) % 1_440 })
+            .first(where: { !occupiedMinutes.contains($0) }),
+              let time = try? ActivationTime(
+                hour: availableMinute / 60,
+                minute: availableMinute % 60
+              ) else {
+            inlineError = textProvider().activationScheduleFullError
+            render()
+            return
+        }
         handleMutation { try model.add(time: time) }
     }
 
@@ -366,7 +427,7 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
     @objc private func changeTime(_ sender: ActivationScheduleDatePicker) {
         guard let id = entryID(from: sender.representedObject),
               let entry = model.entries.first(where: { $0.id == id }) else { return }
-        let components = Calendar.current.dateComponents([.hour, .minute], from: sender.dateValue)
+        let components = calendarProvider().dateComponents([.hour, .minute], from: sender.dateValue)
         guard let hour = components.hour,
               let minute = components.minute,
               let time = try? ActivationTime(hour: hour, minute: minute) else { return }
@@ -390,11 +451,10 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
 
     private func startRefreshTimer() {
         stopRefreshTimer()
-        let timer = Timer(timeInterval: 10, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: refreshInterval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, self.window?.isVisible == true else { return }
-                self.model.refreshActualState()
-                self.render()
+                self.requestRefresh(clearFeedback: false)
             }
         }
         refreshTimer = timer

@@ -50,28 +50,116 @@ final class CodexAutomationReaderTests: XCTestCase {
         }
     }
 
-    func testMalformedUnmanagedFileIsIgnoredButMalformedManagedFileBlocksVerification() throws {
+    func testMissingTopLevelNameMakesVerificationUnavailable() throws {
         let root = try temporaryRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let unmanaged = automationFile(root, "other")
-        try FileManager.default.createDirectory(
-            at: unmanaged.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try Data("not toml".utf8).write(to: unmanaged)
+        try writeSource("prompt = \"CodexQuotaMenu · 06:00\"", root: root, id: "missing-name")
 
-        XCTAssertEqual(CodexAutomationReader(rootURL: root).readManagedAutomations(), .available([]))
-
-        let managed = automationFile(root, "managed")
-        try FileManager.default.createDirectory(
-            at: managed.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try Data("name = \"CodexQuotaMenu · 06:00\"".utf8).write(to: managed)
         guard case .unavailable =
                 CodexAutomationReader(rootURL: root).readManagedAutomations() else {
             return XCTFail("expected unavailable")
         }
+    }
+
+    func testUnparseableTopLevelNameMakesVerificationUnavailable() throws {
+        let root = try temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try writeSource("name = \"unterminated", root: root, id: "bad-name")
+
+        guard case .unavailable = CodexAutomationReader(rootURL: root).readManagedAutomations() else {
+            return XCTFail("expected unavailable")
+        }
+    }
+
+    func testTruncatedManagedAutomationMakesVerificationUnavailable() throws {
+        let root = try temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try writeSource("name = \"CodexQuotaMenu · 06:00\"", root: root, id: "truncated")
+
+        guard case .unavailable = CodexAutomationReader(rootURL: root).readManagedAutomations() else {
+            return XCTFail("expected unavailable")
+        }
+    }
+
+    func testDuplicateRecognizedTopLevelNameOrModelIsUnavailable() throws {
+        for (suffix, duplicate) in [
+            ("name", "name = \"Personal reminder\""),
+            ("model", "model = \"gpt-5.6-sol\"")
+        ] {
+            let root = try temporaryRoot()
+            defer { try? FileManager.default.removeItem(at: root) }
+            try writeSource(
+                automationSource(id: suffix, name: "CodexQuotaMenu · 06:00", version: 1)
+                    + "\n" + duplicate,
+                root: root,
+                id: suffix
+            )
+
+            guard case .unavailable = CodexAutomationReader(rootURL: root).readManagedAutomations() else {
+                return XCTFail("expected duplicate \(suffix) to be unavailable")
+            }
+        }
+    }
+
+    func testUnknownTableCannotShadowRecognizedTopLevelModel() throws {
+        let root = try temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try writeSource(
+            automationSource(id: "shadow", name: "CodexQuotaMenu · 06:00", version: 1)
+                + "\n[metadata]\nmodel = \"gpt-5.6-sol\"",
+            root: root,
+            id: "shadow"
+        )
+
+        guard case .unavailable = CodexAutomationReader(rootURL: root).readManagedAutomations() else {
+            return XCTFail("expected table-scoped recognized key to be unavailable")
+        }
+    }
+
+    func testMalformedSourceWithReliableManagedNameIsUnavailable() throws {
+        let root = try temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try writeSource(
+            automationSource(id: "malformed", name: "CodexQuotaMenu · 06:00", version: 1)
+                + "\nthis is not valid TOML",
+            root: root,
+            id: "malformed"
+        )
+
+        guard case .unavailable = CodexAutomationReader(rootURL: root).readManagedAutomations() else {
+            return XCTFail("expected malformed source to be unavailable")
+        }
+    }
+
+    func testUnknownFieldsAndUnambiguousUnknownTableAreTolerated() throws {
+        let root = try temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try writeSource(
+            automationSource(id: "unknown", name: "CodexQuotaMenu · 06:00", version: 1)
+                + "\nfutureFlag = true\n[metadata]\nnote = \"kept separate\"",
+            root: root,
+            id: "unknown"
+        )
+
+        guard case .available(let tasks) = CodexAutomationReader(rootURL: root).readManagedAutomations() else {
+            return XCTFail("expected structurally unambiguous unknown fields to be tolerated")
+        }
+        XCTAssertEqual(tasks.map(\.name), ["CodexQuotaMenu · 06:00"])
+    }
+
+    func testMalformedPrefixedNamesAreObservedForDiagnostics() throws {
+        let root = try temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try writeAutomation(root, id: "backup", name: "CodexQuotaMenu · backup", version: 1)
+        try writeAutomation(root, id: "copy", name: "CodexQuotaMenu · 06:00 copy", version: 1)
+
+        guard case .available(let tasks) = CodexAutomationReader(rootURL: root).readManagedAutomations() else {
+            return XCTFail("expected diagnostic names to remain observable")
+        }
+        XCTAssertEqual(
+            tasks.map(\.name),
+            ["CodexQuotaMenu · 06:00 copy", "CodexQuotaMenu · backup"]
+        )
     }
 
     func testPersonalNameWithManagedPrefixInPromptIsIgnored() throws {
@@ -86,6 +174,7 @@ final class CodexAutomationReaderTests: XCTestCase {
             """
             name = "Personal reminder"
             prompt = "CodexQuotaMenu · 06:00"
+            # CodexQuotaMenu · 11:02
             """.utf8
         ).write(to: file)
 
@@ -106,12 +195,20 @@ final class CodexAutomationReaderTests: XCTestCase {
     }
 
     private func writeAutomation(_ root: URL, id: String, name: String, version: Int) throws {
+        try writeSource(automationSource(id: id, name: name, version: version), root: root, id: id)
+    }
+
+    private func writeSource(_ source: String, root: URL, id: String) throws {
         let file = automationFile(root, id)
         try FileManager.default.createDirectory(
             at: file.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        let source = """
+        try Data(source.utf8).write(to: file)
+    }
+
+    private func automationSource(id: String, name: String, version: Int) -> String {
+        """
         id = \"\(id)\"
         version = \(version)
         kind = \"heartbeat\"
@@ -126,6 +223,5 @@ final class CodexAutomationReaderTests: XCTestCase {
         target = { type = \"projectless\" }
         unknown = \"ignored\"
         """
-        try Data(source.utf8).write(to: file)
     }
 }

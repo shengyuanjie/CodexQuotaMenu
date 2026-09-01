@@ -20,6 +20,32 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(english.activationUnavailableDescription, "Could not read Codex automation status. Try again later.")
     }
 
+    func testActivationScheduleFeedbackExplainsTheOneSendWorkflow() {
+        let chinese = AppText(language: .simplifiedChinese)
+        let english = AppText(language: .english)
+
+        XCTAssertEqual(
+            chinese.activationPromptCopiedStatus,
+            "同步指令已复制并打开新的 Codex 对话；请粘贴并只发送一次。"
+        )
+        XCTAssertEqual(
+            english.activationPromptCopiedStatus,
+            "Sync prompt copied and a new Codex conversation opened. Paste and send it once."
+        )
+        XCTAssertEqual(
+            chinese.activationCodexOpenFailedStatus,
+            "同步指令已复制，但无法打开 Codex。请手动打开 Codex，粘贴并发送一次。"
+        )
+        XCTAssertEqual(
+            english.activationCodexOpenFailedStatus,
+            "Sync prompt copied, but Codex could not be opened. Open Codex manually, then paste and send it once."
+        )
+        XCTAssertEqual(
+            english.activationScheduleFullError,
+            "All 1,440 daily minutes are already in use."
+        )
+    }
+
     func testSystemLanguageResolvesChineseAndEnglish() {
         XCTAssertEqual(
             AppLanguage.system.resolved(preferredLanguages: ["zh-Hans-CN"]),

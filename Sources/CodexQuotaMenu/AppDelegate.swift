@@ -35,9 +35,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        MainActor.assumeIsolated {
-            activationScheduleModel.load()
-        }
         statusItem.button?.title = text.loadingTitle
         rebuildMenu(message: text.loadingMessage)
         if widgetPreferences.isServerEnabled {
@@ -56,6 +53,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.refreshForecast(manual: false)
         }
         RunLoop.main.add(forecastTimer!, forMode: .common)
+
+        MainActor.assumeIsolated {
+            activationScheduleModel.load()
+        }
     }
 
     private func refreshLocal() {

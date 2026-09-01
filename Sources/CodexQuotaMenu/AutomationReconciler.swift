@@ -35,67 +35,36 @@ enum AutomationReconciler {
         }
 
         let desired = Set(entries.filter(\.isEnabled).map(\.time))
-        let tasks = readTasks.filter { $0.name.hasPrefix(ManagedAutomationPolicy.namePrefix) }
-        let grouped = Dictionary(grouping: tasks.compactMap { task -> (ActivationTime, CodexAutomation)? in
-            guard let time = managedTime(task) else { return nil }
+        let tasks = readTasks.compactMap { task -> (ActivationTime, CodexAutomation)? in
+            guard let time = ManagedAutomationPolicy.managedTime(from: task.name) else { return nil }
             return (time, task)
-        }, by: \.0)
+        }
+        let grouped = Dictionary(grouping: tasks, by: \.0)
         let actual = Set(grouped.keys)
         var difference = AutomationDifference()
 
         difference.missing = desired.subtracting(actual).sorted()
         difference.extra = actual.subtracting(desired).sorted()
-        difference.extra = uniqueSorted(
-            difference.extra + tasks.compactMap { task in
-                guard managedTime(task) == nil else { return nil }
-                return malformedManagedTime(task.name)
-            }
-        )
         difference.duplicate = grouped.compactMap { time, values in
             values.count > 1 ? time : nil
         }.sorted()
-        difference.paused = uniqueSorted(tasks.compactMap { task in
-            guard let time = managedTime(task), task.status != "ACTIVE" else { return nil }
+        difference.paused = uniqueSorted(tasks.compactMap { time, task in
+            guard task.status != "ACTIVE" else { return nil }
             return time
         })
-        difference.misconfigured = uniqueSorted(tasks.compactMap { task in
-            guard let time = managedTime(task), desired.contains(time) else { return nil }
+        difference.misconfigured = uniqueSorted(tasks.compactMap { time, task in
+            guard desired.contains(time) else { return nil }
             return matchesPolicy(task, time: time, timeZoneIdentifier: timeZoneIdentifier) ? nil : time
         })
-        difference.unmatchedNames = tasks.compactMap { task in
-            managedTime(task) == nil && malformedManagedTime(task.name) == nil ? task.name : nil
-        }.sorted()
+        difference.unmatchedNames = readTasks
+            .map(\.name)
+            .filter(ManagedAutomationPolicy.isMalformedPrefixedName)
+            .sorted()
 
-        if desired.isEmpty && tasks.isEmpty {
+        if desired.isEmpty && tasks.isEmpty && difference.unmatchedNames.isEmpty {
             return .unconfigured
         }
         return difference.isEmpty ? .synced : .pending(difference)
-    }
-
-    private static func managedTime(_ task: CodexAutomation) -> ActivationTime? {
-        let suffix = task.name.dropFirst(ManagedAutomationPolicy.namePrefix.count)
-        guard suffix.count == 5 else { return nil }
-        return parseTime(String(suffix))
-    }
-
-    private static func malformedManagedTime(_ name: String) -> ActivationTime? {
-        guard name.hasPrefix(ManagedAutomationPolicy.namePrefix) else { return nil }
-        let suffix = name.dropFirst(ManagedAutomationPolicy.namePrefix.count)
-        guard suffix.count > 5 else { return nil }
-        return parseTime(String(suffix.prefix(5)))
-    }
-
-    private static func parseTime(_ text: String) -> ActivationTime? {
-        let characters = Array(text.utf8)
-        guard characters.count == 5,
-              characters[2] == 58,
-              characters[0...1].allSatisfy(isASCIIDigit),
-              characters[3...4].allSatisfy(isASCIIDigit),
-              let hour = Int(text.prefix(2)),
-              let minute = Int(text.suffix(2)) else {
-            return nil
-        }
-        return try? ActivationTime(hour: hour, minute: minute)
     }
 
     private static func matchesPolicy(
@@ -140,14 +109,10 @@ enum AutomationReconciler {
             return false
         }
 
-        return fields["TZID"].map { $0 == timeZoneIdentifier } ?? true
+        return fields["TZID"] == timeZoneIdentifier
     }
 
     private static func uniqueSorted(_ values: [ActivationTime]) -> [ActivationTime] {
         Array(Set(values)).sorted()
-    }
-
-    private static func isASCIIDigit(_ value: UInt8) -> Bool {
-        (48...57).contains(value)
     }
 }

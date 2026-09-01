@@ -80,16 +80,15 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         XCTAssertNotEqual(model.syncState, .synced)
     }
 
-    func testKeyWindowRefreshStartsTenSecondTimerAndCloseStopsIt() {
+    func testKeyWindowRefreshStartsTenSecondTimerAndCloseStopsIt() async {
         let suite = "ActivationScheduleWindowControllerTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        var readCount = 0
+        let readCount = TestLockedCounter()
         let model = ActivationScheduleSettingsModel(
             store: ActivationScheduleStore(defaults: defaults),
-            readAutomations: { readCount += 1; return .available([]) }
+            readAutomations: { readCount.increment(); return .available([]) }
         )
-        model.load()
         let controller = ActivationScheduleWindowController(
             model: model,
             textProvider: { AppText(language: .english) },
@@ -99,7 +98,8 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
 
         controller.windowDidBecomeKey(Notification(name: NSWindow.didBecomeKeyNotification))
 
-        XCTAssertEqual(readCount, 2)
+        let refreshStarted = await waitUntil { readCount.value == 1 }
+        XCTAssertTrue(refreshStarted)
         XCTAssertTrue(controller.isRefreshTimerRunning)
         XCTAssertEqual(controller.refreshTimerInterval, 10)
 
@@ -107,16 +107,15 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         XCTAssertFalse(controller.isRefreshTimerRunning)
     }
 
-    func testManualRefreshReadsActualAutomationState() {
+    func testManualRefreshReadsActualAutomationState() async {
         let suite = "ActivationScheduleWindowControllerTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        var readCount = 0
+        let readCount = TestLockedCounter()
         let model = ActivationScheduleSettingsModel(
             store: ActivationScheduleStore(defaults: defaults),
-            readAutomations: { readCount += 1; return .available([]) }
+            readAutomations: { readCount.increment(); return .available([]) }
         )
-        model.load()
         let controller = ActivationScheduleWindowController(
             model: model,
             textProvider: { AppText(language: .english) },
@@ -126,7 +125,157 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
 
         controller.refreshActualState()
 
-        XCTAssertEqual(readCount, 2)
+        let refreshStarted = await waitUntil { readCount.value == 1 }
+        XCTAssertTrue(refreshStarted)
+    }
+
+    func testOpenAndImmediateFocusEventDoNotStartDuplicateScans() async {
+        let suite = "ActivationScheduleWindowControllerTests.Open.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let readCount = TestLockedCounter()
+        let model = ActivationScheduleSettingsModel(
+            store: ActivationScheduleStore(defaults: defaults),
+            readAutomations: { readCount.increment(); return .available([]) }
+        )
+        let controller = ActivationScheduleWindowController(
+            model: model,
+            textProvider: { AppText(language: .english) },
+            pasteboardWriter: { _ in true },
+            urlOpener: { _ in true }
+        )
+
+        controller.showWindowAndRefresh()
+        controller.windowDidBecomeKey(Notification(name: NSWindow.didBecomeKeyNotification))
+        let refreshStarted = await waitUntil { readCount.value >= 1 }
+        XCTAssertTrue(refreshStarted)
+        for _ in 0..<100 { await Task.yield() }
+
+        XCTAssertEqual(readCount.value, 1)
+        controller.close()
+    }
+
+    func testVisibleTimerInvokesAsyncRefresh() async {
+        let suite = "ActivationScheduleWindowControllerTests.Timer.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let readCount = TestLockedCounter()
+        let model = ActivationScheduleSettingsModel(
+            store: ActivationScheduleStore(defaults: defaults),
+            readAutomations: { readCount.increment(); return .available([]) }
+        )
+        let controller = ActivationScheduleWindowController(
+            model: model,
+            textProvider: { AppText(language: .english) },
+            pasteboardWriter: { _ in true },
+            urlOpener: { _ in true },
+            refreshInterval: 0.02
+        )
+        controller.window?.orderFront(nil)
+
+        controller.windowDidBecomeKey(Notification(name: NSWindow.didBecomeKeyNotification))
+
+        let timerRefreshStarted = await waitUntil(timeout: 1) { readCount.value >= 2 }
+        XCTAssertTrue(timerRefreshStarted)
+        controller.close()
+    }
+
+    func testAppliedAsyncScanRerendersStatusOnMainActor() async {
+        let suite = "ActivationScheduleWindowControllerTests.AsyncRender.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = ActivationScheduleSettingsModel(
+            store: ActivationScheduleStore(defaults: defaults),
+            readAutomations: { .unavailable("fixture unavailable") }
+        )
+        let controller = ActivationScheduleWindowController(
+            model: model,
+            textProvider: { AppText(language: .english) },
+            pasteboardWriter: { _ in true },
+            urlOpener: { _ in true }
+        )
+
+        controller.refreshActualState()
+
+        let statusRerendered = await waitUntil {
+            self.findTextField(in: controller.window?.contentView) {
+                $0.stringValue == "Could not read Codex automation status. Try again later."
+            } != nil
+        }
+        XCTAssertTrue(statusRerendered)
+    }
+
+    func testAddButtonChoosesFirstUnoccupiedMinuteWithMidnightWrap() throws {
+        let suite = "ActivationScheduleWindowControllerTests.Add.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ActivationScheduleStore(defaults: defaults)
+        try store.save([
+            ActivationScheduleEntry(time: ActivationTime(hour: 23, minute: 59)),
+            ActivationScheduleEntry(time: ActivationTime(hour: 0, minute: 0))
+        ])
+        let model = ActivationScheduleSettingsModel(
+            store: store,
+            readAutomations: { .available([]) }
+        )
+        model.load()
+        let (calendar, now) = fixedDate(hour: 23, minute: 59)
+        let controller = ActivationScheduleWindowController(
+            model: model,
+            textProvider: { AppText(language: .english) },
+            pasteboardWriter: { _ in true },
+            urlOpener: { _ in true },
+            nowProvider: { now },
+            calendarProvider: { calendar }
+        )
+        let addButton = try XCTUnwrap(findButton(in: controller.window?.contentView, title: "Add Time"))
+
+        addButton.performClick(nil)
+
+        XCTAssertEqual(model.entries.map(\.time.displayValue), ["00:00", "00:01", "23:59"])
+        XCTAssertEqual(try store.load(), model.entries)
+    }
+
+    func testAddButtonShowsFullScheduleErrorWithoutChangingStorage() throws {
+        let suite = "ActivationScheduleWindowControllerTests.Full.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ActivationScheduleStore(defaults: defaults)
+        let entries = try (0..<1_440).map { minute in
+            ActivationScheduleEntry(
+                time: try ActivationTime(hour: minute / 60, minute: minute % 60)
+            )
+        }
+        try store.save(entries)
+        let storedData = try XCTUnwrap(
+            defaults.object(forKey: ActivationScheduleStore.storageKey) as? Data
+        )
+        let model = ActivationScheduleSettingsModel(
+            store: store,
+            readAutomations: { .available([]) }
+        )
+        model.load()
+        let (calendar, now) = fixedDate(hour: 12, minute: 34)
+        let controller = ActivationScheduleWindowController(
+            model: model,
+            textProvider: { AppText(language: .english) },
+            pasteboardWriter: { _ in true },
+            urlOpener: { _ in true },
+            nowProvider: { now },
+            calendarProvider: { calendar }
+        )
+        let addButton = try XCTUnwrap(findButton(in: controller.window?.contentView, title: "Add Time"))
+
+        addButton.performClick(nil)
+
+        XCTAssertEqual(model.entries.count, 1_440)
+        XCTAssertEqual(
+            defaults.object(forKey: ActivationScheduleStore.storageKey) as? Data,
+            storedData
+        )
+        XCTAssertNotNil(findTextField(in: controller.window?.contentView) {
+            $0.stringValue == "All 1,440 daily minutes are already in use."
+        })
     }
 
     func testEmptyValidListCanSyncButCorruptStorageCannot() {
@@ -162,6 +311,61 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
             urlOpener: { _ in true }
         )
         XCTAssertFalse(corruptController.isSyncEnabled)
+    }
+
+    func testCorruptStorageDisablesEveryMutatingControl() throws {
+        let suite = "ActivationScheduleWindowControllerTests.CorruptControls.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ActivationScheduleStore(defaults: defaults)
+        try store.save([
+            ActivationScheduleEntry(time: try ActivationTime(hour: 6, minute: 0))
+        ])
+        let model = ActivationScheduleSettingsModel(
+            store: store,
+            readAutomations: { .available([]) }
+        )
+        model.load()
+        defaults.set(Data("not-json".utf8), forKey: ActivationScheduleStore.storageKey)
+        model.load()
+        let controller = ActivationScheduleWindowController(
+            model: model,
+            textProvider: { AppText(language: .english) },
+            pasteboardWriter: { _ in true },
+            urlOpener: { _ in true }
+        )
+
+        XCTAssertFalse(try XCTUnwrap(findButton(in: controller.window?.contentView, title: "Add Time")).isEnabled)
+        XCTAssertFalse(try XCTUnwrap(findButton(in: controller.window?.contentView, title: "Sync to Codex")).isEnabled)
+        XCTAssertFalse(try XCTUnwrap(findButton(in: controller.window?.contentView, title: "Delete")).isEnabled)
+        XCTAssertFalse(try XCTUnwrap(findButton(in: controller.window?.contentView, title: "Enabled")).isEnabled)
+        XCTAssertFalse(try XCTUnwrap(findDatePicker(in: controller.window?.contentView)).isEnabled)
+        XCTAssertTrue(try XCTUnwrap(findButton(in: controller.window?.contentView, title: "Refresh Status")).isEnabled)
+    }
+
+    func testReopenAndManualRefreshClearFeedbackButKeepRetryPrompt() throws {
+        let (model, suite) = makeModel()
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+        model.load()
+        try model.add(time: ActivationTime(hour: 6, minute: 0))
+        let controller = ActivationScheduleWindowController(
+            model: model,
+            textProvider: { AppText(language: .english) },
+            pasteboardWriter: { _ in true },
+            urlOpener: { _ in true }
+        )
+
+        XCTAssertTrue(controller.performSync(timeZoneIdentifier: "Asia/Shanghai"))
+        let retryPrompt = try XCTUnwrap(controller.lastGeneratedPrompt)
+        controller.refreshActualState()
+        XCTAssertEqual(controller.syncFeedback, .none)
+        XCTAssertEqual(controller.lastGeneratedPrompt, retryPrompt)
+
+        XCTAssertTrue(controller.performSync(timeZoneIdentifier: "Asia/Shanghai"))
+        controller.showWindowAndRefresh()
+        XCTAssertEqual(controller.syncFeedback, .none)
+        XCTAssertEqual(controller.lastGeneratedPrompt, retryPrompt)
+        controller.close()
     }
 
     func testPendingStatusRendersEveryDifferenceCategory() throws {
@@ -206,7 +410,7 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         XCTAssertFalse(english.contains(internalReason))
     }
 
-    func testLongDifferenceStatusIsReachableInsideResizableScrollableWindow() throws {
+    func testLongDifferenceStatusIsReachableInsideResizableScrollableWindow() async throws {
         let suite = "ActivationScheduleWindowControllerTests.LongStatus.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -232,6 +436,11 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
             readAutomations: { .available(automations) }
         )
         model.load()
+        let pendingApplied = await waitUntil {
+            if case .pending = model.syncState { return true }
+            return false
+        }
+        XCTAssertTrue(pendingApplied)
         let controller = ActivationScheduleWindowController(
             model: model,
             textProvider: { AppText(language: .english) },
@@ -303,6 +512,49 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         return nil
     }
 
+    private func findButton(in view: NSView?, title: String) -> NSButton? {
+        guard let view else { return nil }
+        if let button = view as? NSButton, button.title == title { return button }
+        for subview in view.subviews {
+            if let match = findButton(in: subview, title: title) { return match }
+        }
+        return nil
+    }
+
+    private func findDatePicker(in view: NSView?) -> NSDatePicker? {
+        guard let view else { return nil }
+        if let picker = view as? NSDatePicker { return picker }
+        for subview in view.subviews {
+            if let match = findDatePicker(in: subview) { return match }
+        }
+        return nil
+    }
+
+    private func fixedDate(hour: Int, minute: Int) -> (Calendar, Date) {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let date = calendar.date(from: DateComponents(
+            year: 2026,
+            month: 9,
+            day: 1,
+            hour: hour,
+            minute: minute
+        ))!
+        return (calendar, date)
+    }
+
+    private func waitUntil(
+        timeout: TimeInterval = 1,
+        _ predicate: @escaping @MainActor () -> Bool
+    ) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if predicate() { return true }
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        return predicate()
+    }
+
     private func enclosingScrollView(of view: NSView) -> NSScrollView? {
         var ancestor = view.superview
         while let current = ancestor {
@@ -312,5 +564,22 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
             ancestor = current.superview
         }
         return nil
+    }
+}
+
+private final class TestLockedCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedValue = 0
+
+    var value: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedValue
+    }
+
+    func increment() {
+        lock.lock()
+        storedValue += 1
+        lock.unlock()
     }
 }

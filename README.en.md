@@ -21,7 +21,7 @@ A native macOS menu bar utility that shows remaining Codex usage, reset countdow
 - Provides an optional, default-off, token-protected local feed for an iPhone Scriptable lock-screen widget.
 - Uses a text-only menu-bar display without a leading icon for a cleaner appearance.
 - Supports Follow System, Simplified Chinese, and English interface languages.
-- Can reconcile daily activation times with official Codex automations through a one-confirmation workflow; the app manages only its own prefixed tasks.
+- Can reconcile daily activation times with official Codex automations through a one-confirmation workflow; the app manages only complete names that exactly match `CodexQuotaMenu · HH:mm`.
 - Reuses your existing local Codex sign-in; no account token needs to be provided to this project.
 - Contains no advertising, analytics, telemetry, or third-party runtime dependencies.
 
@@ -71,7 +71,7 @@ Do not download builds from unofficial mirror sites. Public release archives are
 6. For an iPhone lock-screen display, follow the [Scriptable setup guide](mobile/README.md) and enable the **Phone Widget** read-only feed.
 7. Choose **Quit**, or press `Q` while the menu is open, to stop all queries and the phone feed.
 
-Managed task names use `CodexQuotaMenu · HH:mm`. Sync does not adopt existing tasks without that prefix; with an empty time list, its prompt cleans up only prefixed managed tasks. Successful scheduled runs are silent; Codex notifies according to its notification policy only when a run fails.
+Managed task names exactly match `CodexQuotaMenu · HH:mm`. Names that merely share `CodexQuotaMenu · `, such as `CodexQuotaMenu · backup` or `CodexQuotaMenu · 06:00 copy`, are not owned and remain untouched. With an empty time list, the prompt deletes only exact-format managed tasks. Automated tests and local read-only checks do not synchronize anything; only sending the generated prompt in Codex can change official automations. Successful scheduled runs are silent; Codex notifies according to its notification policy only when a run fails.
 
 To start the app at login, open **System Settings → General → Login Items**, click **+**, and select `Codex用量.app` from Applications.
 
@@ -85,7 +85,7 @@ To reconcile daily activation times, the app read-only scans `~/.codex/automatio
 
 All session content is processed in memory. It is not copied, stored in a project database, uploaded, or used for telemetry.
 
-Forecasting performs GET requests only to `codexreset.org/api/monitor-summary` and displays only its next-48-hour probability; no personal usage, task, identity, or Codex credential is sent. `UserDefaults` stores the public forecast cache and phone-feed toggle, while the phone access token is stored in macOS Keychain. The default-off phone response contains aggregate values only.
+Forecasting performs GET requests only to `codexreset.org/api/monitor-summary` and displays only its next-48-hour probability; no personal usage, task, identity, or Codex credential is sent. `UserDefaults` stores the public forecast cache, phone-feed toggle, and each activation entry's hour, minute, enabled state, and stable local ID, while the phone access token is stored in macOS Keychain. The default-off phone response contains aggregate values only.
 
 See the [English privacy notice](PRIVACY.en.md) for the complete statement.
 

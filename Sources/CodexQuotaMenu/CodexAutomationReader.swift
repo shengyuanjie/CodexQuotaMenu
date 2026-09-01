@@ -53,9 +53,14 @@ struct CodexAutomationReader {
             guard let source = try? String(contentsOf: file, encoding: .utf8) else {
                 return .unavailable("an automation file is unreadable")
             }
-            let fields = StringFieldMap(source: source)
-            guard let name = fields.string("name"),
-                  name.hasPrefix(ManagedAutomationPolicy.namePrefix) else { continue }
+            guard let fields = try? StringFieldMap(source: source),
+                  let name = fields.string("name") else {
+                return .unavailable("an automation file has an ambiguous format")
+            }
+            guard ManagedAutomationPolicy.managedTime(from: name) != nil
+                    || ManagedAutomationPolicy.isMalformedPrefixedName(name) else {
+                continue
+            }
             guard let parsed = Self.parse(fields), parsed.version == 1 else {
                 return .unavailable("managed automation has an unsupported format")
             }
@@ -93,25 +98,73 @@ struct CodexAutomationReader {
 }
 
 private struct StringFieldMap {
+    private static let recognizedKeys: Set<String> = [
+        "version",
+        "id",
+        "kind",
+        "name",
+        "prompt",
+        "status",
+        "rrule",
+        "model",
+        "reasoningEffort",
+        "notificationPolicy",
+        "executionEnvironment",
+        "target"
+    ]
+
     private var integers: [String: Int] = [:]
     private var strings: [String: String] = [:]
     private var inlineTables: [String: String] = [:]
 
-    init(source: String) {
-        for rawLine in source.split(whereSeparator: \.isNewline) {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-            guard let separator = line.firstIndex(of: "=") else { continue }
+    init(source: String) throws {
+        var recognizedTopLevelKeys = Set<String>()
+        var isInsideTable = false
 
-            let key = line[..<separator].trimmingCharacters(in: .whitespaces)
-            let value = line[line.index(after: separator)...].trimmingCharacters(in: .whitespaces)
-            guard !key.isEmpty else { continue }
+        for rawLine in source.split(separator: "\n", omittingEmptySubsequences: false) {
+            guard let uncommented = Self.removingComment(from: String(rawLine)) else {
+                throw StringFieldMapError.malformed
+            }
+            let line = uncommented.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty else { continue }
 
-            if let integer = Int(value) {
+            if line.hasPrefix("[") {
+                guard Self.isSupportedTableHeader(line) else {
+                    throw StringFieldMapError.malformed
+                }
+                isInsideTable = true
+                continue
+            }
+
+            guard let separator = line.firstIndex(of: "=") else {
+                throw StringFieldMapError.malformed
+            }
+            let key = String(line[..<separator].trimmingCharacters(in: .whitespaces))
+            let value = String(line[line.index(after: separator)...].trimmingCharacters(in: .whitespaces))
+            guard Self.isBareKey(key), !value.isEmpty, Self.hasBalancedDelimiters(value) else {
+                throw StringFieldMapError.malformed
+            }
+
+            let isRecognized = Self.recognizedKeys.contains(key)
+            if isInsideTable {
+                guard !isRecognized else {
+                    throw StringFieldMapError.ambiguousRecognizedKey
+                }
+                continue
+            }
+            guard isRecognized else { continue }
+            guard recognizedTopLevelKeys.insert(key).inserted else {
+                throw StringFieldMapError.duplicateRecognizedKey
+            }
+
+            if key == "version", let integer = Int(value) {
                 integers[key] = integer
-            } else if let string = Self.unquoted(value) {
+            } else if key == "target", value.first == "{", value.last == "}" {
+                inlineTables[key] = value
+            } else if key != "version", key != "target", let string = Self.unquoted(value) {
                 strings[key] = string
-            } else if value.first == "{", value.last == "}" {
-                inlineTables[key] = String(value)
+            } else {
+                throw StringFieldMapError.malformed
             }
         }
     }
@@ -127,14 +180,84 @@ private struct StringFieldMap {
     func inlineTableString(_ table: String, key: String) -> String? {
         guard let source = inlineTables[table] else { return nil }
         let body = source.dropFirst().dropLast()
+        var match: String?
         for component in body.split(separator: ",", omittingEmptySubsequences: false) {
             guard let separator = component.firstIndex(of: "=") else { continue }
             let field = component[..<separator].trimmingCharacters(in: .whitespaces)
             guard field == key else { continue }
             let value = component[component.index(after: separator)...].trimmingCharacters(in: .whitespaces)
-            return Self.unquoted(value)
+            guard match == nil, let parsed = Self.unquoted(value) else { return nil }
+            match = parsed
         }
-        return nil
+        return match
+    }
+
+    private static func removingComment(from line: String) -> String? {
+        var result = ""
+        var isInsideString = false
+        var isEscaping = false
+
+        for character in line {
+            if isEscaping {
+                result.append(character)
+                isEscaping = false
+            } else if character == "\\", isInsideString {
+                result.append(character)
+                isEscaping = true
+            } else if character == "\"" {
+                result.append(character)
+                isInsideString.toggle()
+            } else if character == "#", !isInsideString {
+                break
+            } else {
+                result.append(character)
+            }
+        }
+        return isInsideString || isEscaping ? nil : result
+    }
+
+    private static func isSupportedTableHeader(_ line: String) -> Bool {
+        if line.hasPrefix("[[") {
+            guard line.hasSuffix("]]"), line.count > 4 else { return false }
+            let name = line.dropFirst(2).dropLast(2).trimmingCharacters(in: .whitespaces)
+            return !name.isEmpty && !name.contains("[") && !name.contains("]")
+        }
+        guard line.hasSuffix("]"), line.count > 2 else { return false }
+        let name = line.dropFirst().dropLast().trimmingCharacters(in: .whitespaces)
+        return !name.isEmpty && !name.contains("[") && !name.contains("]")
+    }
+
+    private static func isBareKey(_ key: String) -> Bool {
+        !key.isEmpty && key.unicodeScalars.allSatisfy { scalar in
+            CharacterSet.alphanumerics.contains(scalar) || scalar == "_" || scalar == "-"
+        }
+    }
+
+    private static func hasBalancedDelimiters(_ value: String) -> Bool {
+        var isInsideString = false
+        var isEscaping = false
+        var braceDepth = 0
+        var bracketDepth = 0
+
+        for character in value {
+            if isEscaping {
+                isEscaping = false
+            } else if character == "\\", isInsideString {
+                isEscaping = true
+            } else if character == "\"" {
+                isInsideString.toggle()
+            } else if !isInsideString {
+                switch character {
+                case "{": braceDepth += 1
+                case "}": braceDepth -= 1
+                case "[": bracketDepth += 1
+                case "]": bracketDepth -= 1
+                default: break
+                }
+                if braceDepth < 0 || bracketDepth < 0 { return false }
+            }
+        }
+        return !isInsideString && !isEscaping && braceDepth == 0 && bracketDepth == 0
     }
 
     private static func unquoted(_ value: String) -> String? {
@@ -159,4 +282,10 @@ private struct StringFieldMap {
 
         return isEscaping ? nil : result
     }
+}
+
+private enum StringFieldMapError: Error {
+    case malformed
+    case duplicateRecognizedKey
+    case ambiguousRecognizedKey
 }

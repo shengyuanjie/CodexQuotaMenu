@@ -22,4 +22,38 @@ final class ActivationScheduleStoreTests: XCTestCase {
         XCTAssertThrowsError(try ActivationScheduleStore(defaults: defaults).load())
         XCTAssertNotNil(defaults.data(forKey: ActivationScheduleStore.storageKey))
     }
+
+    func testNonDataPreferenceIsCorruptAndPreserved() {
+        let suite = "ScheduleStore.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("not data", forKey: ActivationScheduleStore.storageKey)
+
+        XCTAssertThrowsError(try ActivationScheduleStore(defaults: defaults).load())
+        XCTAssertEqual(
+            defaults.object(forKey: ActivationScheduleStore.storageKey) as? String,
+            "not data"
+        )
+    }
+
+    func testDuplicateStableIDsInStoredDataAreCorruptAndPreserved() throws {
+        let suite = "ScheduleStore.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let id = UUID()
+        let encoded = try JSONEncoder().encode([
+            ActivationScheduleEntry(
+                id: id,
+                time: try ActivationTime(hour: 6, minute: 0)
+            ),
+            ActivationScheduleEntry(
+                id: id,
+                time: try ActivationTime(hour: 11, minute: 2)
+            )
+        ])
+        defaults.set(encoded, forKey: ActivationScheduleStore.storageKey)
+
+        XCTAssertThrowsError(try ActivationScheduleStore(defaults: defaults).load())
+        XCTAssertEqual(defaults.object(forKey: ActivationScheduleStore.storageKey) as? Data, encoded)
+    }
 }

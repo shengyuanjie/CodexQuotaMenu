@@ -9,7 +9,10 @@ struct ActivationScheduleStore {
     }
 
     func load() throws -> [ActivationScheduleEntry] {
-        guard let data = defaults.data(forKey: Self.storageKey) else { return [] }
+        guard let storedValue = defaults.object(forKey: Self.storageKey) else { return [] }
+        guard let data = storedValue as? Data else {
+            throw ActivationScheduleError.corruptStoredData
+        }
         guard let value = try? JSONDecoder().decode([ActivationScheduleEntry].self, from: data),
               let normalized = try? ActivationScheduleEntry.normalized(value) else {
             throw ActivationScheduleError.corruptStoredData

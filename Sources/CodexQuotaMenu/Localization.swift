@@ -166,8 +166,8 @@ struct AppText {
 
     var activationPromptCopiedStatus: String {
         language == .simplifiedChinese
-            ? "指令已复制，已打开 Codex 新任务。"
-            : "Prompt copied; opened a new Codex thread."
+            ? "同步指令已复制并打开新的 Codex 对话；请粘贴并只发送一次。"
+            : "Sync prompt copied and a new Codex conversation opened. Paste and send it once."
     }
 
     var activationPasteboardFailedStatus: String {
@@ -178,14 +178,14 @@ struct AppText {
 
     var activationCodexOpenFailedStatus: String {
         language == .simplifiedChinese
-            ? "指令已复制，但无法打开 Codex。可重试同步。"
-            : "Prompt copied, but Codex could not be opened. You can retry sync."
+            ? "同步指令已复制，但无法打开 Codex。请手动打开 Codex，粘贴并发送一次。"
+            : "Sync prompt copied, but Codex could not be opened. Open Codex manually, then paste and send it once."
     }
 
     var activationCorruptStorageStatus: String {
         language == .simplifiedChinese
-            ? "设置存储已损坏；同步已禁用。"
-            : "The stored settings are corrupt; sync is disabled."
+            ? "设置存储已损坏；编辑和同步已禁用。"
+            : "The stored settings are corrupt; editing and sync are disabled."
     }
 
     var duplicateActivationTimeError: String {
@@ -194,6 +194,12 @@ struct AppText {
 
     var activationSaveFailedError: String {
         language == .simplifiedChinese ? "无法保存激活时间。" : "Could not save the activation time."
+    }
+
+    var activationScheduleFullError: String {
+        language == .simplifiedChinese
+            ? "一天的 1,440 个分钟时间均已占用。"
+            : "All 1,440 daily minutes are already in use."
     }
 
     var activationMissingDifferenceLabel: String {

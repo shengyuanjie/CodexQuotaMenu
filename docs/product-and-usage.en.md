@@ -72,9 +72,11 @@ These are public community forecasts, not an official reset schedule or guarante
 
 Open **Activation Times…**, add the times you need each day, then choose **Sync to Codex**. The list is empty on first launch. The app copies a complete reconciliation prompt and opens a new Codex conversation; you still need to paste and send it once before Codex can create or correct the official automations.
 
-The app manages only tasks whose name exactly follows `CodexQuotaMenu · HH:mm`; it does not adopt existing tasks without that prefix. If the time list is empty, the generated sync prompt cleans up only managed tasks with that prefix.
+The app manages only tasks whose complete name exactly matches `CodexQuotaMenu · HH:mm`. A name that merely shares `CodexQuotaMenu · `, such as `CodexQuotaMenu · backup` or `CodexQuotaMenu · 06:00 copy`, is not owned and remains untouched. If the time list is empty, the generated sync prompt deletes only exact-format managed tasks.
 
 Choosing Sync alone never shows **Synced**. After you send the prompt, the window rechecks configuration through a local read-only reconciliation and shows **Synced** only when the saved settings and managed task configuration match exactly. A local reconciliation cannot prove that an individual background run succeeded. You need to sync again only after changing a time; quitting CodexQuotaMenu does not stop or remove official background automations already created. Successful scheduled runs are silent; Codex notifies according to the task notification policy when a run fails.
+
+Automated tests and local read-only status checks do not perform synchronization and do not change Codex automations. Real synchronization can happen only after you paste and send the generated reconciliation prompt in Codex.
 
 ## Interface Language
 
@@ -168,7 +170,7 @@ To reconcile daily activation times, the app read-only scans `~/.codex/automatio
 
 Session-log fragments may contain task titles, tool-call metadata, and the current response. They are processed in memory and are not copied, uploaded, or stored in a project database. The app does not read or save Codex account tokens, passwords, or API keys and has no advertising, analytics, or telemetry.
 
-The app sends GET requests only to the documented `codexreset.org` public forecast endpoint and sends it no personal quota, task, identity, session, or Codex credential data. `UserDefaults` stores language, the phone-feed toggle, and the non-personal forecast cache; macOS Keychain stores the 32-byte phone token. Phone JSON excludes task titles, paths, and conversations. Scriptable stores its address and token in Scriptable Keychain and writes only non-sensitive JSON to its file cache.
+The app sends GET requests only to the documented `codexreset.org` public forecast endpoint and sends it no personal quota, task, identity, session, or Codex credential data. `UserDefaults` stores language, the phone-feed toggle, the non-personal forecast cache, and each activation entry's hour, minute, enabled state, and stable local ID; macOS Keychain stores the 32-byte phone token. Phone JSON excludes task titles, paths, and conversations. Scriptable stores its address and token in Scriptable Keychain and writes only non-sensitive JSON to its file cache.
 
 App Sandbox is not enabled because the app must launch a local Codex subprocess and read Codex session logs. The app does not request camera, microphone, contacts, calendar, location, photo-library, or Accessibility permissions.
 
@@ -210,7 +212,7 @@ To uninstall:
 2. Remove it from Login Items.
 3. Move `Codex用量.app` from Applications to Trash.
 
-The app creates no user database or separate cache directory, but keeps public forecast cache and preferences in `UserDefaults` and the phone token in Keychain. To remove the preferences and forecast cache:
+The app creates no user database or separate cache directory, but keeps public forecast cache and preferences, including activation entries, in `UserDefaults` and the phone token in Keychain. To remove the preferences and forecast cache:
 
 ```sh
 defaults delete com.local.codexquotamenu

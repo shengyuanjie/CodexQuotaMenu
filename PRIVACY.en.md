@@ -2,7 +2,7 @@
 
 English | [简体中文](PRIVACY.md)
 
-Last updated: August 13, 2026
+Last updated: September 1, 2026
 
 Codex Usage Menu Bar is designed around local processing. The project operates no public service and includes no advertising, telemetry, or user analytics. A user may explicitly enable a Mac-local LAN service for the phone widget; it is off by default.
 
@@ -15,7 +15,7 @@ The app starts `codex app-server --stdio` through a Codex executable already ins
 - local session-log paths returned by Codex;
 - up to the last 512 KB of each relevant session log, used only to identify structured lifecycle events such as task starts, user messages, and task completions, plus whether the log has been active recently.
 
-To reconcile daily activation times, the app read-only scans `~/.codex/automations/*/automation.toml` and extracts only the managed task name, status, and configuration fields needed for reconciliation. Managed task names follow `CodexQuotaMenu · HH:mm`; the app does not adopt existing tasks without that prefix.
+To reconcile daily activation times, the app read-only scans `~/.codex/automations/*/automation.toml` and extracts only the managed task name, status, and configuration fields needed for reconciliation. A task is managed only when its complete name exactly matches `CodexQuotaMenu · HH:mm`; names that merely share `CodexQuotaMenu · ` are left untouched.
 
 Session-log fragments may include task titles, tool-call metadata, and text from the current response.
 The app does not analyze response text or tool-call contents to infer whether the user needs to approve, choose, enter information, upload, or reply.
@@ -38,7 +38,7 @@ Requests contain only normal HTTP metadata, a JSON Accept header, and an app-ver
 
 The app stores locally:
 
-- macOS `UserDefaults`: interface language, the phone-feed toggle, the public forecast cache, and the two quota summaries and reset times used to detect completion of the current reset cycle. This state remains local; forecast data is hidden after two hours;
+- macOS `UserDefaults`: interface language, the phone-feed toggle, the public forecast cache, the two quota summaries and reset times used to detect completion of the current reset cycle, and each activation entry's hour, minute, enabled state, and stable local ID. This state remains local; forecast data is hidden after two hours;
 - macOS Keychain: the 32-byte random access token created when the phone feed is first enabled;
 - process memory: the latest personal quota, task summary, and generated phone JSON snapshot.
 
@@ -48,7 +48,7 @@ On iPhone, the Scriptable script stores its address and token in Scriptable Keyc
 
 The Codex subprocess may connect to OpenAI as part of Codex's normal operation. This project does not control Codex's own data handling.
 
-Local reconciliation can confirm only whether saved activation times and managed task configuration match; it cannot prove that an individual background run succeeded. Successful created automations are silent, and Codex notifies according to the task notification policy when a run fails. Quitting this app does not affect official background automations.
+Local reconciliation can confirm only whether saved activation times and managed task configuration match; it cannot prove that an individual background run succeeded. Successful scheduled runs are silent, and Codex notifies according to the task notification policy when a run fails. Quitting this app does not affect official background automations.
 
 ## Permissions and Sandbox
 
@@ -63,7 +63,7 @@ The app does not request camera, microphone, contacts, calendar, location, photo
 
 Quit the app to stop all reads and the local service, or disable the phone feed independently. If a token may have leaked, regenerate it in the menu; the old token becomes invalid immediately.
 
-To uninstall, remove `Codex用量.app`. To remove the language, toggle, public forecast cache, and reset-detection state from `UserDefaults`, run:
+To uninstall, remove `Codex用量.app`. To remove the language, toggle, activation entries, public forecast cache, and reset-detection state from `UserDefaults`, run:
 
 ```sh
 defaults delete com.local.codexquotamenu
