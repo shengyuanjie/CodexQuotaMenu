@@ -88,7 +88,7 @@ final class AutomationReconcilerTests: XCTestCase {
         )
     }
 
-    func testMalformedPrefixedNamesAreDiagnosticsOnlyAndNeverOwned() throws {
+    func testMalformedPrefixedNamesDoNotBlockAnExactTaskFromSyncing() throws {
         let six = try ActivationTime(hour: 6, minute: 0)
         let malformed = [
             fixture(six, name: "CodexQuotaMenu · backup"),
@@ -97,18 +97,23 @@ final class AutomationReconcilerTests: XCTestCase {
 
         let result = AutomationReconciler.evaluate(
             entries: [.init(time: six)],
-            readResult: .available(malformed),
+            readResult: .available([fixture(six)] + malformed),
             timeZoneIdentifier: "Asia/Shanghai"
         )
 
-        guard case .pending(let difference) = result else {
-            return XCTFail("invalid managed name must not be synced")
-        }
-        XCTAssertEqual(difference.missing, [six])
-        XCTAssertEqual(difference.extra, [])
+        XCTAssertEqual(result, .synced)
+    }
+
+    func testMalformedPrefixedNamesDoNotTurnEmptyConfigurationPending() throws {
+        let six = try ActivationTime(hour: 6, minute: 0)
+
         XCTAssertEqual(
-            difference.unmatchedNames,
-            ["CodexQuotaMenu · 06:00 copy", "CodexQuotaMenu · backup"]
+            AutomationReconciler.evaluate(
+                entries: [],
+                readResult: .available([fixture(six, name: "CodexQuotaMenu · backup")]),
+                timeZoneIdentifier: "Asia/Shanghai"
+            ),
+            .unconfigured
         )
     }
 

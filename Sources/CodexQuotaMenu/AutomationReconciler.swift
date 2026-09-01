@@ -10,7 +10,7 @@ struct AutomationDifference: Equatable, Sendable {
 
     var isEmpty: Bool {
         missing.isEmpty && extra.isEmpty && duplicate.isEmpty && paused.isEmpty
-            && misconfigured.isEmpty && unmatchedNames.isEmpty
+            && misconfigured.isEmpty
     }
 }
 
@@ -61,7 +61,7 @@ enum AutomationReconciler {
             .filter(ManagedAutomationPolicy.isMalformedPrefixedName)
             .sorted()
 
-        if desired.isEmpty && tasks.isEmpty && difference.unmatchedNames.isEmpty {
+        if desired.isEmpty && tasks.isEmpty {
             return .unconfigured
         }
         return difference.isEmpty ? .synced : .pending(difference)

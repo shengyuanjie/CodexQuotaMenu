@@ -414,15 +414,16 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         let suite = "ActivationScheduleWindowControllerTests.LongStatus.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        let automations = (0..<48).map { index in
-            CodexAutomation(
-                id: "unmatched-\(index)",
+        let automations = try (0..<480).map { index in
+            let time = try ActivationTime(hour: index / 60, minute: index % 60)
+            return CodexAutomation(
+                id: "extra-\(index)",
                 version: 1,
                 kind: "cron",
-                name: "\(ManagedAutomationPolicy.namePrefix)invalid-\(index)-\(String(repeating: "detail", count: 8))",
+                name: ManagedAutomationPolicy.name(for: time),
                 prompt: ManagedAutomationPolicy.activationPrompt,
                 status: "ACTIVE",
-                rrule: "FREQ=DAILY;BYHOUR=0;BYMINUTE=0",
+                rrule: "FREQ=DAILY;BYHOUR=\(time.hour);BYMINUTE=\(time.minute);TZID=Asia/Shanghai",
                 model: ManagedAutomationPolicy.model,
                 reasoningEffort: ManagedAutomationPolicy.reasoningEffort,
                 notificationPolicy: ManagedAutomationPolicy.notificationPolicy,
@@ -450,7 +451,7 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         let window = try XCTUnwrap(controller.window)
         window.contentView?.layoutSubtreeIfNeeded()
         let statusView = try XCTUnwrap(findTextField(in: window.contentView) {
-            $0.stringValue.contains("Unrecognized managed names: CodexQuotaMenu · invalid-0-")
+            $0.stringValue.contains("Extra: 00:00, 00:01")
         })
         let scrollView = try XCTUnwrap(enclosingScrollView(of: statusView))
         let documentView = try XCTUnwrap(scrollView.documentView)
