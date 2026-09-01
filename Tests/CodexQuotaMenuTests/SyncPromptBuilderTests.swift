@@ -23,6 +23,8 @@ final class SyncPromptBuilderTests: XCTestCase {
         XCTAssertTrue(prompt.contains("不要修改任何其他计划任务"))
         XCTAssertTrue(prompt.contains("standalone cron"))
         XCTAssertTrue(prompt.contains(ManagedAutomationPolicy.activationPrompt))
+        XCTAssertTrue(prompt.contains("状态必须为 ACTIVE（启用）"))
+        XCTAssertTrue(prompt.contains("将暂停任务恢复为 ACTIVE（启用）"))
     }
 
     func testEmptyPromptDeletesManagedTasksOnly() throws {
