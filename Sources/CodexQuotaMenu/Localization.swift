@@ -104,6 +104,116 @@ struct AppText {
         language == .simplifiedChinese ? "语言" : "Language"
     }
 
+    var activationScheduleAction: String {
+        language == .simplifiedChinese ? "激活时间设置…" : "Activation Times…"
+    }
+
+    var activationScheduleWindowTitle: String {
+        language == .simplifiedChinese ? "激活时间设置" : "Activation Times"
+    }
+
+    var activationScheduleHeading: String {
+        language == .simplifiedChinese ? "每日自动激活时间" : "Daily Activation Times"
+    }
+
+    var addActivationTimeAction: String {
+        language == .simplifiedChinese ? "添加时间" : "Add Time"
+    }
+
+    var deleteActivationTimeAction: String {
+        language == .simplifiedChinese ? "删除" : "Delete"
+    }
+
+    var activationEnabledLabel: String {
+        language == .simplifiedChinese ? "启用" : "Enabled"
+    }
+
+    var refreshActivationStatusAction: String {
+        language == .simplifiedChinese ? "刷新状态" : "Refresh Status"
+    }
+
+    var syncToCodexAction: String {
+        language == .simplifiedChinese ? "同步到 Codex" : "Sync to Codex"
+    }
+
+    var activationUnconfiguredStatus: String {
+        language == .simplifiedChinese ? "未配置" : "Not Configured"
+    }
+
+    var activationSyncedStatus: String {
+        language == .simplifiedChinese ? "已同步" : "Synced"
+    }
+
+    var activationPendingStatus: String {
+        language == .simplifiedChinese ? "待同步" : "Pending"
+    }
+
+    var activationUnavailableStatus: String {
+        language == .simplifiedChinese ? "状态不可用" : "Unavailable"
+    }
+
+    var activationEmptyListDescription: String {
+        language == .simplifiedChinese
+            ? "尚未设置激活时间。同步可清理全部受管任务。"
+            : "No activation times yet. Syncing can remove all managed tasks."
+    }
+
+    var activationPromptCopiedStatus: String {
+        language == .simplifiedChinese
+            ? "指令已复制，已打开 Codex 新任务。"
+            : "Prompt copied; opened a new Codex thread."
+    }
+
+    var activationPasteboardFailedStatus: String {
+        language == .simplifiedChinese
+            ? "无法复制同步指令，未打开 Codex。"
+            : "Could not copy the sync prompt; Codex was not opened."
+    }
+
+    var activationCodexOpenFailedStatus: String {
+        language == .simplifiedChinese
+            ? "指令已复制，但无法打开 Codex。可重试同步。"
+            : "Prompt copied, but Codex could not be opened. You can retry sync."
+    }
+
+    var activationCorruptStorageStatus: String {
+        language == .simplifiedChinese
+            ? "设置存储已损坏；同步已禁用。"
+            : "The stored settings are corrupt; sync is disabled."
+    }
+
+    var duplicateActivationTimeError: String {
+        language == .simplifiedChinese ? "激活时间不能重复。" : "Activation times cannot be duplicated."
+    }
+
+    var activationSaveFailedError: String {
+        language == .simplifiedChinese ? "无法保存激活时间。" : "Could not save the activation time."
+    }
+
+    var activationMissingDifferenceLabel: String {
+        language == .simplifiedChinese ? "缺少" : "Missing"
+    }
+
+    var activationExtraDifferenceLabel: String {
+        language == .simplifiedChinese ? "多余" : "Extra"
+    }
+
+    var activationDuplicateDifferenceLabel: String {
+        language == .simplifiedChinese ? "重复" : "Duplicate"
+    }
+
+    var activationPausedDifferenceLabel: String {
+        language == .simplifiedChinese ? "已暂停" : "Paused"
+    }
+
+    var activationMisconfiguredDifferenceLabel: String {
+        language == .simplifiedChinese ? "配置不一致" : "Misconfigured"
+    }
+
+    var activationUnmatchedNamesDifferenceLabel: String {
+        language == .simplifiedChinese ? "无法识别的受管名称" : "Unrecognized managed names"
+    }
+
     var languageSystem: String {
         language == .simplifiedChinese ? "跟随系统" : "Follow System"
     }

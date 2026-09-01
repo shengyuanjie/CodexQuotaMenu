@@ -2,6 +2,16 @@ import XCTest
 @testable import CodexQuotaMenu
 
 final class LocalizationTests: XCTestCase {
+    func testActivationScheduleStringsAreLocalized() {
+        let chinese = AppText(language: .simplifiedChinese)
+        let english = AppText(language: .english)
+
+        XCTAssertEqual(chinese.activationScheduleAction, "激活时间设置…")
+        XCTAssertEqual(english.activationScheduleAction, "Activation Times…")
+        XCTAssertEqual(chinese.syncToCodexAction, "同步到 Codex")
+        XCTAssertEqual(english.activationSyncedStatus, "Synced")
+    }
+
     func testSystemLanguageResolvesChineseAndEnglish() {
         XCTAssertEqual(
             AppLanguage.system.resolved(preferredLanguages: ["zh-Hans-CN"]),
