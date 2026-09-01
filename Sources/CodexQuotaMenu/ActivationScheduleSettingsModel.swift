@@ -4,7 +4,7 @@ import Foundation
 final class ActivationScheduleSettingsModel {
     private let store: ActivationScheduleStore
     private let readAutomations: () -> AutomationReadResult
-    private var timeZoneIdentifier = TimeZone.current.identifier
+    private var currentTimeZoneIdentifier = TimeZone.current.identifier
 
     private(set) var entries: [ActivationScheduleEntry] = []
     private(set) var syncState: AutomationSyncState = .unconfigured
@@ -21,7 +21,7 @@ final class ActivationScheduleSettingsModel {
     }
 
     func load(timeZoneIdentifier: String = TimeZone.current.identifier) {
-        self.timeZoneIdentifier = timeZoneIdentifier
+        currentTimeZoneIdentifier = timeZoneIdentifier
 
         do {
             let loaded = try store.load()
@@ -50,8 +50,12 @@ final class ActivationScheduleSettingsModel {
         try persist(entries.filter { $0.id != id })
     }
 
-    func refreshActualState(timeZoneIdentifier: String = TimeZone.current.identifier) {
-        self.timeZoneIdentifier = timeZoneIdentifier
+    func refreshActualState() {
+        refreshActualState(timeZoneIdentifier: currentTimeZoneIdentifier)
+    }
+
+    func refreshActualState(timeZoneIdentifier: String) {
+        currentTimeZoneIdentifier = timeZoneIdentifier
         syncState = AutomationReconciler.evaluate(
             entries: entries,
             readResult: readAutomations(),
@@ -59,8 +63,13 @@ final class ActivationScheduleSettingsModel {
         )
     }
 
-    func makeSyncPrompt(timeZoneIdentifier: String = TimeZone.current.identifier) throws -> String {
-        try SyncPromptBuilder.build(entries: entries, timeZoneIdentifier: timeZoneIdentifier)
+    func makeSyncPrompt() throws -> String {
+        try makeSyncPrompt(timeZoneIdentifier: currentTimeZoneIdentifier)
+    }
+
+    func makeSyncPrompt(timeZoneIdentifier: String) throws -> String {
+        currentTimeZoneIdentifier = timeZoneIdentifier
+        return try SyncPromptBuilder.build(entries: entries, timeZoneIdentifier: timeZoneIdentifier)
     }
 
     private func persist(_ value: [ActivationScheduleEntry]) throws {
@@ -68,6 +77,6 @@ final class ActivationScheduleSettingsModel {
         try store.save(normalized)
         entries = normalized
         loadError = nil
-        refreshActualState(timeZoneIdentifier: timeZoneIdentifier)
+        refreshActualState()
     }
 }

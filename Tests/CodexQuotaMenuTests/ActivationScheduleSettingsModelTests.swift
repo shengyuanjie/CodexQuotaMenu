@@ -80,4 +80,51 @@ final class ActivationScheduleSettingsModelTests: XCTestCase {
         XCTAssertFalse(prompt.contains("CodexQuotaMenu · 06:00"))
         XCTAssertTrue(prompt.contains("Asia/Shanghai"))
     }
+
+    func testExplicitTimeZoneIsReusedByRefreshMutationAndPrompt() throws {
+        let suite = "SettingsModel.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let time = try ActivationTime(hour: 6, minute: 0)
+        let readerResult = AutomationReadResult.available([fixture(time, timeZoneIdentifier: "America/Los_Angeles")])
+        let store = ActivationScheduleStore(defaults: defaults)
+        try store.save([ActivationScheduleEntry(time: time)])
+        let model = ActivationScheduleSettingsModel(
+            store: store,
+            readAutomations: { readerResult }
+        )
+
+        model.load(timeZoneIdentifier: "America/Los_Angeles")
+        XCTAssertEqual(model.syncState, .synced)
+
+        model.refreshActualState()
+        XCTAssertEqual(model.syncState, .synced)
+
+        try model.add(time: try ActivationTime(hour: 11, minute: 2))
+        guard case .pending(let difference) = model.syncState else {
+            return XCTFail("expected one missing task after adding a second time")
+        }
+        XCTAssertEqual(difference.missing, [try ActivationTime(hour: 11, minute: 2)])
+        XCTAssertEqual(difference.misconfigured, [])
+
+        let prompt = try model.makeSyncPrompt()
+        XCTAssertTrue(prompt.contains("时区为 America/Los_Angeles"))
+    }
+
+    private func fixture(_ time: ActivationTime, timeZoneIdentifier: String) -> CodexAutomation {
+        CodexAutomation(
+            id: UUID().uuidString,
+            version: 1,
+            kind: "cron",
+            name: ManagedAutomationPolicy.name(for: time),
+            prompt: ManagedAutomationPolicy.activationPrompt,
+            status: "ACTIVE",
+            rrule: "FREQ=DAILY;BYHOUR=\(time.hour);BYMINUTE=\(time.minute);TZID=\(timeZoneIdentifier)",
+            model: ManagedAutomationPolicy.model,
+            reasoningEffort: ManagedAutomationPolicy.reasoningEffort,
+            notificationPolicy: ManagedAutomationPolicy.notificationPolicy,
+            executionEnvironment: "local",
+            targetType: "projectless"
+        )
+    }
 }
