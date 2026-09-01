@@ -60,10 +60,11 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
         self.urlOpener = urlOpener
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 420),
-            styleMask: [.titled, .closable, .miniaturizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
+        window.minSize = NSSize(width: 420, height: 320)
         super.init(window: window)
         window.delegate = self
         window.center()
@@ -130,8 +131,8 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
             return text.activationUnconfiguredStatus
         case .synced:
             return text.activationSyncedStatus
-        case .unavailable(let reason):
-            return "\(text.activationUnavailableStatus): \(reason)"
+        case .unavailable:
+            return text.activationUnavailableDescription
         case .pending(let difference):
             var lines = [text.activationPendingStatus]
             appendDifference(
@@ -180,24 +181,32 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
         emptyLabel.textColor = .secondaryLabelColor
         statusLabel.maximumNumberOfLines = 0
         statusLabel.lineBreakMode = .byWordWrapping
+        statusLabel.setContentCompressionResistancePriority(.required, for: .vertical)
         errorLabel.maximumNumberOfLines = 0
         errorLabel.lineBreakMode = .byWordWrapping
         errorLabel.textColor = .systemRed
+        errorLabel.setContentCompressionResistancePriority(.required, for: .vertical)
 
         rowsStack.orientation = .vertical
         rowsStack.alignment = .leading
         rowsStack.spacing = 8
         rowsStack.translatesAutoresizingMaskIntoConstraints = false
 
+        let contentStack = NSStackView(views: [headingLabel, emptyLabel, rowsStack, statusLabel, errorLabel])
+        contentStack.orientation = .vertical
+        contentStack.alignment = .leading
+        contentStack.spacing = 12
+        contentStack.translatesAutoresizingMaskIntoConstraints = false
+
         let documentView = NSView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
-        documentView.addSubview(rowsStack)
+        documentView.addSubview(contentStack)
 
         let scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
-        scrollView.borderType = .bezelBorder
+        scrollView.borderType = .noBorder
         scrollView.documentView = documentView
 
         let buttonBar = NSStackView(views: [addButton, NSView(), refreshButton, syncButton])
@@ -212,7 +221,7 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
         syncButton.target = self
         syncButton.action = #selector(syncToCodex)
 
-        let rootStack = NSStackView(views: [headingLabel, emptyLabel, scrollView, statusLabel, errorLabel, buttonBar])
+        let rootStack = NSStackView(views: [scrollView, buttonBar])
         rootStack.orientation = .vertical
         rootStack.alignment = .leading
         rootStack.spacing = 12
@@ -225,16 +234,17 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
             rootStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 20),
             rootStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -20),
             scrollView.widthAnchor.constraint(equalTo: rootStack.widthAnchor),
-            scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 210),
-            statusLabel.widthAnchor.constraint(equalTo: rootStack.widthAnchor),
-            errorLabel.widthAnchor.constraint(equalTo: rootStack.widthAnchor),
+            scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 180),
             buttonBar.widthAnchor.constraint(equalTo: rootStack.widthAnchor),
             documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
-            documentView.heightAnchor.constraint(greaterThanOrEqualTo: rowsStack.heightAnchor),
-            rowsStack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor, constant: 8),
-            rowsStack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor, constant: -8),
-            rowsStack.topAnchor.constraint(equalTo: documentView.topAnchor, constant: 8),
-            rowsStack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor, constant: -8)
+            contentStack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor, constant: 4),
+            contentStack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor, constant: -4),
+            contentStack.topAnchor.constraint(equalTo: documentView.topAnchor, constant: 4),
+            contentStack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor, constant: -4),
+            emptyLabel.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
+            rowsStack.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
+            statusLabel.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
+            errorLabel.widthAnchor.constraint(equalTo: contentStack.widthAnchor)
         ])
     }
 

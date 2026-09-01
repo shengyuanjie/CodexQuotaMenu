@@ -152,6 +152,12 @@ struct AppText {
         language == .simplifiedChinese ? "状态不可用" : "Unavailable"
     }
 
+    var activationUnavailableDescription: String {
+        language == .simplifiedChinese
+            ? "无法读取 Codex 计划任务状态。请稍后重试。"
+            : "Could not read Codex automation status. Try again later."
+    }
+
     var activationEmptyListDescription: String {
         language == .simplifiedChinese
             ? "尚未设置激活时间。同步可清理全部受管任务。"

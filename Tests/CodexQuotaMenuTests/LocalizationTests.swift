@@ -12,6 +12,14 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(english.activationSyncedStatus, "Synced")
     }
 
+    func testActivationScheduleUnavailableDetailsAreFullyLocalized() {
+        let chinese = AppText(language: .simplifiedChinese)
+        let english = AppText(language: .english)
+
+        XCTAssertEqual(chinese.activationUnavailableDescription, "无法读取 Codex 计划任务状态。请稍后重试。")
+        XCTAssertEqual(english.activationUnavailableDescription, "Could not read Codex automation status. Try again later.")
+    }
+
     func testSystemLanguageResolvesChineseAndEnglish() {
         XCTAssertEqual(
             AppLanguage.system.resolved(preferredLanguages: ["zh-Hans-CN"]),

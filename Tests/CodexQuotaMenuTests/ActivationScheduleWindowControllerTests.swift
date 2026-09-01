@@ -188,6 +188,74 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         XCTAssertTrue(value.contains("Unrecognized managed names: CodexQuotaMenu · invalid"))
     }
 
+    func testUnavailableStatusDoesNotExposeInternalReasonInEitherLanguage() {
+        let internalReason = "managed automation parse failed at /private/internal/task.toml"
+
+        let chinese = ActivationScheduleWindowController.statusText(
+            for: .unavailable(internalReason),
+            text: AppText(language: .simplifiedChinese)
+        )
+        let english = ActivationScheduleWindowController.statusText(
+            for: .unavailable(internalReason),
+            text: AppText(language: .english)
+        )
+
+        XCTAssertEqual(chinese, "无法读取 Codex 计划任务状态。请稍后重试。")
+        XCTAssertEqual(english, "Could not read Codex automation status. Try again later.")
+        XCTAssertFalse(chinese.contains(internalReason))
+        XCTAssertFalse(english.contains(internalReason))
+    }
+
+    func testLongDifferenceStatusIsReachableInsideResizableScrollableWindow() throws {
+        let suite = "ActivationScheduleWindowControllerTests.LongStatus.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let automations = (0..<48).map { index in
+            CodexAutomation(
+                id: "unmatched-\(index)",
+                version: 1,
+                kind: "cron",
+                name: "\(ManagedAutomationPolicy.namePrefix)invalid-\(index)-\(String(repeating: "detail", count: 8))",
+                prompt: ManagedAutomationPolicy.activationPrompt,
+                status: "ACTIVE",
+                rrule: "FREQ=DAILY;BYHOUR=0;BYMINUTE=0",
+                model: ManagedAutomationPolicy.model,
+                reasoningEffort: ManagedAutomationPolicy.reasoningEffort,
+                notificationPolicy: ManagedAutomationPolicy.notificationPolicy,
+                executionEnvironment: "local",
+                targetType: "projectless"
+            )
+        }
+        let store = ActivationScheduleStore(defaults: defaults)
+        let model = ActivationScheduleSettingsModel(
+            store: store,
+            readAutomations: { .available(automations) }
+        )
+        model.load()
+        let controller = ActivationScheduleWindowController(
+            model: model,
+            textProvider: { AppText(language: .english) },
+            pasteboardWriter: { _ in true },
+            urlOpener: { _ in true }
+        )
+        let window = try XCTUnwrap(controller.window)
+        window.contentView?.layoutSubtreeIfNeeded()
+        let statusView = try XCTUnwrap(findTextField(in: window.contentView) {
+            $0.stringValue.contains("Unrecognized managed names: CodexQuotaMenu · invalid-0-")
+        })
+        let scrollView = try XCTUnwrap(enclosingScrollView(of: statusView))
+        let documentView = try XCTUnwrap(scrollView.documentView)
+        documentView.layoutSubtreeIfNeeded()
+
+        XCTAssertTrue(window.styleMask.contains(.resizable))
+        XCTAssertGreaterThanOrEqual(window.minSize.width, 420)
+        XCTAssertGreaterThanOrEqual(window.minSize.height, 320)
+        XCTAssertTrue(scrollView.hasVerticalScroller)
+        XCTAssertGreaterThan(documentView.fittingSize.height, scrollView.contentView.bounds.height)
+        statusView.scrollToVisible(statusView.bounds)
+        XCTAssertFalse(statusView.visibleRect.isEmpty)
+    }
+
     func testUpdateLanguageRefreshesWindowCopy() {
         let (model, suite) = makeModel()
         defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
@@ -217,5 +285,32 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
             ),
             suite
         )
+    }
+
+    private func findTextField(
+        in view: NSView?,
+        where predicate: (NSTextField) -> Bool
+    ) -> NSTextField? {
+        guard let view else { return nil }
+        if let textField = view as? NSTextField, predicate(textField) {
+            return textField
+        }
+        for subview in view.subviews {
+            if let match = findTextField(in: subview, where: predicate) {
+                return match
+            }
+        }
+        return nil
+    }
+
+    private func enclosingScrollView(of view: NSView) -> NSScrollView? {
+        var ancestor = view.superview
+        while let current = ancestor {
+            if let scrollView = current as? NSScrollView {
+                return scrollView
+            }
+            ancestor = current.superview
+        }
+        return nil
     }
 }
