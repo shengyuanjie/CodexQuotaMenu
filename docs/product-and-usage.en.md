@@ -68,6 +68,14 @@ Forecasts refresh independently every five minutes from `codexreset.org/api/moni
 
 These are public community forecasts, not an official reset schedule or guarantee.
 
+## Daily Activation Times
+
+Open **Activation Times…**, add the times you need each day, then choose **Sync to Codex**. The list is empty on first launch. The app copies a complete reconciliation prompt and opens a new Codex conversation; you still need to paste and send it once before Codex can create or correct the official automations.
+
+The app manages only tasks whose name exactly follows `CodexQuotaMenu · HH:mm`; it does not adopt existing tasks without that prefix. If the time list is empty, the generated sync prompt cleans up only managed tasks with that prefix.
+
+Choosing Sync alone never shows **Synced**. After you send the prompt, the window rechecks configuration through a local read-only reconciliation and shows **Synced** only when the saved settings and managed task configuration match exactly. A local reconciliation cannot prove that an individual background run succeeded. You need to sync again only after changing a time; quitting CodexQuotaMenu does not stop or remove official background automations already created. Successful scheduled runs are silent; Codex notifies according to the task notification policy when a run fails.
+
 ## Interface Language
 
 Open the menu and select **Language**:
@@ -155,6 +163,8 @@ The app processes:
 - the selected interface language;
 - public forecast values, status, and timestamps;
 - whether the phone feed is enabled and its access token.
+
+To reconcile daily activation times, the app read-only scans `~/.codex/automations/*/automation.toml` and extracts only the managed task name, status, and configuration fields needed for reconciliation. It does not write those files, read automation run conversations, or upload automation configuration. A local check can confirm matching configuration, but cannot prove that an individual background run succeeded.
 
 Session-log fragments may contain task titles, tool-call metadata, and the current response. They are processed in memory and are not copied, uploaded, or stored in a project database. The app does not read or save Codex account tokens, passwords, or API keys and has no advertising, analytics, or telemetry.
 

@@ -21,6 +21,7 @@ A native macOS menu bar utility that shows remaining Codex usage, reset countdow
 - Provides an optional, default-off, token-protected local feed for an iPhone Scriptable lock-screen widget.
 - Uses a text-only menu-bar display without a leading icon for a cleaner appearance.
 - Supports Follow System, Simplified Chinese, and English interface languages.
+- Can reconcile daily activation times with official Codex automations through a one-confirmation workflow; the app manages only its own prefixed tasks.
 - Reuses your existing local Codex sign-in; no account token needs to be provided to this project.
 - Contains no advertising, analytics, telemetry, or third-party runtime dependencies.
 
@@ -66,8 +67,11 @@ Do not download builds from unofficial mirror sites. Public release archives are
 2. Read the remaining usage, reset countdown, and `▶` active-task count directly from the menu bar.
 3. Click the item for details. Choose **Refresh Now**, or press `R` while the menu is open, to query immediately.
 4. Choose **Language** to switch instantly between Follow System, Simplified Chinese, and English.
-5. For an iPhone lock-screen display, follow the [Scriptable setup guide](mobile/README.md) and enable the **Phone Widget** read-only feed.
-6. Choose **Quit**, or press `Q` while the menu is open, to stop all queries and the phone feed.
+5. For a daily activation time, open **Activation Times…**, add the times you need each day, then choose **Sync to Codex**. The app copies a complete reconciliation prompt and opens a new Codex conversation; paste and send it once. The list is empty on first launch. The status shows **Synced** only after a local read-only reconciliation finds the saved settings and task configuration identical. You need to sync again only after changing a time; quitting CodexQuotaMenu does not affect created official background automations.
+6. For an iPhone lock-screen display, follow the [Scriptable setup guide](mobile/README.md) and enable the **Phone Widget** read-only feed.
+7. Choose **Quit**, or press `Q` while the menu is open, to stop all queries and the phone feed.
+
+Managed task names use `CodexQuotaMenu · HH:mm`. Sync does not adopt existing tasks without that prefix; with an empty time list, its prompt cleans up only prefixed managed tasks. Successful scheduled runs are silent; Codex notifies according to its notification policy only when a run fails.
 
 To start the app at login, open **System Settings → General → Login Items**, click **+**, and select `Codex用量.app` from Applications.
 
@@ -76,6 +80,8 @@ The app queries local usage and tasks every five seconds and refreshes public fo
 ## Privacy
 
 The app queries usage and task metadata through a local Codex process. To identify whether a task is still active or completed, it may parse structured lifecycle events from up to the last 512 KB of relevant local Codex session logs. It no longer analyzes response text to infer user intent.
+
+To reconcile daily activation times, the app read-only scans `~/.codex/automations/*/automation.toml` and extracts only the configuration needed for reconciliation. It does not write those files, read automation run conversations, or upload automation configuration. A local check can confirm matching configuration, but cannot prove that an individual background run succeeded.
 
 All session content is processed in memory. It is not copied, stored in a project database, uploaded, or used for telemetry.
 
