@@ -1,0 +1,35 @@
+import XCTest
+@testable import CodexQuotaMenu
+
+final class SyncPromptBuilderTests: XCTestCase {
+    func testPromptIsSortedScopedAndUsesFixedConfiguration() throws {
+        let entries = [
+            ActivationScheduleEntry(time: try ActivationTime(hour: 11, minute: 2)),
+            ActivationScheduleEntry(time: try ActivationTime(hour: 6, minute: 0)),
+            ActivationScheduleEntry(time: try ActivationTime(hour: 7, minute: 30), isEnabled: false)
+        ]
+
+        let prompt = try SyncPromptBuilder.build(
+            entries: entries,
+            timeZoneIdentifier: "Asia/Shanghai"
+        )
+
+        XCTAssertLessThan(
+            prompt.range(of: "CodexQuotaMenu · 06:00")!.lowerBound,
+            prompt.range(of: "CodexQuotaMenu · 11:02")!.lowerBound
+        )
+        XCTAssertFalse(prompt.contains("CodexQuotaMenu · 07:30"))
+        XCTAssertTrue(prompt.contains("failed_runs_only"))
+        XCTAssertTrue(prompt.contains("不要修改任何其他计划任务"))
+        XCTAssertTrue(prompt.contains("standalone cron"))
+        XCTAssertTrue(prompt.contains(ManagedAutomationPolicy.activationPrompt))
+    }
+
+    func testEmptyPromptDeletesManagedTasksOnly() throws {
+        let prompt = try SyncPromptBuilder.build(entries: [], timeZoneIdentifier: "Asia/Shanghai")
+
+        XCTAssertTrue(prompt.contains("期望时间列表为空"))
+        XCTAssertTrue(prompt.contains("删除全部受管任务"))
+        XCTAssertFalse(prompt.contains("6点激活 Codex 用量窗口"))
+    }
+}
