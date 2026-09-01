@@ -128,4 +128,6 @@ harness coverage is reported above instead.
 
 ## Commit
 
-`f90c9c1 fix: harden activation schedule reconciliation`
+Implementation commit: `627f0d5 fix: harden activation schedule reconciliation`.
+
+This report correction is recorded in the subsequent documentation-only commit.
