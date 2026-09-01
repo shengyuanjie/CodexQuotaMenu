@@ -74,6 +74,24 @@ final class CodexAutomationReaderTests: XCTestCase {
         }
     }
 
+    func testPersonalNameWithManagedPrefixInPromptIsIgnored() throws {
+        let root = try temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = automationFile(root, "personal")
+        try FileManager.default.createDirectory(
+            at: file.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data(
+            """
+            name = "Personal reminder"
+            prompt = "CodexQuotaMenu · 06:00"
+            """.utf8
+        ).write(to: file)
+
+        XCTAssertEqual(CodexAutomationReader(rootURL: root).readManagedAutomations(), .available([]))
+    }
+
     private func temporaryRoot() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("CodexAutomationReaderTests-\(UUID().uuidString)", isDirectory: true)

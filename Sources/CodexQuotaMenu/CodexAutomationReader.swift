@@ -53,8 +53,10 @@ struct CodexAutomationReader {
             guard let source = try? String(contentsOf: file, encoding: .utf8) else {
                 return .unavailable("an automation file is unreadable")
             }
-            guard source.contains(ManagedAutomationPolicy.namePrefix) else { continue }
-            guard let parsed = Self.parse(source), parsed.version == 1 else {
+            let fields = StringFieldMap(source: source)
+            guard let name = fields.string("name"),
+                  name.hasPrefix(ManagedAutomationPolicy.namePrefix) else { continue }
+            guard let parsed = Self.parse(fields), parsed.version == 1 else {
                 return .unavailable("managed automation has an unsupported format")
             }
             tasks.append(parsed)
@@ -63,8 +65,7 @@ struct CodexAutomationReader {
         return .available(tasks.sorted { $0.name < $1.name })
     }
 
-    private static func parse(_ source: String) -> CodexAutomation? {
-        let fields = StringFieldMap(source: source)
+    private static func parse(_ fields: StringFieldMap) -> CodexAutomation? {
         guard let version = fields.integer("version"),
               let id = fields.string("id"),
               let kind = fields.string("kind"),
