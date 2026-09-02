@@ -4,6 +4,7 @@ import Foundation
 final class ActivationScheduleSettingsModel {
     private let store: ActivationScheduleStore
     private let readAutomations: @Sendable () -> AutomationReadResult
+    private let synchronizeAutomations: ([ActivationScheduleEntry], String) throws -> Void
     private let timeZoneIdentifierProvider: @Sendable () -> String
     private var refreshGeneration: UInt64 = 0
     private var latestReadResult: AutomationReadResult?
@@ -18,12 +19,19 @@ final class ActivationScheduleSettingsModel {
         readAutomations: @escaping @Sendable () -> AutomationReadResult = {
             CodexAutomationReader().readManagedAutomations()
         },
+        synchronizeAutomations: @escaping ([ActivationScheduleEntry], String) throws -> Void = {
+            try CodexAutomationSynchronizer().synchronize(
+                entries: $0,
+                timeZoneIdentifier: $1
+            )
+        },
         timeZoneIdentifierProvider: @escaping @Sendable () -> String = {
             TimeZone.current.identifier
         }
     ) {
         self.store = store
         self.readAutomations = readAutomations
+        self.synchronizeAutomations = synchronizeAutomations
         self.timeZoneIdentifierProvider = timeZoneIdentifierProvider
     }
 
@@ -84,12 +92,14 @@ final class ActivationScheduleSettingsModel {
         }
     }
 
-    func makeSyncPrompt() throws -> String {
-        try makeSyncPrompt(timeZoneIdentifier: timeZoneIdentifierProvider())
+    func synchronize() throws {
+        try synchronize(timeZoneIdentifier: timeZoneIdentifierProvider())
     }
 
-    func makeSyncPrompt(timeZoneIdentifier: String) throws -> String {
-        return try SyncPromptBuilder.build(entries: entries, timeZoneIdentifier: timeZoneIdentifier)
+    func synchronize(timeZoneIdentifier: String) throws {
+        try ensureMutationsAreAllowed()
+        try synchronizeAutomations(entries, timeZoneIdentifier)
+        refreshActualState(timeZoneIdentifier: timeZoneIdentifier)
     }
 
     private func persist(_ value: [ActivationScheduleEntry]) throws {

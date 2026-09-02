@@ -129,11 +129,11 @@ struct AppText {
     }
 
     var refreshActivationStatusAction: String {
-        language == .simplifiedChinese ? "刷新状态" : "Refresh Status"
+        language == .simplifiedChinese ? "重试检测" : "Retry Check"
     }
 
     var syncToCodexAction: String {
-        language == .simplifiedChinese ? "同步到 Codex" : "Sync to Codex"
+        language == .simplifiedChinese ? "应用到 Codex" : "Apply to Codex"
     }
 
     var activationUnconfiguredStatus: String {
@@ -164,22 +164,22 @@ struct AppText {
             : "No activation times yet. Syncing can remove all managed tasks."
     }
 
-    var activationPromptCopiedStatus: String {
+    var activationTasksAppliedStatus: String {
         language == .simplifiedChinese
-            ? "同步指令已复制并打开新的 Codex 对话；请粘贴并只发送一次。"
-            : "Sync prompt copied and a new Codex conversation opened. Paste and send it once."
+            ? "已应用到 Codex，状态将自动检测。"
+            : "Applied to Codex. Status will be checked automatically."
     }
 
-    var activationPasteboardFailedStatus: String {
+    var activationDirectSyncFailedStatus: String {
         language == .simplifiedChinese
-            ? "无法复制同步指令，未打开 Codex。"
-            : "Could not copy the sync prompt; Codex was not opened."
+            ? "无法安全应用。Codex 计划任务可能未更改，或已恢复原状。"
+            : "Could not apply safely. Codex automations may be unchanged or already restored."
     }
 
-    var activationCodexOpenFailedStatus: String {
+    func activationRecoveryRequiredError(path: String) -> String {
         language == .simplifiedChinese
-            ? "同步指令已复制，但无法打开 Codex。请手动打开 Codex，粘贴并发送一次。"
-            : "Sync prompt copied, but Codex could not be opened. Open Codex manually, then paste and send it once."
+            ? "无法确认计划任务已恢复。请勿删除恢复副本：\(path)"
+            : "Recovery could not be verified. Do not delete the recovery copy at: \(path)"
     }
 
     var activationCorruptStorageStatus: String {

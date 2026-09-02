@@ -2,9 +2,8 @@ import AppKit
 
 enum ActivationScheduleSyncFeedback: Equatable {
     case none
-    case copiedAndOpened
-    case pasteboardFailed
-    case codexOpenFailed
+    case applied
+    case failed
     case unavailable
 }
 
@@ -22,13 +21,8 @@ private final class ActivationScheduleButton: NSButton {
 
 @MainActor
 final class ActivationScheduleWindowController: NSWindowController, NSWindowDelegate {
-    typealias PasteboardWriter = @MainActor (String) -> Bool
-    typealias URLOpener = @MainActor (URL) -> Bool
-
     private let model: ActivationScheduleSettingsModel
     private let textProvider: () -> AppText
-    private let pasteboardWriter: PasteboardWriter
-    private let urlOpener: URLOpener
     private let nowProvider: @MainActor () -> Date
     private let calendarProvider: @MainActor () -> Calendar
     private let refreshInterval: TimeInterval
@@ -45,7 +39,6 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
     private let refreshButton = NSButton(title: "", target: nil, action: nil)
     private let syncButton = NSButton(title: "", target: nil, action: nil)
 
-    private(set) var lastGeneratedPrompt: String?
     private(set) var syncFeedback = ActivationScheduleSyncFeedback.none
 
     var isRefreshTimerRunning: Bool { refreshTimer?.isValid == true }
@@ -55,16 +48,12 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
     init(
         model: ActivationScheduleSettingsModel,
         textProvider: @escaping () -> AppText,
-        pasteboardWriter: @escaping PasteboardWriter = ActivationScheduleWindowController.writePasteboard,
-        urlOpener: @escaping URLOpener = { NSWorkspace.shared.open($0) },
         refreshInterval: TimeInterval = 10,
         nowProvider: @escaping @MainActor () -> Date = Date.init,
         calendarProvider: @escaping @MainActor () -> Calendar = { .current }
     ) {
         self.model = model
         self.textProvider = textProvider
-        self.pasteboardWriter = pasteboardWriter
-        self.urlOpener = urlOpener
         self.refreshInterval = refreshInterval
         self.nowProvider = nowProvider
         self.calendarProvider = calendarProvider
@@ -120,35 +109,39 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
 
     @discardableResult
     func performSync() -> Bool {
-        performSync { try model.makeSyncPrompt() }
+        performSyncOperation { try model.synchronize() }
     }
 
     @discardableResult
     func performSync(timeZoneIdentifier: String) -> Bool {
-        performSync { try model.makeSyncPrompt(timeZoneIdentifier: timeZoneIdentifier) }
+        performSyncOperation {
+            try model.synchronize(timeZoneIdentifier: timeZoneIdentifier)
+        }
     }
 
-    private func performSync(_ promptBuilder: () throws -> String) -> Bool {
-        guard model.loadError == nil, let prompt = try? promptBuilder() else {
+    private func performSyncOperation(_ operation: () throws -> Void) -> Bool {
+        guard model.loadError == nil else {
             syncFeedback = .unavailable
             render()
             return false
         }
-        lastGeneratedPrompt = prompt
-
-        guard pasteboardWriter(prompt) else {
-            syncFeedback = .pasteboardFailed
+        do {
+            try operation()
+            inlineError = nil
+            syncFeedback = .applied
+            render()
+            return true
+        } catch CodexAutomationSynchronizationError.recoveryRequired(let path) {
+            syncFeedback = .failed
+            inlineError = textProvider().activationRecoveryRequiredError(path: path)
+            render()
+            return false
+        } catch {
+            syncFeedback = .failed
+            inlineError = nil
             render()
             return false
         }
-        guard let url = URL(string: "codex://threads/new"), urlOpener(url) else {
-            syncFeedback = .codexOpenFailed
-            render()
-            return false
-        }
-        syncFeedback = .copiedAndOpened
-        render()
-        return true
     }
 
     private func requestRefresh(clearFeedback: Bool) {
@@ -294,6 +287,11 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
         let canMutate = model.loadError == nil
         addButton.isEnabled = canMutate
         syncButton.isEnabled = canMutate
+        if case .unavailable = model.syncState, model.loadError == nil {
+            refreshButton.isHidden = false
+        } else {
+            refreshButton.isHidden = true
+        }
 
         for view in rowsStack.arrangedSubviews {
             rowsStack.removeArrangedSubview(view)
@@ -319,12 +317,10 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
         switch syncFeedback {
         case .none, .unavailable:
             return ""
-        case .copiedAndOpened:
-            return text.activationPromptCopiedStatus
-        case .pasteboardFailed:
-            return text.activationPasteboardFailedStatus
-        case .codexOpenFailed:
-            return text.activationCodexOpenFailedStatus
+        case .applied:
+            return text.activationTasksAppliedStatus
+        case .failed:
+            return text.activationDirectSyncFailedStatus
         }
     }
 
@@ -466,8 +462,4 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
         refreshTimer = nil
     }
 
-    private static func writePasteboard(_ value: String) -> Bool {
-        NSPasteboard.general.clearContents()
-        return NSPasteboard.general.setString(value, forType: .string)
-    }
 }

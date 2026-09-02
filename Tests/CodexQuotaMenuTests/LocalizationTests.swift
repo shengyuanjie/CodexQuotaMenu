@@ -8,7 +8,8 @@ final class LocalizationTests: XCTestCase {
 
         XCTAssertEqual(chinese.activationScheduleAction, "激活时间设置…")
         XCTAssertEqual(english.activationScheduleAction, "Activation Times…")
-        XCTAssertEqual(chinese.syncToCodexAction, "同步到 Codex")
+        XCTAssertEqual(chinese.syncToCodexAction, "应用到 Codex")
+        XCTAssertEqual(chinese.refreshActivationStatusAction, "重试检测")
         XCTAssertEqual(english.activationSyncedStatus, "Synced")
     }
 
@@ -20,25 +21,29 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(english.activationUnavailableDescription, "Could not read Codex automation status. Try again later.")
     }
 
-    func testActivationScheduleFeedbackExplainsTheOneSendWorkflow() {
+    func testActivationScheduleFeedbackExplainsDirectSynchronization() {
         let chinese = AppText(language: .simplifiedChinese)
         let english = AppText(language: .english)
 
         XCTAssertEqual(
-            chinese.activationPromptCopiedStatus,
-            "同步指令已复制并打开新的 Codex 对话；请粘贴并只发送一次。"
+            chinese.activationTasksAppliedStatus,
+            "已应用到 Codex，状态将自动检测。"
         )
         XCTAssertEqual(
-            english.activationPromptCopiedStatus,
-            "Sync prompt copied and a new Codex conversation opened. Paste and send it once."
+            english.activationTasksAppliedStatus,
+            "Applied to Codex. Status will be checked automatically."
         )
         XCTAssertEqual(
-            chinese.activationCodexOpenFailedStatus,
-            "同步指令已复制，但无法打开 Codex。请手动打开 Codex，粘贴并发送一次。"
+            chinese.activationDirectSyncFailedStatus,
+            "无法安全应用。Codex 计划任务可能未更改，或已恢复原状。"
         )
         XCTAssertEqual(
-            english.activationCodexOpenFailedStatus,
-            "Sync prompt copied, but Codex could not be opened. Open Codex manually, then paste and send it once."
+            english.activationDirectSyncFailedStatus,
+            "Could not apply safely. Codex automations may be unchanged or already restored."
+        )
+        XCTAssertEqual(
+            chinese.activationRecoveryRequiredError(path: "/tmp/recovery"),
+            "无法确认计划任务已恢复。请勿删除恢复副本：/tmp/recovery"
         )
         XCTAssertEqual(
             english.activationScheduleFullError,

@@ -2,7 +2,7 @@
 
 English | [简体中文](product-and-usage.md)
 
-Version: v1.6.2
+Version: v1.6.6
 
 System: macOS 14 or later
 
@@ -70,13 +70,13 @@ These are public community forecasts, not an official reset schedule or guarante
 
 ## Daily Activation Times
 
-Open **Activation Times…**, add the times you need each day, then choose **Sync to Codex**. The list is empty on first launch. The app copies a complete reconciliation prompt and opens a new Codex conversation; you still need to paste and send it once before Codex can create or correct the official automations.
+Open **Activation Times…**, add the times you need each day, then choose **Apply to Codex**. The list is empty on first launch. The app directly creates or updates the matching Codex background automations, with no copying, pasting, or send confirmation.
 
-The app manages only tasks whose complete name exactly matches `CodexQuotaMenu · HH:mm`. A name that merely shares `CodexQuotaMenu · `, such as `CodexQuotaMenu · backup` or `CodexQuotaMenu · 06:00 copy`, is not owned and remains untouched. If the time list is empty, the generated sync prompt deletes only exact-format managed tasks.
+The app manages only tasks whose complete name exactly matches `CodexQuotaMenu · HH:mm`. A name that merely shares `CodexQuotaMenu · `, such as `CodexQuotaMenu · backup` or `CodexQuotaMenu · 06:00 copy`, is not owned and remains untouched. If the time list is empty, **Apply to Codex** deletes only exact-format managed tasks.
 
-Choosing Sync alone never shows **Synced**. After you send the prompt, the window rechecks configuration through a local read-only reconciliation and shows **Synced** only when the saved settings and managed task configuration match exactly. A local reconciliation cannot prove that an individual background run succeeded. You need to sync again only after changing a time; quitting CodexQuotaMenu does not stop or remove official background automations already created. Successful scheduled runs are silent; Codex notifies according to the task notification policy when a run fails.
+The app first stages and validates the complete target configuration, then replaces the managed tasks and attempts to restore the previous set if synchronization fails. The window checks the resulting configuration automatically and shows **Synced** only when the saved settings and managed tasks match exactly. Manual refresh is hidden during normal operation; **Retry Check** appears only when status cannot be read. A local reconciliation cannot prove that an individual background run succeeded. You need to apply again only after changing a time; quitting CodexQuotaMenu does not stop or remove background automations already created. Successful scheduled runs are silent; Codex notifies according to the task notification policy when a run fails.
 
-Automated tests and local read-only status checks do not perform synchronization and do not change Codex automations. Real synchronization can happen only after you paste and send the generated reconciliation prompt in Codex.
+Local status checks are read-only. The app changes exact-format managed automations only when the user chooses **Apply to Codex**.
 
 ## Interface Language
 
@@ -114,16 +114,16 @@ The release archive uses the ASCII name `CodexQuotaMenu` to prevent GitHub from 
 
 Apple Silicon:
 
-Use the following filenames to verify the official v1.6.2 release assets:
+Use the following filenames to verify the official v1.6.6 release assets:
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.6.2-macOS-arm64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.6.6-macOS-arm64.zip.sha256
 ```
 
 Intel:
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.6.2-macOS-x86_64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.6.6-macOS-x86_64.zip.sha256
 ```
 
 An `OK` result confirms that the ZIP matches its checksum file. Download both files from the same official Release.
@@ -166,7 +166,7 @@ The app processes:
 - public forecast values, status, and timestamps;
 - whether the phone feed is enabled and its access token.
 
-To reconcile daily activation times, the app read-only scans `~/.codex/automations/*/automation.toml` and extracts only the managed task name, status, and configuration fields needed for reconciliation. It does not write those files, read automation run conversations, or upload automation configuration. A local check can confirm matching configuration, but cannot prove that an individual background run succeeded.
+To synchronize and reconcile daily activation times, the app reads `~/.codex/automations/*/automation.toml` and creates, updates, or deletes only tasks whose complete names exactly match `CodexQuotaMenu · HH:mm`. It does not read automation run conversations or upload automation configuration. A local check can confirm matching configuration, but cannot prove that an individual background run succeeded.
 
 Session-log fragments may contain task titles, tool-call metadata, and the current response. They are processed in memory and are not copied, uploaded, or stored in a project database. The app does not read or save Codex account tokens, passwords, or API keys and has no advertising, analytics, or telemetry.
 

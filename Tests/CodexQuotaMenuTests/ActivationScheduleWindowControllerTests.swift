@@ -16,68 +16,89 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         XCTAssertEqual(item.keyEquivalentModifierMask, .command)
     }
 
-    func testSyncCopiesPromptAndOpensNewThreadWithoutClaimingSynced() throws {
-        let (model, suite) = makeModel()
-        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+    func testSyncAppliesTasksDirectlyWithoutOpeningAnotherConversation() async throws {
+        let suite = "ActivationScheduleWindowControllerTests.Direct.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Controller.Direct.\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let writer = CodexAutomationSynchronizer(rootURL: root, timestampProvider: { 123 })
+        let model = ActivationScheduleSettingsModel(
+            store: ActivationScheduleStore(defaults: defaults),
+            readAutomations: { CodexAutomationReader(rootURL: root).readManagedAutomations() },
+            synchronizeAutomations: { entries, timeZoneIdentifier in
+                try writer.synchronize(entries: entries, timeZoneIdentifier: timeZoneIdentifier)
+            }
+        )
         model.load()
         try model.add(time: ActivationTime(hour: 6, minute: 0))
-        var copied: String?
-        var opened: URL?
         let controller = ActivationScheduleWindowController(
             model: model,
-            textProvider: { AppText(language: .simplifiedChinese) },
-            pasteboardWriter: { copied = $0; return true },
-            urlOpener: { opened = $0; return true }
+            textProvider: { AppText(language: .simplifiedChinese) }
         )
 
         XCTAssertTrue(controller.performSync(timeZoneIdentifier: "Asia/Shanghai"))
 
-        XCTAssertTrue(copied?.contains("CodexQuotaMenu · 06:00") == true)
-        XCTAssertEqual(opened?.absoluteString, "codex://threads/new")
-        XCTAssertEqual(controller.lastGeneratedPrompt, copied)
-        XCTAssertEqual(controller.syncFeedback, .copiedAndOpened)
-        XCTAssertNotEqual(model.syncState, .synced)
+        XCTAssertEqual(controller.syncFeedback, .applied)
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: root.appendingPathComponent("codexquotamenu-06-00/automation.toml").path
+        ))
+        let synced = await waitUntil { model.syncState == .synced }
+        XCTAssertTrue(synced)
     }
 
-    func testPasteboardFailureKeepsGeneratedPromptAndDoesNotOpenCodex() throws {
+    func testSyncFailureIsReportedWithoutClaimingSuccess() throws {
         let (model, suite) = makeModel()
         defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
         model.load()
         try model.add(time: ActivationTime(hour: 7, minute: 30))
-        var didTryToOpen = false
+        let failingModel = ActivationScheduleSettingsModel(
+            store: ActivationScheduleStore(defaults: UserDefaults(suiteName: suite)!),
+            readAutomations: { .available([]) },
+            synchronizeAutomations: { _, _ in
+                throw CodexAutomationSynchronizationError.verificationFailed
+            }
+        )
+        failingModel.load()
         let controller = ActivationScheduleWindowController(
-            model: model,
-            textProvider: { AppText(language: .english) },
-            pasteboardWriter: { _ in false },
-            urlOpener: { _ in didTryToOpen = true; return true }
+            model: failingModel,
+            textProvider: { AppText(language: .english) }
         )
 
         XCTAssertFalse(controller.performSync(timeZoneIdentifier: "Asia/Shanghai"))
 
-        XCTAssertTrue(controller.lastGeneratedPrompt?.contains("CodexQuotaMenu · 07:30") == true)
-        XCTAssertEqual(controller.syncFeedback, .pasteboardFailed)
-        XCTAssertFalse(didTryToOpen)
-        XCTAssertNotEqual(model.syncState, .synced)
+        XCTAssertEqual(controller.syncFeedback, .failed)
+        XCTAssertNotEqual(failingModel.syncState, .synced)
     }
 
-    func testCodexOpenFailureKeepsCopiedPromptAvailableForRetry() throws {
-        let (model, suite) = makeModel()
-        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+    func testRecoveryRequiredShowsRecoveryDirectoryInsteadOfClaimingPreservation() throws {
+        let suite = "ActivationScheduleWindowControllerTests.Recovery.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let recoveryPath = "/tmp/.codexquotamenu-recovery-fixture"
+        let model = ActivationScheduleSettingsModel(
+            store: ActivationScheduleStore(defaults: defaults),
+            readAutomations: { .available([]) },
+            synchronizeAutomations: { _, _ in
+                throw CodexAutomationSynchronizationError.recoveryRequired(recoveryPath)
+            }
+        )
         model.load()
-        try model.add(time: ActivationTime(hour: 11, minute: 2))
-        var copied: String?
         let controller = ActivationScheduleWindowController(
             model: model,
-            textProvider: { AppText(language: .english) },
-            pasteboardWriter: { copied = $0; return true },
-            urlOpener: { _ in false }
+            textProvider: { AppText(language: .english) }
         )
 
         XCTAssertFalse(controller.performSync(timeZoneIdentifier: "Asia/Shanghai"))
 
-        XCTAssertEqual(controller.lastGeneratedPrompt, copied)
-        XCTAssertEqual(controller.syncFeedback, .codexOpenFailed)
-        XCTAssertNotEqual(model.syncState, .synced)
+        XCTAssertEqual(controller.syncFeedback, .failed)
+        XCTAssertNotNil(findTextField(in: controller.window?.contentView) {
+            $0.stringValue == "Recovery could not be verified. Do not delete the recovery copy at: \(recoveryPath)"
+        })
+        XCTAssertNil(findTextField(in: controller.window?.contentView) {
+            $0.stringValue.contains("existing Codex automations were preserved")
+        })
     }
 
     func testKeyWindowRefreshStartsTenSecondTimerAndCloseStopsIt() async {
@@ -92,8 +113,6 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         let controller = ActivationScheduleWindowController(
             model: model,
             textProvider: { AppText(language: .english) },
-            pasteboardWriter: { _ in true },
-            urlOpener: { _ in true }
         )
 
         controller.windowDidBecomeKey(Notification(name: NSWindow.didBecomeKeyNotification))
@@ -119,8 +138,6 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         let controller = ActivationScheduleWindowController(
             model: model,
             textProvider: { AppText(language: .english) },
-            pasteboardWriter: { _ in true },
-            urlOpener: { _ in true }
         )
 
         controller.refreshActualState()
@@ -141,8 +158,6 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         let controller = ActivationScheduleWindowController(
             model: model,
             textProvider: { AppText(language: .english) },
-            pasteboardWriter: { _ in true },
-            urlOpener: { _ in true }
         )
 
         controller.showWindowAndRefresh()
@@ -167,8 +182,6 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         let controller = ActivationScheduleWindowController(
             model: model,
             textProvider: { AppText(language: .english) },
-            pasteboardWriter: { _ in true },
-            urlOpener: { _ in true },
             refreshInterval: 0.02
         )
         controller.window?.orderFront(nil)
@@ -180,7 +193,7 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         controller.close()
     }
 
-    func testAppliedAsyncScanRerendersStatusOnMainActor() async {
+    func testAppliedAsyncScanRerendersStatusOnMainActor() async throws {
         let suite = "ActivationScheduleWindowControllerTests.AsyncRender.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -191,8 +204,6 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         let controller = ActivationScheduleWindowController(
             model: model,
             textProvider: { AppText(language: .english) },
-            pasteboardWriter: { _ in true },
-            urlOpener: { _ in true }
         )
 
         controller.refreshActualState()
@@ -203,6 +214,9 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
             } != nil
         }
         XCTAssertTrue(statusRerendered)
+        XCTAssertFalse(try XCTUnwrap(
+            findButton(in: controller.window?.contentView, title: "Retry Check")
+        ).isHidden)
     }
 
     func testAddButtonChoosesFirstUnoccupiedMinuteWithMidnightWrap() throws {
@@ -223,8 +237,6 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         let controller = ActivationScheduleWindowController(
             model: model,
             textProvider: { AppText(language: .english) },
-            pasteboardWriter: { _ in true },
-            urlOpener: { _ in true },
             nowProvider: { now },
             calendarProvider: { calendar }
         )
@@ -259,8 +271,6 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         let controller = ActivationScheduleWindowController(
             model: model,
             textProvider: { AppText(language: .english) },
-            pasteboardWriter: { _ in true },
-            urlOpener: { _ in true },
             nowProvider: { now },
             calendarProvider: { calendar }
         )
@@ -290,8 +300,6 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         let validController = ActivationScheduleWindowController(
             model: validModel,
             textProvider: { AppText(language: .english) },
-            pasteboardWriter: { _ in true },
-            urlOpener: { _ in true }
         )
         XCTAssertTrue(validController.isSyncEnabled)
 
@@ -307,8 +315,6 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         let corruptController = ActivationScheduleWindowController(
             model: corruptModel,
             textProvider: { AppText(language: .english) },
-            pasteboardWriter: { _ in true },
-            urlOpener: { _ in true }
         )
         XCTAssertFalse(corruptController.isSyncEnabled)
     }
@@ -331,40 +337,40 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         let controller = ActivationScheduleWindowController(
             model: model,
             textProvider: { AppText(language: .english) },
-            pasteboardWriter: { _ in true },
-            urlOpener: { _ in true }
         )
 
         XCTAssertFalse(try XCTUnwrap(findButton(in: controller.window?.contentView, title: "Add Time")).isEnabled)
-        XCTAssertFalse(try XCTUnwrap(findButton(in: controller.window?.contentView, title: "Sync to Codex")).isEnabled)
+        XCTAssertFalse(try XCTUnwrap(findButton(in: controller.window?.contentView, title: "Apply to Codex")).isEnabled)
         XCTAssertFalse(try XCTUnwrap(findButton(in: controller.window?.contentView, title: "Delete")).isEnabled)
         XCTAssertFalse(try XCTUnwrap(findButton(in: controller.window?.contentView, title: "Enabled")).isEnabled)
         XCTAssertFalse(try XCTUnwrap(findDatePicker(in: controller.window?.contentView)).isEnabled)
-        XCTAssertTrue(try XCTUnwrap(findButton(in: controller.window?.contentView, title: "Refresh Status")).isEnabled)
+        XCTAssertTrue(try XCTUnwrap(findButton(in: controller.window?.contentView, title: "Retry Check")).isHidden)
     }
 
-    func testReopenAndManualRefreshClearFeedbackButKeepRetryPrompt() throws {
-        let (model, suite) = makeModel()
-        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+    func testReopenAndAutomaticRefreshClearAppliedFeedback() throws {
+        let suite = "ActivationScheduleWindowControllerTests.Feedback.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = ActivationScheduleSettingsModel(
+            store: ActivationScheduleStore(defaults: defaults),
+            readAutomations: { .available([]) },
+            synchronizeAutomations: { _, _ in }
+        )
         model.load()
         try model.add(time: ActivationTime(hour: 6, minute: 0))
         let controller = ActivationScheduleWindowController(
             model: model,
             textProvider: { AppText(language: .english) },
-            pasteboardWriter: { _ in true },
-            urlOpener: { _ in true }
         )
 
         XCTAssertTrue(controller.performSync(timeZoneIdentifier: "Asia/Shanghai"))
-        let retryPrompt = try XCTUnwrap(controller.lastGeneratedPrompt)
+        XCTAssertEqual(controller.syncFeedback, .applied)
         controller.refreshActualState()
         XCTAssertEqual(controller.syncFeedback, .none)
-        XCTAssertEqual(controller.lastGeneratedPrompt, retryPrompt)
 
         XCTAssertTrue(controller.performSync(timeZoneIdentifier: "Asia/Shanghai"))
         controller.showWindowAndRefresh()
         XCTAssertEqual(controller.syncFeedback, .none)
-        XCTAssertEqual(controller.lastGeneratedPrompt, retryPrompt)
         controller.close()
     }
 
@@ -445,8 +451,6 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         let controller = ActivationScheduleWindowController(
             model: model,
             textProvider: { AppText(language: .english) },
-            pasteboardWriter: { _ in true },
-            urlOpener: { _ in true }
         )
         let window = try XCTUnwrap(controller.window)
         window.contentView?.layoutSubtreeIfNeeded()
@@ -474,8 +478,6 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         let controller = ActivationScheduleWindowController(
             model: model,
             textProvider: { AppText(language: language) },
-            pasteboardWriter: { _ in true },
-            urlOpener: { _ in true }
         )
         XCTAssertEqual(controller.window?.title, "激活时间设置")
 

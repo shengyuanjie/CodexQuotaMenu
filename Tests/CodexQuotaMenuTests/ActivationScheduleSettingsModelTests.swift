@@ -3,6 +3,35 @@ import XCTest
 
 @MainActor
 final class ActivationScheduleSettingsModelTests: XCTestCase {
+    func testSynchronizeWritesCurrentEntriesAndRefreshesState() async throws {
+        let suite = "SettingsModel.Sync.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SettingsModel.Sync.\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = ActivationScheduleStore(defaults: defaults)
+        let writer = CodexAutomationSynchronizer(rootURL: root, timestampProvider: { 123 })
+        let model = ActivationScheduleSettingsModel(
+            store: store,
+            readAutomations: { CodexAutomationReader(rootURL: root).readManagedAutomations() },
+            synchronizeAutomations: { entries, timeZoneIdentifier in
+                try writer.synchronize(entries: entries, timeZoneIdentifier: timeZoneIdentifier)
+            },
+            timeZoneIdentifierProvider: { "Asia/Shanghai" }
+        )
+        model.load()
+        try model.add(time: ActivationTime(hour: 6, minute: 30))
+
+        try model.synchronize()
+
+        let applied = await waitUntil { model.syncState == .synced }
+        XCTAssertTrue(applied)
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: root.appendingPathComponent("codexquotamenu-06-30/automation.toml").path
+        ))
+    }
+
     func testLoadReturnsPromptlyWhileAutomationReaderIsBlocked() {
         let suite = "SettingsModel.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -57,7 +86,7 @@ final class ActivationScheduleSettingsModelTests: XCTestCase {
         XCTAssertEqual(model.syncState, .unconfigured)
     }
 
-    func testProviderChangeAffectsPromptAndMutationWithoutAnotherDiskRead() async throws {
+    func testProviderChangeAffectsSynchronizationAndMutationReconciliation() async throws {
         let suite = "SettingsModel.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -66,6 +95,7 @@ final class ActivationScheduleSettingsModelTests: XCTestCase {
         let store = ActivationScheduleStore(defaults: defaults)
         try store.save([ActivationScheduleEntry(time: six)])
         let timeZoneIdentifier = LockedValue("America/Los_Angeles")
+        let synchronizedTimeZone = LockedValue("")
         let readCount = LockedValue(0)
         let existingAutomation = fixture(
             six,
@@ -77,6 +107,9 @@ final class ActivationScheduleSettingsModelTests: XCTestCase {
                 readCount.withValue { $0 += 1 }
                 return .available([existingAutomation])
             },
+            synchronizeAutomations: { _, timeZoneIdentifier in
+                synchronizedTimeZone.value = timeZoneIdentifier
+            },
             timeZoneIdentifierProvider: { timeZoneIdentifier.value }
         )
 
@@ -86,11 +119,13 @@ final class ActivationScheduleSettingsModelTests: XCTestCase {
         XCTAssertEqual(readCount.value, 1)
 
         timeZoneIdentifier.value = "Asia/Shanghai"
-        let prompt = try model.makeSyncPrompt()
-        XCTAssertTrue(prompt.contains("时区为 Asia/Shanghai"))
+        try model.synchronize()
+        XCTAssertEqual(synchronizedTimeZone.value, "Asia/Shanghai")
+        let refreshed = await waitUntil { readCount.value == 2 }
+        XCTAssertTrue(refreshed)
 
         try model.add(time: eleven)
-        XCTAssertEqual(readCount.value, 1)
+        XCTAssertEqual(readCount.value, 2)
         guard case .pending(let difference) = model.syncState else {
             return XCTFail("expected cached snapshot to be reconciled in the current time zone")
         }
@@ -201,28 +236,6 @@ final class ActivationScheduleSettingsModelTests: XCTestCase {
         XCTAssertNotNil(model.loadError)
     }
 
-    func testPromptUsesOnlyCurrentExpectedEntries() throws {
-        let suite = "SettingsModel.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let model = ActivationScheduleSettingsModel(
-            store: ActivationScheduleStore(defaults: defaults),
-            readAutomations: { .available([]) }
-        )
-        model.load()
-        try model.add(time: try ActivationTime(hour: 11, minute: 2))
-        let disabled = try ActivationTime(hour: 6, minute: 0)
-        try model.add(time: disabled)
-        let entry = try XCTUnwrap(model.entries.first(where: { $0.time == disabled }))
-        try model.update(id: entry.id, time: disabled, isEnabled: false)
-
-        let prompt = try model.makeSyncPrompt(timeZoneIdentifier: "Asia/Shanghai")
-
-        XCTAssertTrue(prompt.contains("CodexQuotaMenu · 11:02"))
-        XCTAssertFalse(prompt.contains("- CodexQuotaMenu · 06:00：每天 06:00"))
-        XCTAssertTrue(prompt.contains("Asia/Shanghai"))
-    }
-
     func testExplicitRefreshUsesItsZoneAndMutationUsesLatestSnapshot() async throws {
         let suite = "SettingsModel.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -261,8 +274,6 @@ final class ActivationScheduleSettingsModelTests: XCTestCase {
         XCTAssertEqual(difference.missing, [try ActivationTime(hour: 11, minute: 2)])
         XCTAssertEqual(difference.misconfigured, [])
 
-        let prompt = try model.makeSyncPrompt()
-        XCTAssertTrue(prompt.contains("时区为 America/Los_Angeles"))
     }
 
     private func fixture(_ time: ActivationTime, timeZoneIdentifier: String) -> CodexAutomation {

@@ -2,7 +2,7 @@
 
 English | [简体中文](PRIVACY.md)
 
-Last updated: September 1, 2026
+Last updated: September 2, 2026
 
 Codex Usage Menu Bar is designed around local processing. The project operates no public service and includes no advertising, telemetry, or user analytics. A user may explicitly enable a Mac-local LAN service for the phone widget; it is off by default.
 
@@ -15,7 +15,7 @@ The app starts `codex app-server --stdio` through a Codex executable already ins
 - local session-log paths returned by Codex;
 - up to the last 512 KB of each relevant session log, used only to identify structured lifecycle events such as task starts, user messages, and task completions, plus whether the log has been active recently.
 
-To reconcile daily activation times, the app read-only scans `~/.codex/automations/*/automation.toml` and extracts only the managed task name, status, and configuration fields needed for reconciliation. A task is managed only when its complete name exactly matches `CodexQuotaMenu · HH:mm`; names that merely share `CodexQuotaMenu · ` are left untouched.
+To synchronize and reconcile daily activation times, the app reads only the managed task name, status, and required configuration fields from `~/.codex/automations/*/automation.toml`. When the user chooses **Apply to Codex**, the app creates, updates, or deletes only tasks whose complete names exactly match `CodexQuotaMenu · HH:mm`; names that merely share `CodexQuotaMenu · ` are left untouched.
 
 Session-log fragments may include task titles, tool-call metadata, and text from the current response.
 The app does not analyze response text or tool-call contents to infer whether the user needs to approve, choose, enter information, upload, or reply.
@@ -31,7 +31,7 @@ Requests contain only normal HTTP metadata, a JSON Accept header, and an app-ver
 - Local Codex session content and task details are processed only in device memory. Public forecast cache and user settings are stored locally as described below.
 - The app does not create its own user database.
 - The app does not write, copy, or upload Codex session content.
-- The app does not write `~/.codex/automations/*/automation.toml`, read automation run conversations, or upload automation configuration.
+- The app writes `automation.toml` only for exact-format managed tasks when the user chooses **Apply to Codex**. It does not read automation run conversations or upload automation configuration.
 - The app does not read or save Codex account tokens, passwords, or API keys.
 - The app implements no telemetry, crash reporting, or user-data upload. Network behavior is limited to the documented `codexreset.org` public forecast GET, the user-enabled local read-only feed, and Codex's own normal connections.
 - In-memory query results are released when the app exits.
@@ -56,6 +56,7 @@ App Sandbox is not enabled because the core features require the app to:
 
 - start a local Codex subprocess;
 - read local session logs at paths returned by Codex.
+- read and write the Codex background automations explicitly configured by the user.
 
 The app does not request camera, microphone, contacts, calendar, location, photo-library, or Accessibility access. macOS may show a Local Network prompt only after the user enables the phone feed.
 

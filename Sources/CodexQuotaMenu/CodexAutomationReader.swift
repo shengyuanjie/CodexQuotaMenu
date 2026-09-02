@@ -66,6 +66,9 @@ struct CodexAutomationReader {
             guard let parsed = Self.parse(fields), parsed.version == 1 else {
                 return .unavailable("managed automation has an unsupported format")
             }
+            guard parsed.id == child.lastPathComponent else {
+                return .unavailable("managed automation id does not match its directory")
+            }
             tasks.append(parsed)
         }
 
