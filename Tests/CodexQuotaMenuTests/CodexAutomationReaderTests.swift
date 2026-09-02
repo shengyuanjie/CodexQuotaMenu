@@ -491,9 +491,9 @@ final class CodexAutomationReaderTests: XCTestCase {
         status = \"ACTIVE\"
         rrule = \"FREQ=DAILY;BYHOUR=6;BYMINUTE=0\"
         model = \"gpt-5.6-luna\"
-        reasoningEffort = \"low\"
-        notificationPolicy = \"failed_runs_only\"
-        executionEnvironment = \"local\"
+        reasoning_effort = \"low\"
+        notification_policy = \"failed_runs_only\"
+        execution_environment = \"local\"
         target = { type = \"projectless\" }
         unknown = \"ignored\"
         """

@@ -91,9 +91,9 @@ struct CodexAutomationReader {
             status: status,
             rrule: rrule,
             model: fields.string("model"),
-            reasoningEffort: fields.string("reasoningEffort"),
-            notificationPolicy: fields.string("notificationPolicy"),
-            executionEnvironment: fields.string("executionEnvironment"),
+            reasoningEffort: fields.string("reasoning_effort"),
+            notificationPolicy: fields.string("notification_policy"),
+            executionEnvironment: fields.string("execution_environment"),
             targetType: fields.inlineTableString("target", key: "type")
         )
     }
@@ -109,9 +109,9 @@ private struct StringFieldMap {
         "status",
         "rrule",
         "model",
-        "reasoningEffort",
-        "notificationPolicy",
-        "executionEnvironment",
+        "reasoning_effort",
+        "notification_policy",
+        "execution_environment",
         "target"
     ]
 
