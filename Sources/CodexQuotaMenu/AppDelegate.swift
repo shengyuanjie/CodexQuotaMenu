@@ -27,6 +27,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let widgetPreferences = WidgetPreferences()
     private var widgetServer: WidgetServer?
     private var widgetServerState = WidgetServerState.stopped
+    @MainActor private lazy var activationScheduleModel = ActivationScheduleSettingsModel()
+    @MainActor private var activationScheduleWindowController: ActivationScheduleWindowController?
 
     private var text: AppText {
         AppText(language: languageSelection.resolved())
@@ -51,6 +53,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.refreshForecast(manual: false)
         }
         RunLoop.main.add(forecastTimer!, forMode: .common)
+
+        MainActor.assumeIsolated {
+            activationScheduleModel.load()
+        }
     }
 
     private func refreshLocal() {
@@ -192,6 +198,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         appendWidgetMenu(to: menu)
 
+        menu.addItem(Self.activationScheduleMenuItem(
+            text: text,
+            target: self,
+            action: #selector(openActivationScheduleSettings)
+        ))
+
         let languageItem = NSMenuItem(title: text.languageAction, action: nil, keyEquivalent: "")
         let languageMenu = NSMenu()
         for selection in AppLanguage.allCases {
@@ -285,10 +297,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.title = title
     }
 
+    static func activationScheduleMenuItem(
+        text: AppText,
+        target: AnyObject?,
+        action: Selector?
+    ) -> NSMenuItem {
+        let item = NSMenuItem(title: text.activationScheduleAction, action: action, keyEquivalent: ",")
+        item.keyEquivalentModifierMask = .command
+        item.target = target
+        return item
+    }
+
     @objc private func refreshClicked() {
         refreshLocal()
         refreshForecast(manual: true)
     }
+
+    @MainActor
+    @objc private func openActivationScheduleSettings() {
+        if activationScheduleWindowController == nil {
+            activationScheduleWindowController = ActivationScheduleWindowController(
+                model: activationScheduleModel,
+                textProvider: { [weak self] in self?.text ?? AppText.current }
+            )
+        }
+        activationScheduleWindowController?.showWindowAndRefresh()
+    }
+
     @objc private func quit() { NSApplication.shared.terminate(nil) }
 
     @objc private func toggleWidgetServer() {
@@ -325,15 +360,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         renderCurrentState()
     }
 
+    @MainActor
     @objc private func selectLanguage(_ sender: NSMenuItem) {
         guard let rawValue = sender.representedObject as? String,
               let selection = AppLanguage(rawValue: rawValue) else { return }
         languageSelection = selection
         languageSelection.save()
+        activationScheduleWindowController?.updateLanguage()
         renderCurrentState()
     }
 
+    @MainActor
     func applicationWillTerminate(_ notification: Notification) {
+        activationScheduleWindowController?.close()
         widgetServer?.stop()
     }
 

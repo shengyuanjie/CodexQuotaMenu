@@ -104,6 +104,128 @@ struct AppText {
         language == .simplifiedChinese ? "语言" : "Language"
     }
 
+    var activationScheduleAction: String {
+        language == .simplifiedChinese ? "激活时间设置…" : "Activation Times…"
+    }
+
+    var activationScheduleWindowTitle: String {
+        language == .simplifiedChinese ? "激活时间设置" : "Activation Times"
+    }
+
+    var activationScheduleHeading: String {
+        language == .simplifiedChinese ? "每日自动激活时间" : "Daily Activation Times"
+    }
+
+    var addActivationTimeAction: String {
+        language == .simplifiedChinese ? "添加时间" : "Add Time"
+    }
+
+    var deleteActivationTimeAction: String {
+        language == .simplifiedChinese ? "删除" : "Delete"
+    }
+
+    var activationEnabledLabel: String {
+        language == .simplifiedChinese ? "启用" : "Enabled"
+    }
+
+    var refreshActivationStatusAction: String {
+        language == .simplifiedChinese ? "重试检测" : "Retry Check"
+    }
+
+    var syncToCodexAction: String {
+        language == .simplifiedChinese ? "应用到 Codex" : "Apply to Codex"
+    }
+
+    var activationUnconfiguredStatus: String {
+        language == .simplifiedChinese ? "未配置" : "Not Configured"
+    }
+
+    var activationSyncedStatus: String {
+        language == .simplifiedChinese ? "已同步" : "Synced"
+    }
+
+    var activationPendingStatus: String {
+        language == .simplifiedChinese ? "待同步" : "Pending"
+    }
+
+    var activationUnavailableStatus: String {
+        language == .simplifiedChinese ? "状态不可用" : "Unavailable"
+    }
+
+    var activationUnavailableDescription: String {
+        language == .simplifiedChinese
+            ? "无法读取 Codex 计划任务状态。请稍后重试。"
+            : "Could not read Codex automation status. Try again later."
+    }
+
+    var activationEmptyListDescription: String {
+        language == .simplifiedChinese
+            ? "尚未设置激活时间。同步可清理全部受管任务。"
+            : "No activation times yet. Syncing can remove all managed tasks."
+    }
+
+    var activationTasksAppliedStatus: String {
+        language == .simplifiedChinese
+            ? "已应用到 Codex，状态将自动检测。"
+            : "Applied to Codex. Status will be checked automatically."
+    }
+
+    var activationDirectSyncFailedStatus: String {
+        language == .simplifiedChinese
+            ? "无法安全应用。Codex 计划任务可能未更改，或已恢复原状。"
+            : "Could not apply safely. Codex automations may be unchanged or already restored."
+    }
+
+    func activationRecoveryRequiredError(path: String) -> String {
+        language == .simplifiedChinese
+            ? "无法确认计划任务已恢复。请勿删除恢复副本：\(path)"
+            : "Recovery could not be verified. Do not delete the recovery copy at: \(path)"
+    }
+
+    var activationCorruptStorageStatus: String {
+        language == .simplifiedChinese
+            ? "设置存储已损坏；编辑和同步已禁用。"
+            : "The stored settings are corrupt; editing and sync are disabled."
+    }
+
+    var duplicateActivationTimeError: String {
+        language == .simplifiedChinese ? "激活时间不能重复。" : "Activation times cannot be duplicated."
+    }
+
+    var activationSaveFailedError: String {
+        language == .simplifiedChinese ? "无法保存激活时间。" : "Could not save the activation time."
+    }
+
+    var activationScheduleFullError: String {
+        language == .simplifiedChinese
+            ? "一天的 1,440 个分钟时间均已占用。"
+            : "All 1,440 daily minutes are already in use."
+    }
+
+    var activationMissingDifferenceLabel: String {
+        language == .simplifiedChinese ? "缺少" : "Missing"
+    }
+
+    var activationExtraDifferenceLabel: String {
+        language == .simplifiedChinese ? "多余" : "Extra"
+    }
+
+    var activationDuplicateDifferenceLabel: String {
+        language == .simplifiedChinese ? "重复" : "Duplicate"
+    }
+
+    var activationPausedDifferenceLabel: String {
+        language == .simplifiedChinese ? "已暂停" : "Paused"
+    }
+
+    var activationMisconfiguredDifferenceLabel: String {
+        language == .simplifiedChinese ? "配置不一致" : "Misconfigured"
+    }
+
+    var activationUnmatchedNamesDifferenceLabel: String {
+        language == .simplifiedChinese ? "无法识别的受管名称" : "Unrecognized managed names"
+    }
+
     var languageSystem: String {
         language == .simplifiedChinese ? "跟随系统" : "Follow System"
     }

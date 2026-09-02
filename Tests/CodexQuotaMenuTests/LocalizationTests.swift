@@ -2,6 +2,55 @@ import XCTest
 @testable import CodexQuotaMenu
 
 final class LocalizationTests: XCTestCase {
+    func testActivationScheduleStringsAreLocalized() {
+        let chinese = AppText(language: .simplifiedChinese)
+        let english = AppText(language: .english)
+
+        XCTAssertEqual(chinese.activationScheduleAction, "激活时间设置…")
+        XCTAssertEqual(english.activationScheduleAction, "Activation Times…")
+        XCTAssertEqual(chinese.syncToCodexAction, "应用到 Codex")
+        XCTAssertEqual(chinese.refreshActivationStatusAction, "重试检测")
+        XCTAssertEqual(english.activationSyncedStatus, "Synced")
+    }
+
+    func testActivationScheduleUnavailableDetailsAreFullyLocalized() {
+        let chinese = AppText(language: .simplifiedChinese)
+        let english = AppText(language: .english)
+
+        XCTAssertEqual(chinese.activationUnavailableDescription, "无法读取 Codex 计划任务状态。请稍后重试。")
+        XCTAssertEqual(english.activationUnavailableDescription, "Could not read Codex automation status. Try again later.")
+    }
+
+    func testActivationScheduleFeedbackExplainsDirectSynchronization() {
+        let chinese = AppText(language: .simplifiedChinese)
+        let english = AppText(language: .english)
+
+        XCTAssertEqual(
+            chinese.activationTasksAppliedStatus,
+            "已应用到 Codex，状态将自动检测。"
+        )
+        XCTAssertEqual(
+            english.activationTasksAppliedStatus,
+            "Applied to Codex. Status will be checked automatically."
+        )
+        XCTAssertEqual(
+            chinese.activationDirectSyncFailedStatus,
+            "无法安全应用。Codex 计划任务可能未更改，或已恢复原状。"
+        )
+        XCTAssertEqual(
+            english.activationDirectSyncFailedStatus,
+            "Could not apply safely. Codex automations may be unchanged or already restored."
+        )
+        XCTAssertEqual(
+            chinese.activationRecoveryRequiredError(path: "/tmp/recovery"),
+            "无法确认计划任务已恢复。请勿删除恢复副本：/tmp/recovery"
+        )
+        XCTAssertEqual(
+            english.activationScheduleFullError,
+            "All 1,440 daily minutes are already in use."
+        )
+    }
+
     func testSystemLanguageResolvesChineseAndEnglish() {
         XCTAssertEqual(
             AppLanguage.system.resolved(preferredLanguages: ["zh-Hans-CN"]),

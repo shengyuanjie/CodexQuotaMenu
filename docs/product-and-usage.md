@@ -2,7 +2,7 @@
 
 [English](product-and-usage.en.md) | 简体中文
 
-适用版本：v1.6.2
+适用版本：v1.6.6
 
 适用系统：macOS 14 或更高版本
 
@@ -27,6 +27,7 @@ Codex 用量是一款原生 macOS 菜单栏工具，用于快速查看 Codex 剩
 - 支持跟随系统、简体中文和 English，并可即时切换；
 - 查询失败时保留菜单栏中的上次成功结果；
 - 支持手动立即刷新和登录 macOS 时自动启动；
+- 支持将每日激活时间一键应用为 Codex 后台计划任务；
 - 可选提供受 Keychain 令牌保护的手机只读接口；
 - 不包含广告、遥测、用户分析或第三方运行时依赖。
 
@@ -165,16 +166,16 @@ uname -m
 
 Apple Silicon：
 
-以下文件名用于校验 v1.6.2 的正式发布资产：
+以下文件名用于校验 v1.6.6 的正式发布资产：
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.6.2-macOS-arm64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.6.6-macOS-arm64.zip.sha256
 ```
 
 Intel：
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.6.2-macOS-x86_64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.6.6-macOS-x86_64.zip.sha256
 ```
 
 显示 `OK` 表示 ZIP 与发布时生成的校验值一致。校验只能证明文件与对应校验清单匹配，因此 ZIP 和 `.sha256` 都应从本项目的同一个 GitHub Release 下载。
@@ -214,6 +215,16 @@ shasum -a 256 -c CodexQuotaMenu-v1.6.2-macOS-x86_64.zip.sha256
 
 切换立即生效，不需要退出或重新启动。任务标题由 Codex 原样提供，不会被自动翻译。
 
+### 每日激活时间
+
+选择“激活时间设置…”，添加每天需要的时间，然后点击“应用到 Codex”。首次打开时，时间列表为空。应用会直接创建或更新对应的 Codex 后台计划任务，无需复制、粘贴或发送确认。
+
+应用只管理完整名称严格匹配 `CodexQuotaMenu · HH:mm` 的任务。仅共享 `CodexQuotaMenu · ` 前缀的名称（如 `CodexQuotaMenu · backup` 或 `CodexQuotaMenu · 06:00 copy`）不属于本工具并保持不变。若时间列表为空，“应用到 Codex”也只删除严格匹配格式的受管任务。
+
+应用会先在临时目录生成并验证完整目标配置，再替换受管任务；失败时尝试恢复原任务。写入后窗口自动重新检查配置，只有本地设置和受管任务配置完全一致时才显示“已同步”。正常状态下不需要手动刷新，只有读取失败时才显示“重试检测”。本地对账不能证明某次后台运行成功。只有修改时间后才需再次应用；退出 CodexQuotaMenu 不会停止或删除已创建的后台任务。成功运行保持静默，失败时由 Codex 按任务通知策略提示。
+
+本机状态检测本身只读；只有用户点击“应用到 Codex”时，应用才会更改严格受管的计划任务。
+
 ### iPhone Scriptable 锁屏小组件
 
 1. 选择“手机小组件 → 启用只读接口”；
@@ -248,6 +259,8 @@ shasum -a 256 -c CodexQuotaMenu-v1.6.2-macOS-x86_64.zip.sha256
 - 公开预测接口返回的未来48小时概率、状态和时间；
 - 用户是否启用手机接口，以及手机接口访问令牌。
 
+为同步和对账每日激活时间，应用会读取 `~/.codex/automations/*/automation.toml`，并只创建、更新或删除完整名称严格匹配 `CodexQuotaMenu · HH:mm` 的受管任务。应用不读取计划任务运行对话，也不上传计划任务配置。本地检测只能确认配置一致，不能证明某次后台运行成功。
+
 日志片段只用于识别任务开始、用户消息、任务完成等结构化生命周期事件，以及近期是否仍有任务活动。应用不再分析回复文字或工具调用内容来判断用户意图。
 
 个人 Codex 会话内容和任务明细：
@@ -259,7 +272,7 @@ shasum -a 256 -c CodexQuotaMenu-v1.6.2-macOS-x86_64.zip.sha256
 - 不用于广告、遥测、崩溃上传或用户分析；
 - 不向预测站点发送个人余量、任务、身份、会话或 Codex 凭据。
 
-macOS `UserDefaults` 保存界面语言、手机接口开关和不含个人数据的公开预测缓存；缓存超过两小时不再显示。32 字节随机手机令牌只保存在 macOS Keychain。手机接口响应不含任务标题、路径或对话内容。Scriptable 把地址和令牌存入自己的 Keychain，本地文件只缓存非敏感 JSON 和接收时间。
+macOS `UserDefaults` 保存界面语言、手机接口开关、不含个人数据的公开预测缓存，以及每条激活时间的小时、分钟、启用状态和稳定本地 ID；缓存超过两小时不再显示。32 字节随机手机令牌只保存在 macOS Keychain。手机接口响应不含任务标题、路径或对话内容。Scriptable 把地址和令牌存入自己的 Keychain，本地文件只缓存非敏感 JSON 和接收时间。
 
 应用只额外请求已披露的 `codexreset.org` 公开预测 GET，不上传个人数据。它启动的 Codex 子进程可能按照 Codex 产品本身的正常方式连接 OpenAI 服务。
 

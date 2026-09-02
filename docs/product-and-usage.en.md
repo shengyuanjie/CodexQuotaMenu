@@ -2,7 +2,7 @@
 
 English | [简体中文](product-and-usage.md)
 
-Version: v1.6.2
+Version: v1.6.6
 
 System: macOS 14 or later
 
@@ -68,6 +68,16 @@ Forecasts refresh independently every five minutes from `codexreset.org/api/moni
 
 These are public community forecasts, not an official reset schedule or guarantee.
 
+## Daily Activation Times
+
+Open **Activation Times…**, add the times you need each day, then choose **Apply to Codex**. The list is empty on first launch. The app directly creates or updates the matching Codex background automations, with no copying, pasting, or send confirmation.
+
+The app manages only tasks whose complete name exactly matches `CodexQuotaMenu · HH:mm`. A name that merely shares `CodexQuotaMenu · `, such as `CodexQuotaMenu · backup` or `CodexQuotaMenu · 06:00 copy`, is not owned and remains untouched. If the time list is empty, **Apply to Codex** deletes only exact-format managed tasks.
+
+The app first stages and validates the complete target configuration, then replaces the managed tasks and attempts to restore the previous set if synchronization fails. The window checks the resulting configuration automatically and shows **Synced** only when the saved settings and managed tasks match exactly. Manual refresh is hidden during normal operation; **Retry Check** appears only when status cannot be read. A local reconciliation cannot prove that an individual background run succeeded. You need to apply again only after changing a time; quitting CodexQuotaMenu does not stop or remove background automations already created. Successful scheduled runs are silent; Codex notifies according to the task notification policy when a run fails.
+
+Local status checks are read-only. The app changes exact-format managed automations only when the user chooses **Apply to Codex**.
+
 ## Interface Language
 
 Open the menu and select **Language**:
@@ -104,16 +114,16 @@ The release archive uses the ASCII name `CodexQuotaMenu` to prevent GitHub from 
 
 Apple Silicon:
 
-Use the following filenames to verify the official v1.6.2 release assets:
+Use the following filenames to verify the official v1.6.6 release assets:
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.6.2-macOS-arm64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.6.6-macOS-arm64.zip.sha256
 ```
 
 Intel:
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.6.2-macOS-x86_64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.6.6-macOS-x86_64.zip.sha256
 ```
 
 An `OK` result confirms that the ZIP matches its checksum file. Download both files from the same official Release.
@@ -156,9 +166,11 @@ The app processes:
 - public forecast values, status, and timestamps;
 - whether the phone feed is enabled and its access token.
 
+To synchronize and reconcile daily activation times, the app reads `~/.codex/automations/*/automation.toml` and creates, updates, or deletes only tasks whose complete names exactly match `CodexQuotaMenu · HH:mm`. It does not read automation run conversations or upload automation configuration. A local check can confirm matching configuration, but cannot prove that an individual background run succeeded.
+
 Session-log fragments may contain task titles, tool-call metadata, and the current response. They are processed in memory and are not copied, uploaded, or stored in a project database. The app does not read or save Codex account tokens, passwords, or API keys and has no advertising, analytics, or telemetry.
 
-The app sends GET requests only to the documented `codexreset.org` public forecast endpoint and sends it no personal quota, task, identity, session, or Codex credential data. `UserDefaults` stores language, the phone-feed toggle, and the non-personal forecast cache; macOS Keychain stores the 32-byte phone token. Phone JSON excludes task titles, paths, and conversations. Scriptable stores its address and token in Scriptable Keychain and writes only non-sensitive JSON to its file cache.
+The app sends GET requests only to the documented `codexreset.org` public forecast endpoint and sends it no personal quota, task, identity, session, or Codex credential data. `UserDefaults` stores language, the phone-feed toggle, the non-personal forecast cache, and each activation entry's hour, minute, enabled state, and stable local ID; macOS Keychain stores the 32-byte phone token. Phone JSON excludes task titles, paths, and conversations. Scriptable stores its address and token in Scriptable Keychain and writes only non-sensitive JSON to its file cache.
 
 App Sandbox is not enabled because the app must launch a local Codex subprocess and read Codex session logs. The app does not request camera, microphone, contacts, calendar, location, photo-library, or Accessibility permissions.
 
@@ -200,7 +212,7 @@ To uninstall:
 2. Remove it from Login Items.
 3. Move `Codex用量.app` from Applications to Trash.
 
-The app creates no user database or separate cache directory, but keeps public forecast cache and preferences in `UserDefaults` and the phone token in Keychain. To remove the preferences and forecast cache:
+The app creates no user database or separate cache directory, but keeps public forecast cache and preferences, including activation entries, in `UserDefaults` and the phone token in Keychain. To remove the preferences and forecast cache:
 
 ```sh
 defaults delete com.local.codexquotamenu
