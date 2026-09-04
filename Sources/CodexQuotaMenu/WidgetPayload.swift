@@ -91,7 +91,7 @@ enum WidgetPayloadBuilder {
                 calibrationState: forecast.calibrationState,
                 updatedAt: forecast.updatedAt,
                 isCached: forecast.isCached,
-                source: "codexreset.org"
+                source: "willcodexreset.com"
             )
         }
         return WidgetPayload(

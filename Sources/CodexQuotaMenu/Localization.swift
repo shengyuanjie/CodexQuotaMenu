@@ -327,7 +327,7 @@ struct AppText {
     }
 
     var forecastSourceDescription: String {
-        language == .simplifiedChinese ? "来源：Codex Reset Monitor" : "Source: Codex Reset Monitor"
+        language == .simplifiedChinese ? "来源：willcodexreset.com" : "Source: willcodexreset.com"
     }
 
     func forecastUpdatedDescription(_ time: String?, isCached: Bool) -> String {
