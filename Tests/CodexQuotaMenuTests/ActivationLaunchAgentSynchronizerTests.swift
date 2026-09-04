@@ -162,6 +162,40 @@ final class ActivationLaunchAgentSynchronizerTests: XCTestCase {
         XCTAssertEqual(try fixture.recoveryDirectories(), [])
     }
 
+    func testConcurrentReplacementAtExistingRemovalBoundaryIsRestoredWithoutOverwrite() throws {
+        let fixture = try Fixture(codexURL: codexURL, homeURL: homeURL)
+        defer { fixture.remove() }
+        let six = try ActivationTime(hour: 6, minute: 0)
+        let eleven = try ActivationTime(hour: 11, minute: 0)
+        let sixFile = fixture.policy.fileURL(for: six, in: fixture.launchAgentsURL)
+        let originalData = try fixture.policy.agent(for: six).xmlData()
+        let concurrentData = Data("concurrent existing replacement".utf8)
+        try originalData.write(to: sixFile)
+        let synchronizer = fixture.synchronizer(
+            hooks: .init(beforeIsolatingExistingAgent: { url in
+                XCTAssertEqual(url, sixFile)
+                try concurrentData.write(to: url, options: .atomic)
+            })
+        )
+        var recoveryPath: String?
+
+        XCTAssertThrowsError(try synchronizer.synchronize(entries: [.init(time: eleven)])) { error in
+            guard case ActivationLaunchAgentSynchronizationError.recoveryRequired(let path) = error else {
+                return XCTFail("expected recoveryRequired, got \(error)")
+            }
+            recoveryPath = path
+        }
+
+        XCTAssertEqual(try Data(contentsOf: sixFile), concurrentData)
+        let recovery = URL(fileURLWithPath: try XCTUnwrap(recoveryPath))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: recovery.path))
+        XCTAssertEqual(
+            try Data(contentsOf: fixture.policy.fileURL(for: six, in: recovery)),
+            originalData
+        )
+        XCTAssertFalse(fixture.fileExists(for: eleven))
+    }
+
     func testChangedInstalledFileIsRetainedWithRecoveryPathWhenRollbackCannotVerifyOwnership() throws {
         let fixture = try Fixture(codexURL: codexURL, homeURL: homeURL)
         defer { fixture.remove() }
@@ -196,6 +230,64 @@ final class ActivationLaunchAgentSynchronizerTests: XCTestCase {
         XCTAssertTrue(URL(fileURLWithPath: path).lastPathComponent.hasPrefix(
             ".codexquotamenu-launchagent-recovery-"
         ))
+    }
+
+    func testConcurrentReplacementAtRollbackRemovalBoundaryIsNeverDeleted() throws {
+        let fixture = try Fixture(codexURL: codexURL, homeURL: homeURL)
+        defer { fixture.remove() }
+        let six = try ActivationTime(hour: 6, minute: 0)
+        let eleven = try ActivationTime(hour: 11, minute: 0)
+        let sixFile = fixture.policy.fileURL(for: six, in: fixture.launchAgentsURL)
+        let concurrentData = Data("concurrent rollback replacement".utf8)
+        let synchronizer = fixture.synchronizer(hooks: .init(
+            beforeInstallingAgent: { url in
+                if url == fixture.policy.fileURL(for: eleven, in: fixture.launchAgentsURL) {
+                    throw FixtureError.injected
+                }
+            },
+            beforeIsolatingInstalledAgentDuringRollback: { url in
+                XCTAssertEqual(url, sixFile)
+                try concurrentData.write(to: url, options: .atomic)
+            }
+        ))
+        var recoveryPath: String?
+
+        XCTAssertThrowsError(try synchronizer.synchronize(entries: [
+            .init(time: six),
+            .init(time: eleven)
+        ])) { error in
+            guard case ActivationLaunchAgentSynchronizationError.recoveryRequired(let path) = error else {
+                return XCTFail("expected recoveryRequired, got \(error)")
+            }
+            recoveryPath = path
+        }
+
+        XCTAssertEqual(try Data(contentsOf: sixFile), concurrentData)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(recoveryPath)))
+    }
+
+    func testFailedBootstrapDoesNotBootoutConcurrentlyLoadedSameLabel() throws {
+        let fixture = try Fixture(codexURL: codexURL, homeURL: homeURL)
+        defer { fixture.remove() }
+        let six = try ActivationTime(hour: 6, minute: 0)
+        let sixLabel = fixture.label(for: six)
+        fixture.controller.bootstrapHandler = { _ in
+            fixture.controller.loadedLabels.insert(sixLabel)
+            throw FixtureError.injected
+        }
+        var recoveryPath: String?
+
+        XCTAssertThrowsError(try fixture.synchronizer().synchronize(entries: [.init(time: six)])) {
+            error in
+            guard case ActivationLaunchAgentSynchronizationError.recoveryRequired(let path) = error else {
+                return XCTFail("expected recoveryRequired, got \(error)")
+            }
+            recoveryPath = path
+        }
+
+        XCTAssertEqual(fixture.controller.loadedLabels, [sixLabel])
+        XCTAssertEqual(fixture.controller.bootoutCalls, [])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(recoveryPath)))
     }
 
     func testExistingRecoveryDirectoryBlocksSynchronizationBeforeCapabilityProbe() throws {
@@ -386,6 +478,7 @@ private final class FakeCodexCommandRunner: CodexCommandRunning {
 
 private final class FakeLaunchctlController: LaunchctlControlling {
     var loadedLabels: Set<String> = []
+    private(set) var bootoutCalls: [String] = []
     var bootstrapHandler: ((URL) throws -> Void)?
     var bootoutHandler: ((String) throws -> Void)?
     var inventoryHandler: (() throws -> Set<String>)?
@@ -407,6 +500,7 @@ private final class FakeLaunchctlController: LaunchctlControlling {
     }
 
     func bootout(label: String) throws {
+        bootoutCalls.append(label)
         try bootoutHandler?(label)
         loadedLabels.remove(label)
     }

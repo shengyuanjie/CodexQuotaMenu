@@ -110,13 +110,19 @@ struct CodexProcessRunner: CodexCommandRunning {
 
 struct ActivationLaunchAgentSynchronizationHooks {
     var beforeInstallingAgent: (URL) throws -> Void
+    var beforeIsolatingExistingAgent: (URL) throws -> Void
+    var beforeIsolatingInstalledAgentDuringRollback: (URL) throws -> Void
     var beforeRollback: () throws -> Void
 
     init(
         beforeInstallingAgent: @escaping (URL) throws -> Void = { _ in },
+        beforeIsolatingExistingAgent: @escaping (URL) throws -> Void = { _ in },
+        beforeIsolatingInstalledAgentDuringRollback: @escaping (URL) throws -> Void = { _ in },
         beforeRollback: @escaping () throws -> Void = {}
     ) {
         self.beforeInstallingAgent = beforeInstallingAgent
+        self.beforeIsolatingExistingAgent = beforeIsolatingExistingAgent
+        self.beforeIsolatingInstalledAgentDuringRollback = beforeIsolatingInstalledAgentDuringRollback
         self.beforeRollback = beforeRollback
     }
 }
@@ -233,8 +239,23 @@ struct ActivationLaunchAgentSynchronizer: ActivationLaunchAgentSynchronizing {
             isDirectory: true
         )
         try fileManager.createDirectory(at: recoveryRoot, withIntermediateDirectories: false)
+        let isolatedExistingRoot = recoveryRoot.appendingPathComponent(
+            "isolated-existing",
+            isDirectory: true
+        )
+        let isolatedInstalledRoot = recoveryRoot.appendingPathComponent(
+            "isolated-installed",
+            isDirectory: true
+        )
+        let restoreStagingRoot = recoveryRoot.appendingPathComponent(
+            "restore-staging",
+            isDirectory: true
+        )
         let backups: [LaunchAgentBackup]
         do {
+            for directory in [isolatedExistingRoot, isolatedInstalledRoot, restoreStagingRoot] {
+                try fileManager.createDirectory(at: directory, withIntermediateDirectories: false)
+            }
             backups = try createVerifiedBackups(
                 of: initialAgents,
                 policy: policy,
@@ -245,17 +266,22 @@ struct ActivationLaunchAgentSynchronizer: ActivationLaunchAgentSynchronizing {
             throw error
         }
 
-        var installedHashes: [URL: Data] = [:]
-        var attemptedBootstrapLabels = Set<String>()
+        var installedFingerprints: [URL: FileFingerprint] = [:]
+        var successfullyBootstrappedLabels = Set<String>()
         do {
             for label in initialLoadedLabels.sorted() {
                 try controller.bootout(label: label)
             }
             for backup in backups {
-                guard try fileHash(at: backup.destinationURL) == backup.hash else {
-                    throw ActivationLaunchAgentSynchronizationError.targetCollision
-                }
-                try fileManager.removeItem(at: backup.destinationURL)
+                try hooks.beforeIsolatingExistingAgent(backup.destinationURL)
+                try isolateExpectedFile(
+                    at: backup.destinationURL,
+                    to: isolatedExistingRoot.appendingPathComponent(
+                        backup.destinationURL.lastPathComponent
+                    ),
+                    expectedFingerprint: backup.originalFingerprint,
+                    missingIsAcceptable: false
+                )
             }
             for agent in desiredAgents {
                 let destination = policy.fileURL(for: agent.time, in: launchAgentsURL)
@@ -265,9 +291,9 @@ struct ActivationLaunchAgentSynchronizer: ActivationLaunchAgentSynchronizing {
                 }
                 let staged = policy.fileURL(for: agent.time, in: stagingRoot)
                 try installExclusively(staged, at: destination)
-                installedHashes[destination] = try fileHash(at: destination)
-                attemptedBootstrapLabels.insert(agent.label)
+                installedFingerprints[destination] = try fileFingerprint(at: destination)
                 try controller.bootstrap(plistURL: destination)
+                successfullyBootstrappedLabels.insert(agent.label)
             }
 
             let finalSnapshot = ActivationSchedulerSnapshot.read(
@@ -289,16 +315,23 @@ struct ActivationLaunchAgentSynchronizer: ActivationLaunchAgentSynchronizing {
 
             try legacyAutomationRemover()
         } catch let synchronizationError {
+            let mustRetainRecovery = synchronizationError is LaunchAgentIsolationError
             do {
                 try hooks.beforeRollback()
                 try rollback(
                     initialLoadedLabels: initialLoadedLabels,
-                    attemptedBootstrapLabels: attemptedBootstrapLabels,
-                    installedHashes: installedHashes,
+                    successfullyBootstrappedLabels: successfullyBootstrappedLabels,
+                    installedFingerprints: installedFingerprints,
                     backups: backups,
-                    recoveryRoot: recoveryRoot
+                    isolatedInstalledRoot: isolatedInstalledRoot,
+                    restoreStagingRoot: restoreStagingRoot,
+                    recoveryRoot: recoveryRoot,
+                    removeRecoveryOnSuccess: !mustRetainRecovery
                 )
             } catch {
+                throw ActivationLaunchAgentSynchronizationError.recoveryRequired(recoveryRoot.path)
+            }
+            if mustRetainRecovery {
                 throw ActivationLaunchAgentSynchronizationError.recoveryRequired(recoveryRoot.path)
             }
             throw synchronizationError
@@ -362,49 +395,63 @@ struct ActivationLaunchAgentSynchronizer: ActivationLaunchAgentSynchronizing {
         try agents.map { agent in
             let source = policy.fileURL(for: agent.time, in: launchAgentsURL)
             let backup = policy.fileURL(for: agent.time, in: recoveryRoot)
-            let hash = try fileHash(at: source)
+            let originalFingerprint = try fileFingerprint(at: source)
             try fileManager.copyItem(at: source, to: backup)
-            guard try fileHash(at: backup) == hash else {
+            guard try fileHash(at: backup) == originalFingerprint.hash else {
                 throw LaunchAgentRollbackError.backupVerificationFailed
             }
             return LaunchAgentBackup(
                 agent: agent,
                 destinationURL: source,
                 backupURL: backup,
-                hash: hash
+                originalFingerprint: originalFingerprint
             )
         }
     }
 
     private func rollback(
         initialLoadedLabels: Set<String>,
-        attemptedBootstrapLabels: Set<String>,
-        installedHashes: [URL: Data],
+        successfullyBootstrappedLabels: Set<String>,
+        installedFingerprints: [URL: FileFingerprint],
         backups: [LaunchAgentBackup],
-        recoveryRoot: URL
+        isolatedInstalledRoot: URL,
+        restoreStagingRoot: URL,
+        recoveryRoot: URL,
+        removeRecoveryOnSuccess: Bool
     ) throws {
         let currentlyLoaded = try controller.loadedOwnedLabels()
-        for label in attemptedBootstrapLabels.intersection(currentlyLoaded).sorted() {
+        for label in successfullyBootstrappedLabels.intersection(currentlyLoaded).sorted() {
             try controller.bootout(label: label)
         }
 
-        for (file, expectedHash) in installedHashes.sorted(by: { $0.key.path < $1.key.path }) {
-            guard fileManager.fileExists(atPath: file.path) else { continue }
-            guard try fileHash(at: file) == expectedHash else {
-                throw LaunchAgentRollbackError.destinationChanged
-            }
-            try fileManager.removeItem(at: file)
+        for (file, expectedFingerprint) in installedFingerprints.sorted(
+            by: { $0.key.path < $1.key.path }
+        ) {
+            try hooks.beforeIsolatingInstalledAgentDuringRollback(file)
+            try isolateExpectedFile(
+                at: file,
+                to: isolatedInstalledRoot.appendingPathComponent(file.lastPathComponent),
+                expectedFingerprint: expectedFingerprint,
+                missingIsAcceptable: true
+            )
         }
 
         for backup in backups {
             if fileManager.fileExists(atPath: backup.destinationURL.path) {
-                guard try fileHash(at: backup.destinationURL) == backup.hash else {
+                guard try fileHash(at: backup.destinationURL) == backup.originalFingerprint.hash else {
                     throw LaunchAgentRollbackError.destinationChanged
                 }
             } else {
-                try fileManager.copyItem(at: backup.backupURL, to: backup.destinationURL)
+                let stagedRestore = restoreStagingRoot.appendingPathComponent(
+                    UUID().uuidString + "-" + backup.destinationURL.lastPathComponent
+                )
+                try fileManager.copyItem(at: backup.backupURL, to: stagedRestore)
+                guard try fileHash(at: stagedRestore) == backup.originalFingerprint.hash else {
+                    throw LaunchAgentRollbackError.restoreVerificationFailed
+                }
+                try installExclusively(stagedRestore, at: backup.destinationURL)
             }
-            guard try fileHash(at: backup.destinationURL) == backup.hash else {
+            guard try fileHash(at: backup.destinationURL) == backup.originalFingerprint.hash else {
                 throw LaunchAgentRollbackError.restoreVerificationFailed
             }
         }
@@ -421,7 +468,9 @@ struct ActivationLaunchAgentSynchronizer: ActivationLaunchAgentSynchronizing {
             throw LaunchAgentRollbackError.restoreVerificationFailed
         }
 
-        try fileManager.removeItem(at: recoveryRoot)
+        if removeRecoveryOnSuccess {
+            try fileManager.removeItem(at: recoveryRoot)
+        }
     }
 
     private func existingRecoveryDirectory() throws -> URL? {
@@ -436,6 +485,52 @@ struct ActivationLaunchAgentSynchronizer: ActivationLaunchAgentSynchronizing {
 
     private func fileHash(at url: URL) throws -> Data {
         Data(SHA256.hash(data: try Data(contentsOf: url)))
+    }
+
+    private func fileFingerprint(at url: URL) throws -> FileFingerprint {
+        let attributes = try fileManager.attributesOfItem(atPath: url.path)
+        guard attributes[.type] as? FileAttributeType == .typeRegular,
+              let systemNumber = attributes[.systemNumber] as? NSNumber,
+              let fileNumber = attributes[.systemFileNumber] as? NSNumber else {
+            throw LaunchAgentRollbackError.unverifiableFileIdentity
+        }
+        return FileFingerprint(
+            hash: try fileHash(at: url),
+            systemNumber: systemNumber.uint64Value,
+            fileNumber: fileNumber.uint64Value
+        )
+    }
+
+    private func isolateExpectedFile(
+        at source: URL,
+        to isolated: URL,
+        expectedFingerprint: FileFingerprint,
+        missingIsAcceptable: Bool
+    ) throws {
+        let result = source.path.withCString { sourcePath in
+            isolated.path.withCString { isolatedPath in
+                renamex_np(sourcePath, isolatedPath, UInt32(RENAME_EXCL))
+            }
+        }
+        if result != 0 {
+            if errno == ENOENT, missingIsAcceptable {
+                return
+            }
+            throw LaunchAgentIsolationError.ownershipChanged
+        }
+
+        do {
+            guard try fileFingerprint(at: isolated) == expectedFingerprint else {
+                throw LaunchAgentIsolationError.ownershipChanged
+            }
+        } catch {
+            do {
+                try installExclusively(isolated, at: source)
+            } catch {
+                // The isolated object remains in recovery when the public path is occupied.
+            }
+            throw LaunchAgentIsolationError.ownershipChanged
+        }
     }
 
     private func installExclusively(_ staged: URL, at destination: URL) throws {
@@ -465,7 +560,13 @@ private struct LaunchAgentBackup {
     let agent: ActivationLaunchAgent
     let destinationURL: URL
     let backupURL: URL
+    let originalFingerprint: FileFingerprint
+}
+
+private struct FileFingerprint: Equatable {
     let hash: Data
+    let systemNumber: UInt64
+    let fileNumber: UInt64
 }
 
 private enum LaunchAgentRollbackError: Error {
@@ -473,4 +574,9 @@ private enum LaunchAgentRollbackError: Error {
     case destinationChanged
     case missingLoadableBackup
     case restoreVerificationFailed
+    case unverifiableFileIdentity
+}
+
+private enum LaunchAgentIsolationError: Error {
+    case ownershipChanged
 }
