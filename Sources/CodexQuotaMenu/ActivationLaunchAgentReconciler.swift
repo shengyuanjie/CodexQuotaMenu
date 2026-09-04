@@ -13,10 +13,7 @@ enum ActivationSchedulerSnapshot: Equatable, Sendable {
             return .unavailable(reason)
         case .available(let agents):
             do {
-                var loadedLabels = Set<String>()
-                for label in Set(agents.map(\.label)) where try controller.isLoaded(label: label) {
-                    loadedLabels.insert(label)
-                }
+                let loadedLabels = try controller.loadedOwnedLabels()
                 return .available(agents: agents, loadedLabels: loadedLabels)
             } catch {
                 return .unavailable("LaunchAgent loaded state is unavailable")

@@ -61,6 +61,56 @@ final class LaunchctlControllerTests: XCTestCase {
             try LaunchctlController(guiUserID: 501, runner: bootoutRunner).bootout(label: label)
         )
     }
+
+    func testDomainInventoryFindsOnlyExactValidOwnedLabels() throws {
+        let sixThirty = "com.local.codexquotamenu.activation.0630"
+        let elevenTwo = "com.local.codexquotamenu.activation.1102"
+        let runner = RecordingLaunchctlRunner(results: [
+            .init(
+                terminationStatus: 0,
+                standardOutput: """
+                services = {
+                    \(sixThirty)
+                    \(elevenTwo)
+                    com.local.codexquotamenu.activation.2460
+                    com.local.codexquotamenu.activation.0630-copy
+                    prefixcom.local.codexquotamenu.activation.0630
+                }
+                """,
+                standardError: ""
+            )
+        ])
+        let controller = LaunchctlController(guiUserID: 501, runner: runner)
+
+        XCTAssertEqual(try controller.loadedOwnedLabels(), [sixThirty, elevenTwo])
+        XCTAssertEqual(runner.invocations, [["print", "gui/501"]])
+    }
+
+    func testRepeatedExactOwnedLabelMakesDomainInventoryUnavailable() {
+        let label = "com.local.codexquotamenu.activation.0630"
+        let runner = RecordingLaunchctlRunner(results: [
+            .init(terminationStatus: 0, standardOutput: "\(label)\n\(label)", standardError: "")
+        ])
+
+        XCTAssertThrowsError(
+            try LaunchctlController(guiUserID: 501, runner: runner).loadedOwnedLabels()
+        )
+    }
+
+    func testTruncatedDomainInventoryIsUnavailableRatherThanIncomplete() {
+        let runner = RecordingLaunchctlRunner(results: [
+            .init(
+                terminationStatus: 0,
+                standardOutput: "com.local.codexquotamenu.activation.0630",
+                standardError: "",
+                standardOutputWasTruncated: true
+            )
+        ])
+
+        XCTAssertThrowsError(
+            try LaunchctlController(guiUserID: 501, runner: runner).loadedOwnedLabels()
+        )
+    }
 }
 
 private final class RecordingLaunchctlRunner: LaunchctlCommandRunning {

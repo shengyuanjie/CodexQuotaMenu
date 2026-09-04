@@ -109,7 +109,43 @@ final class ActivationLaunchAgentReconcilerTests: XCTestCase {
         )
     }
 
-    func testSnapshotReadsEveryOwnedAgentAndHidesControllerDiagnostics() throws {
+    func testLoadedOnlyDisabledEntryIsExtra() throws {
+        let six = try ActivationTime(hour: 6, minute: 0)
+        let agent = policy.agent(for: six)
+        let controller = SnapshotLaunchctlController(loadedLabels: [agent.label])
+        let snapshot = ActivationSchedulerSnapshot.read(
+            readResult: .available([]),
+            controller: controller
+        )
+
+        XCTAssertEqual(
+            snapshot,
+            .available(agents: [], loadedLabels: [agent.label])
+        )
+        XCTAssertEqual(
+            ActivationLaunchAgentReconciler.evaluate(
+                entries: [.init(time: six, isEnabled: false)],
+                snapshot: snapshot
+            ),
+            .pending(.init(extra: [six]))
+        )
+    }
+
+    func testLoadedOnlyLabelWithoutAnyLocalEntryIsExtra() throws {
+        let eleven = try ActivationTime(hour: 11, minute: 2)
+        let agent = policy.agent(for: eleven)
+        let snapshot = ActivationSchedulerSnapshot.read(
+            readResult: .available([]),
+            controller: SnapshotLaunchctlController(loadedLabels: [agent.label])
+        )
+
+        XCTAssertEqual(
+            ActivationLaunchAgentReconciler.evaluate(entries: [], snapshot: snapshot),
+            .pending(.init(extra: [eleven]))
+        )
+    }
+
+    func testSnapshotUsesIndependentLoadedLabelInventoryAndHidesControllerDiagnostics() throws {
         let six = try ActivationTime(hour: 6, minute: 0)
         let agent = policy.agent(for: six)
         let controller = SnapshotLaunchctlController(loadedLabels: [agent.label])
@@ -147,6 +183,11 @@ private final class SnapshotLaunchctlController: LaunchctlControlling {
     func isLoaded(label: String) throws -> Bool {
         if let error { throw error }
         return loadedLabels.contains(label)
+    }
+
+    func loadedOwnedLabels() throws -> Set<String> {
+        if let error { throw error }
+        return loadedLabels
     }
 
     func bootout(label: String) throws {}
