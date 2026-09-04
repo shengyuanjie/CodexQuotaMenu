@@ -81,7 +81,7 @@ Codex 90% · 4时25分 · ↻30% · ▶ 1
 
 应用会通过本机 Codex 进程查询用量和任务列表，并在本机读取 Codex 会话日志末尾最多 512KB，按结构化生命周期事件识别任务是否仍在活动、是否已经完成。会话内容只在内存中处理，不保存、不上传，也不包含遥测。
 
-为同步和对账每日激活时间，应用只读取并验证 `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` 这类精确归属的文件，并通过 `launchctl` 检查对应用户级服务是否已加载。写入前会暂存并验证完整目标配置；失败时尝试恢复本轮变更。首次迁移时，只有完整名称严格匹配 `CodexQuotaMenu · HH:mm` 的旧版自动化会被移除，其他自动化保持不变。应用不读取激活运行对话，也不上传调度配置；本地检测只能确认配置和加载状态，不能证明某次后台运行成功。
+为同步和对账每日激活时间，应用日常只读取并验证 `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` 这类精确归属的文件，并通过 `launchctl` 检查对应用户级服务是否已加载。首次迁移旧版调度时，只扫描旧 automation 的名称来识别完整名称严格匹配 `CodexQuotaMenu · HH:mm` 的条目，不读取运行对话或超出识别所需的内容，也不修改其他 automation。写入前会暂存并验证完整目标配置；失败时尝试恢复本轮变更。应用不读取激活运行对话，也不上传调度配置；本地检测只能确认配置和加载状态，不能证明某次后台运行成功。
 
 为显示公开预测，应用只请求 `codexreset.org/api/monitor-summary`，并只展示未来48小时概率；不发送个人余量、任务、身份或 Codex 凭据。公开预测缓存、手机接口开关，以及每条激活时间的小时、分钟、启用状态和稳定本地 ID 保存在 `UserDefaults`；手机访问令牌保存在 macOS Keychain。手机接口默认关闭，响应只含汇总数值。
 

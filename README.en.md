@@ -21,7 +21,7 @@ A native macOS menu bar utility that shows remaining Codex usage, reset countdow
 - Provides an optional, default-off, token-protected local feed for an iPhone Scriptable lock-screen widget.
 - Uses a text-only menu-bar display without a leading icon for a cleaner appearance.
 - Supports Follow System, Simplified Chinese, and English interface languages.
-- Can apply daily activation times directly as Codex background automations without copying, pasting, or send confirmation; the app manages only complete names that exactly match `CodexQuotaMenu · HH:mm`.
+- Can apply daily activation times directly as user-level LaunchAgents without copying, pasting, or send confirmation; schedules are managed only in CodexQuotaMenu's Activation Times settings.
 - Reuses your existing local Codex sign-in; no account token needs to be provided to this project.
 - Contains no advertising, analytics, telemetry, or third-party runtime dependencies.
 
@@ -67,11 +67,11 @@ Do not download builds from unofficial mirror sites. Public release archives are
 2. Read the remaining usage, reset countdown, and `▶` active-task count directly from the menu bar.
 3. Click the item for details. Choose **Refresh Now**, or press `R` while the menu is open, to query immediately.
 4. Choose **Language** to switch instantly between Follow System, Simplified Chinese, and English.
-5. For daily activation, open **Activation Times…**, add the times you need, then choose **Apply to Codex**. The app directly creates or updates the matching Codex background automations—no copying, pasting, or send confirmation is required—and automatically checks their actual state. **Retry Check** appears only if that state cannot be read. The list is empty on first launch; quitting CodexQuotaMenu does not affect created background automations.
+5. For daily activation, open **Activation Times…**, add the times you need, then choose **Apply to Codex**. The app creates or updates matching user-level LaunchAgents that invoke the official `codex exec --ephemeral` CLI; these schedules appear only in CodexQuotaMenu and do not create entries in Codex's scheduled-task list or recent-task conversations. **Retry Check** appears only if actual state cannot be read. The list is empty on first launch; quitting CodexQuotaMenu does not affect created LaunchAgents.
 6. For an iPhone lock-screen display, follow the [Scriptable setup guide](mobile/README.md) and enable the **Phone Widget** read-only feed.
 7. Choose **Quit**, or press `Q` while the menu is open, to stop all queries and the phone feed.
 
-Managed task names exactly match `CodexQuotaMenu · HH:mm`. Names that merely share `CodexQuotaMenu · `, such as `CodexQuotaMenu · backup` or `CodexQuotaMenu · 06:00 copy`, are not owned and remain untouched. With an empty time list, **Apply to Codex** deletes only exact-format managed tasks. Local status checks are read-only; managed automations change only when the user chooses **Apply to Codex**. Successful scheduled runs are silent; Codex notifies according to its notification policy only when a run fails.
+Managed LaunchAgent labels and filenames exactly match `com.local.codexquotamenu.activation.HHMM` under `~/Library/LaunchAgents/`. Prefix-sharing files are not owned and remain untouched. With an empty time list, **Apply to Codex** removes only the app's own LaunchAgents. Local status checks are read-only; managed scheduling changes only when the user chooses **Apply to Codex**. Successful runs are silent; the CLI's notification policy applies only when a run fails. After sleep, macOS may coalesce a missed calendar trigger into one catch-up run.
 
 To start the app at login, open **System Settings → General → Login Items**, click **+**, and select `Codex用量.app` from Applications.
 
@@ -81,7 +81,7 @@ The app queries local usage and tasks every five seconds and refreshes public fo
 
 The app queries usage and task metadata through a local Codex process. To identify whether a task is still active or completed, it may parse structured lifecycle events from up to the last 512 KB of relevant local Codex session logs. It no longer analyzes response text to infer user intent.
 
-To synchronize and reconcile daily activation times, the app reads `~/.codex/automations/*/automation.toml` and creates, updates, or deletes only tasks whose complete names exactly match `CodexQuotaMenu · HH:mm`. It stages and validates the target set before replacement and attempts to restore the previous managed tasks on failure. It does not read automation run conversations or upload automation configuration. A local check can confirm matching configuration, but cannot prove that an individual background run succeeded.
+For daily activation, the app normally reads and validates only exact-owned LaunchAgent plists under `~/Library/LaunchAgents/` and checks their per-user `launchctl` loaded state. During first migration, it scans legacy automation names only to identify the exact `CodexQuotaMenu · HH:mm` entries; it does not read their conversations or unrelated configuration, and it does not modify any other automation. It stages and validates the new target set before replacement and attempts to restore this run's changes on failure. A local check can confirm matching plist and loaded state, but cannot prove that an individual background run succeeded.
 
 All session content is processed in memory. It is not copied, stored in a project database, uploaded, or used for telemetry.
 

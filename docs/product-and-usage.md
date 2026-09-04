@@ -217,7 +217,7 @@ shasum -a 256 -c CodexQuotaMenu-v1.6.6-macOS-x86_64.zip.sha256
 
 ### 每日激活时间
 
-选择“激活时间设置…”，添加每天需要的时间，然后点击“应用到 Codex”。首次打开时，时间列表为空。应用会直接创建或更新对应的用户级 LaunchAgent，无需复制、粘贴或发送确认。每个启用时间调用官方 `codex exec --ephemeral` CLI 完成一次激活；会话不会持久化为 Codex 最近任务对话。
+选择“激活时间设置…”，添加每天需要的时间，然后点击“应用到 Codex”。首次打开时，时间列表为空。应用会直接创建或更新对应的用户级 LaunchAgent，无需复制、粘贴或发送确认。每个启用时间调用官方 `codex exec --ephemeral` CLI 完成一次激活；这些调度只在 CodexQuotaMenu 的激活时间设置中管理，不会出现在 Codex“已安排”列表中，也不会持久化为 Codex 最近任务对话。
 
 应用只管理文件名和标签均严格匹配 `com.local.codexquotamenu.activation.HHMM` 的 LaunchAgent，文件位于 `~/Library/LaunchAgents/`。仅共享前缀但不完整匹配的文件不属于本工具并保持不变。若时间列表为空，“应用到 Codex”会移除本工具自己的 LaunchAgent。
 
@@ -259,7 +259,7 @@ shasum -a 256 -c CodexQuotaMenu-v1.6.6-macOS-x86_64.zip.sha256
 - 公开预测接口返回的未来48小时概率、状态和时间；
 - 用户是否启用手机接口，以及手机接口访问令牌。
 
-为同步和对账每日激活时间，应用读取并验证 `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` 这类精确归属的文件，并通过 `launchctl` 检查对应用户级服务是否已加载。应用不读取激活运行对话，也不上传调度配置。本地检测只能确认 plist 配置和加载状态一致，不能证明某次后台运行成功。首次迁移时，只有完整名称严格匹配 `CodexQuotaMenu · HH:mm` 的旧版自动化会被移除，其他自动化保持不变。
+为同步和对账每日激活时间，应用日常读取并验证 `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` 这类精确归属的文件，并通过 `launchctl` 检查对应用户级服务是否已加载。首次迁移旧版调度时，只扫描旧 automation 的名称来识别完整名称严格匹配 `CodexQuotaMenu · HH:mm` 的条目，不读取运行对话或超出识别所需的内容，也不修改其他 automation。应用不读取激活运行对话，也不上传调度配置。本地检测只能确认 plist 配置和加载状态一致，不能证明某次后台运行成功。
 
 日志片段只用于识别任务开始、用户消息、任务完成等结构化生命周期事件，以及近期是否仍有任务活动。应用不再分析回复文字或工具调用内容来判断用户意图。
 

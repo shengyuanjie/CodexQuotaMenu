@@ -70,7 +70,7 @@ These are public community forecasts, not an official reset schedule or guarante
 
 ## Daily Activation Times
 
-Open **Activation Times…**, add the times you need each day, then choose **Apply to Codex**. The list is empty on first launch. The app directly creates or updates matching user-level LaunchAgents, with no copying, pasting, or send confirmation. Each enabled time invokes the official `codex exec --ephemeral` CLI for one activation; the session is not persisted as a recent Codex task conversation.
+Open **Activation Times…**, add the times you need each day, then choose **Apply to Codex**. The list is empty on first launch. The app directly creates or updates matching user-level LaunchAgents, with no copying, pasting, or send confirmation. Each enabled time invokes the official `codex exec --ephemeral` CLI for one activation; schedules are managed only in CodexQuotaMenu and do not appear in Codex's scheduled-task list or persist as recent Codex task conversations.
 
 The app manages only LaunchAgent files and labels that exactly match `com.local.codexquotamenu.activation.HHMM` under `~/Library/LaunchAgents/`. Prefix-sharing files are not owned and remain untouched. If the time list is empty, **Apply to Codex** removes only the app's own LaunchAgents.
 
@@ -166,7 +166,7 @@ The app processes:
 - public forecast values, status, and timestamps;
 - whether the phone feed is enabled and its access token.
 
-To synchronize and reconcile daily activation times, the app reads only exact-owned files such as `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` and checks their per-user service state through `launchctl`. It does not read activation-run conversations or upload scheduler configuration. A local check can confirm matching plist and loaded state, but cannot prove that an individual background run succeeded. During migration, only the exact legacy name `CodexQuotaMenu · HH:mm` is removed after successful verification of the new LaunchAgents.
+For ordinary synchronization and reconciliation, the app reads only exact-owned files such as `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` and checks their per-user service state through `launchctl`. During first migration, it scans legacy automation names only to identify the exact complete name `CodexQuotaMenu · HH:mm`; it does not read run conversations or unrelated configuration, and it does not modify other automations. A local check can confirm matching plist and loaded state, but cannot prove that an individual background run succeeded. The exact legacy entry is removed only after successful verification of the new LaunchAgents.
 
 Session-log fragments may contain task titles, tool-call metadata, and the current response. They are processed in memory and are not copied, uploaded, or stored in a project database. The app does not read or save Codex account tokens, passwords, or API keys and has no advertising, analytics, or telemetry.
 
