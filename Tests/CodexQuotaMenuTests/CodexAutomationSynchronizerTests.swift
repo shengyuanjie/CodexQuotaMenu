@@ -2,6 +2,36 @@ import XCTest
 @testable import CodexQuotaMenu
 
 final class CodexAutomationSynchronizerTests: XCTestCase {
+    func testRemoveAllManagedAutomationsPreservesUnrelatedAndMalformedPrefixPeers() throws {
+        let root = try temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let managed = ActivationScheduleEntry(time: try ActivationTime(hour: 6, minute: 30))
+        let synchronizer = CodexAutomationSynchronizer(rootURL: root)
+        try synchronizer.synchronize(entries: [managed], timeZoneIdentifier: "Asia/Shanghai")
+        let unrelated = root.appendingPathComponent("personal/automation.toml")
+        let malformedPeer = root.appendingPathComponent("prefixed-peer/automation.toml")
+        try FileManager.default.createDirectory(
+            at: unrelated.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(
+            at: malformedPeer.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let unrelatedSource = "name = \"Personal reminder\"\n"
+        let malformedSource = "name = \"CodexQuotaMenu · 06:30 copy\"\n"
+        try Data(unrelatedSource.utf8).write(to: unrelated)
+        try Data(malformedSource.utf8).write(to: malformedPeer)
+
+        try synchronizer.removeAllManagedAutomations()
+
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: root.appendingPathComponent("codexquotamenu-06-30").path
+        ))
+        XCTAssertEqual(try String(contentsOf: unrelated, encoding: .utf8), unrelatedSource)
+        XCTAssertEqual(try String(contentsOf: malformedPeer, encoding: .utf8), malformedSource)
+    }
+
     func testCreatesDesiredTasksWithoutChangingUnrelatedAutomation() throws {
         let root = try temporaryRoot()
         defer { try? FileManager.default.removeItem(at: root) }

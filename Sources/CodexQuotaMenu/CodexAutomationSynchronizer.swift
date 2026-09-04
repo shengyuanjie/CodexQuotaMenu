@@ -156,6 +156,10 @@ struct CodexAutomationSynchronizer {
         }
     }
 
+    func removeAllManagedAutomations() throws {
+        try synchronize(entries: [], timeZoneIdentifier: "UTC")
+    }
+
     private func existingRecoveryDirectory() throws -> URL? {
         let children = try fileManager.contentsOfDirectory(
             at: rootURL,
