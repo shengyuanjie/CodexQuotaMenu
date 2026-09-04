@@ -2,12 +2,17 @@ import Foundation
 import Darwin
 
 final class CodexClient {
+    private let executableLocator: CodexExecutableLocating
     private let timeout: TimeInterval = 20
     private var process: Process?
     private var input: Pipe?
     private var output: Pipe?
     private var outputBuffer = Data()
     private var nextRequestID = 2
+
+    init(executableLocator: CodexExecutableLocating = CodexExecutableLocator()) {
+        self.executableLocator = executableLocator
+    }
 
     deinit { stop() }
 
@@ -71,11 +76,11 @@ final class CodexClient {
         if process?.isRunning == true { return }
 
         stop()
-        let executable = try findCodexExecutable()
+        let executable = try executableLocator.findExecutable()
         let newProcess = Process()
         let newInput = Pipe()
         let newOutput = Pipe()
-        newProcess.executableURL = URL(fileURLWithPath: executable)
+        newProcess.executableURL = executable
         newProcess.arguments = ["app-server", "--stdio"]
         newProcess.standardInput = newInput
         newProcess.standardOutput = newOutput
@@ -153,21 +158,4 @@ final class CodexClient {
         throw UsageError.timedOut
     }
 
-    private func findCodexExecutable() throws -> String {
-        let environment = ProcessInfo.processInfo.environment
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let candidates = [
-            environment["CODEX_CLI_PATH"],
-            "/Applications/Codex.app/Contents/Resources/codex",
-            "/Applications/ChatGPT.app/Contents/Resources/codex",
-            "\(home)/.local/bin/codex",
-            "/opt/homebrew/bin/codex",
-            "/usr/local/bin/codex"
-        ].compactMap { $0 }
-
-        if let path = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
-            return path
-        }
-        throw UsageError.codexNotFound
-    }
 }
