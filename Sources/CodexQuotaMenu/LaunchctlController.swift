@@ -188,19 +188,67 @@ struct LaunchctlController: LaunchctlControlling {
     }
 
     private func ownedLabels(in output: String) throws -> Set<String> {
+        let serviceLines = try activeServiceLines(in: output)
         let prefix = NSRegularExpression.escapedPattern(for: ActivationLaunchAgentPolicy.labelPrefix)
-        let pattern = "(?<![A-Za-z0-9._-])\(prefix)(?:[01][0-9]|2[0-3])[0-5][0-9](?![A-Za-z0-9._-])"
-        guard let expression = try? NSRegularExpression(pattern: pattern) else {
+        let labelPattern = "\(prefix)(?:[01][0-9]|2[0-3])[0-5][0-9]"
+        let rowPattern = "^(?:(?:0x[0-9A-Fa-f]+|[0-9]+)\\s*=\\s*)?(\(labelPattern))$"
+        guard let expression = try? NSRegularExpression(pattern: rowPattern) else {
             throw LaunchctlControllerError.ambiguousInventory
         }
-        let range = NSRange(output.startIndex..., in: output)
-        let labels = expression.matches(in: output, range: range).compactMap {
-            Range($0.range, in: output).map { String(output[$0]) }
+        let labels = serviceLines.compactMap { line -> String? in
+            let range = NSRange(line.startIndex..., in: line)
+            guard let match = expression.firstMatch(in: line, range: range),
+                  let labelRange = Range(match.range(at: 1), in: line) else {
+                return nil
+            }
+            return String(line[labelRange])
         }
         guard Set(labels).count == labels.count else {
             throw LaunchctlControllerError.ambiguousInventory
         }
         return Set(labels)
+    }
+
+    private func activeServiceLines(in output: String) throws -> [String] {
+        var foundInventory = false
+        var closedInventory = false
+        var lines: [String] = []
+
+        for rawLine in output.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !foundInventory {
+                switch line {
+                case "services = {":
+                    foundInventory = true
+                case "services = {}":
+                    foundInventory = true
+                    closedInventory = true
+                default:
+                    continue
+                }
+                continue
+            }
+
+            if closedInventory {
+                guard line != "services = {", line != "services = {}" else {
+                    throw LaunchctlControllerError.ambiguousInventory
+                }
+                continue
+            }
+
+            if line == "}" {
+                closedInventory = true
+            } else if line.contains("{") || line.contains("}") {
+                throw LaunchctlControllerError.ambiguousInventory
+            } else {
+                lines.append(line)
+            }
+        }
+
+        guard foundInventory, closedInventory else {
+            throw LaunchctlControllerError.ambiguousInventory
+        }
+        return lines
     }
 }
 

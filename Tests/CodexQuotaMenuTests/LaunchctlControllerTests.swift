@@ -70,11 +70,14 @@ final class LaunchctlControllerTests: XCTestCase {
                 terminationStatus: 0,
                 standardOutput: """
                 services = {
-                    \(sixThirty)
+                    0x100 = \(sixThirty)
                     \(elevenTwo)
                     com.local.codexquotamenu.activation.2460
                     com.local.codexquotamenu.activation.0630-copy
                     prefixcom.local.codexquotamenu.activation.0630
+                }
+                disabled services = {
+                    0x200 = com.local.codexquotamenu.activation.2359
                 }
                 """,
                 standardError: ""
@@ -89,11 +92,38 @@ final class LaunchctlControllerTests: XCTestCase {
     func testRepeatedExactOwnedLabelMakesDomainInventoryUnavailable() {
         let label = "com.local.codexquotamenu.activation.0630"
         let runner = RecordingLaunchctlRunner(results: [
-            .init(terminationStatus: 0, standardOutput: "\(label)\n\(label)", standardError: "")
+            .init(
+                terminationStatus: 0,
+                standardOutput: "services = {\n\(label)\n\(label)\n}",
+                standardError: ""
+            )
         ])
 
         XCTAssertThrowsError(
             try LaunchctlController(guiUserID: 501, runner: runner).loadedOwnedLabels()
+        )
+    }
+
+    func testDisabledServicesInventoryDoesNotMakeAnAgentLoaded() throws {
+        let disabledOnly = "com.local.codexquotamenu.activation.0630"
+        let runner = RecordingLaunchctlRunner(results: [
+            .init(
+                terminationStatus: 0,
+                standardOutput: """
+                services = {
+                    0x100 = com.apple.unrelated
+                }
+                disabled services = {
+                    0x200 = \(disabledOnly)
+                }
+                """,
+                standardError: ""
+            )
+        ])
+
+        XCTAssertEqual(
+            try LaunchctlController(guiUserID: 501, runner: runner).loadedOwnedLabels(),
+            []
         )
     }
 
