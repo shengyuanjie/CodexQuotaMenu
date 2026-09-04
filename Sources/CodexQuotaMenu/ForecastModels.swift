@@ -2,14 +2,18 @@ import Foundation
 
 struct ResetForecast: Codable, Equatable {
     let probability48h: Int
-    let calibrationState: String
+    let sourceUpdatedAt: Date
     let fetchedAt: Date
 
     var isValid: Bool {
         (0...100).contains(probability48h) &&
-        !calibrationState.isEmpty &&
-        calibrationState.count <= 64
+        sourceUpdatedAt.timeIntervalSinceReferenceDate.isFinite &&
+        fetchedAt.timeIntervalSinceReferenceDate.isFinite
     }
+
+    // Kept as a source-compatible view until the display model removes the
+    // legacy calibration field. It is intentionally not persisted by Codable.
+    var calibrationState: String? { nil }
 }
 
 enum ForecastParsingError: Error, Equatable {
@@ -20,12 +24,19 @@ enum ForecastParsingError: Error, Equatable {
 enum ForecastParser {
     static func parse(_ data: Data, fetchedAt: Date) throws -> ResetForecast {
         do {
-            let wire = try JSONDecoder().decode(MonitorSummary.self, from: data)
-            guard wire.reset.unit == "probability" else { throw ForecastParsingError.invalidResponse }
-            guard (0...100).contains(wire.reset.score48h) else { throw ForecastParsingError.probabilityOutOfRange }
+            let wire = try JSONDecoder().decode(WireResponse.self, from: data)
+            guard wire.code == 0, let payload = wire.data else {
+                throw ForecastParsingError.invalidResponse
+            }
+            guard (0...100).contains(payload.probability48h) else {
+                throw ForecastParsingError.probabilityOutOfRange
+            }
+            guard let sourceUpdatedAt = parseISO8601(payload.updatedAt) else {
+                throw ForecastParsingError.invalidResponse
+            }
             let forecast = ResetForecast(
-                probability48h: wire.reset.score48h,
-                calibrationState: wire.reset.calibrationState,
+                probability48h: payload.probability48h,
+                sourceUpdatedAt: sourceUpdatedAt,
                 fetchedAt: fetchedAt
             )
             guard forecast.isValid else {
@@ -38,13 +49,26 @@ enum ForecastParser {
             throw ForecastParsingError.invalidResponse
         }
     }
+
+    private static func parseISO8601(_ value: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: value) {
+            return date
+        }
+
+        let standard = ISO8601DateFormatter()
+        standard.formatOptions = [.withInternetDateTime]
+        return standard.date(from: value)
+    }
 }
 
-private struct MonitorSummary: Decodable {
-    struct Reset: Decodable {
-        let calibrationState: String
-        let score48h: Int
-        let unit: String
-    }
-    let reset: Reset
+private struct WireResponse: Decodable {
+    let code: Int
+    let data: DataPayload?
+}
+
+private struct DataPayload: Decodable {
+    let updatedAt: String
+    let probability48h: Int
 }

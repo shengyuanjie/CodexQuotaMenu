@@ -7,7 +7,8 @@ final class ForecastCacheTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
         defaults.set(Data("legacy".utf8), forKey: UserDefaultsForecastCache.legacyStorageKey)
-        let expected = ResetForecast(probability48h: 82, calibrationState: "experimental", fetchedAt: Date(timeIntervalSince1970: 123_456))
+        let timestamp = Date(timeIntervalSince1970: 123_456)
+        let expected = ResetForecast(probability48h: 82, sourceUpdatedAt: timestamp, fetchedAt: timestamp)
 
         let cache = UserDefaultsForecastCache(defaults: defaults)
         cache.save(expected)
@@ -32,8 +33,8 @@ final class ForecastCacheTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let cache = UserDefaultsForecastCache(defaults: defaults)
         let invalid = ResetForecast(
-            probability48h: 82,
-            calibrationState: String(repeating: "a", count: 65),
+            probability48h: 101,
+            sourceUpdatedAt: Date(timeIntervalSince1970: 123_456),
             fetchedAt: Date(timeIntervalSince1970: 123_456)
         )
         defaults.set(try JSONEncoder().encode(invalid), forKey: UserDefaultsForecastCache.storageKey)
@@ -54,7 +55,7 @@ final class ForecastCacheTests: XCTestCase {
 
         cache.save(ResetForecast(
             probability48h: 101,
-            calibrationState: "experimental",
+            sourceUpdatedAt: Date(timeIntervalSince1970: 123_456),
             fetchedAt: Date(timeIntervalSince1970: 123_456)
         ))
 

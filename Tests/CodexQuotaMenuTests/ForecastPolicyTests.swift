@@ -30,6 +30,6 @@ final class ForecastPolicyTests: XCTestCase {
     }
 
     private func forecast(at date: Date) -> ResetForecast {
-        ResetForecast(probability48h: 82, calibrationState: "experimental", fetchedAt: date)
+        ResetForecast(probability48h: 82, sourceUpdatedAt: date, fetchedAt: date)
     }
 }
