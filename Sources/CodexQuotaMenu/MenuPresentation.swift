@@ -26,7 +26,7 @@ enum MenuPresentation {
         }
 
         let showEncouragement = resetCelebrationActive
-            ?? (forecast.probability48h.map { $0 >= 80 } == true)
+            ?? (forecast.probability48h.map { $0 >= ResetCelebrationPolicy.threshold } == true)
         let quotaParts = showEncouragement
             ? [encouragement]
             : [shortPart, weeklyPart]

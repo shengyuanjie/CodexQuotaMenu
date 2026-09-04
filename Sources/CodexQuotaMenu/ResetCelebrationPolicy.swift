@@ -25,6 +25,8 @@ struct ResetCelebrationDecision: Equatable {
 }
 
 enum ResetCelebrationPolicy {
+    static let threshold = 50
+
     static func evaluate(
         state: ResetCelebrationState,
         probability48h: Int?,
@@ -34,7 +36,7 @@ enum ResetCelebrationPolicy {
             return ResetCelebrationDecision(isActive: false, state: state)
         }
 
-        guard probability48h >= 80 else {
+        guard probability48h >= threshold else {
             return ResetCelebrationDecision(
                 isActive: false,
                 state: ResetCelebrationState(
@@ -94,7 +96,7 @@ enum ResetCelebrationPolicy {
 
 final class UserDefaultsResetCelebrationStateStore {
     private let defaults: UserDefaults
-    private let key = "resetCelebration.state.v1"
+    private let key = "resetCelebration.state.v2"
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults

@@ -2,7 +2,7 @@ import XCTest
 @testable import CodexQuotaMenu
 
 final class MenuPresentationTests: XCTestCase {
-    func testChineseTitleUsesWiderSpacingAndHidesForecastBelowEightyPercent() {
+    func testChineseTitleUsesWiderSpacingWhenCelebrationIsInactive() {
         XCTAssertEqual(
             MenuPresentation.title(
                 shortRemainingPercent: 81,
@@ -18,7 +18,7 @@ final class MenuPresentationTests: XCTestCase {
         )
     }
 
-    func testEnglishTitleUsesWiderSpacingAndHidesForecastBelowEightyPercent() {
+    func testEnglishTitleUsesWiderSpacingWhenCelebrationIsInactive() {
         XCTAssertEqual(
             MenuPresentation.title(
                 shortRemainingPercent: 81,
@@ -34,7 +34,7 @@ final class MenuPresentationTests: XCTestCase {
         )
     }
 
-    func testChineseTitleReplacesQuotaDetailsAtEightyPercentForecast() {
+    func testChineseTitleReplacesQuotaDetailsWhenCelebrationIsActive() {
         XCTAssertEqual(
             MenuPresentation.title(
                 shortRemainingPercent: 81,
@@ -50,7 +50,22 @@ final class MenuPresentationTests: XCTestCase {
         )
     }
 
-    func testEnglishTitleReplacesQuotaDetailsAtEightyPercentForecast() {
+    func testFallbackReplacesQuotaDetailsAtFiftyPercentForecast() {
+        XCTAssertEqual(
+            MenuPresentation.title(
+                shortRemainingPercent: 81,
+                shortResetText: "3时",
+                weeklyRemainingPercent: 62,
+                weeklyResetText: "2天",
+                forecast: forecast(50),
+                runningCount: 2,
+                language: .simplifiedChinese
+            ),
+            "Codex  冲冲冲～使劲蹬啊～  ▶2"
+        )
+    }
+
+    func testEnglishTitleReplacesQuotaDetailsWhenCelebrationIsActive() {
         XCTAssertEqual(
             MenuPresentation.title(
                 shortRemainingPercent: 81,
