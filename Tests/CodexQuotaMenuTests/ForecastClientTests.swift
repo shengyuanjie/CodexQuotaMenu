@@ -57,8 +57,7 @@ final class ForecastClientTests: XCTestCase {
     }
 
     func testURLSessionLoaderStopsAtEventsBoundaryBeforeLargeTail() async throws {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [ForecastURLProtocol.self]
+        let configuration = forecastURLProtocolConfiguration()
         ForecastURLProtocol.install(
             prefix: Data(
                 #"{"code":0,"data":{"updatedAt":"2026-09-04T02:42:22.950Z","probability48h":99,"events":["#.utf8
@@ -68,7 +67,7 @@ final class ForecastClientTests: XCTestCase {
         defer { ForecastURLProtocol.reset() }
 
         let client = ForecastClient(
-            loader: URLSessionHTTPDataLoader(configuration: configuration),
+            loader: URLSessionHTTPDataLoader(configurationFactory: { configuration }),
             appVersion: "1.6.1"
         )
 
@@ -78,6 +77,76 @@ final class ForecastClientTests: XCTestCase {
         XCTAssertEqual(value.probability48h, 99)
         XCTAssertTrue(ForecastURLProtocol.wasStopped)
         XCTAssertFalse(ForecastURLProtocol.didDeliverTail)
+    }
+
+    func testTransportFailureAfterSummaryDoesNotBecomeSuccess() async {
+        ForecastURLProtocol.install(
+            prefix: Data(
+                #"{"code":0,"data":{"updatedAt":"2026-09-04T02:42:22.950Z","probability48h":99,"events":["#.utf8
+            ),
+            tail: Data(),
+            postPrefixErrorCode: .timedOut
+        )
+        defer { ForecastURLProtocol.reset() }
+        let client = ForecastClient(
+            loader: URLSessionHTTPDataLoader(configurationFactory: forecastURLProtocolConfiguration),
+            appVersion: "1.6.1"
+        )
+
+        do {
+            _ = try await client.fetch(now: Date(timeIntervalSince1970: 1))
+            XCTFail("Expected the transport error to win over an internal summary cancellation")
+        } catch let error as URLError {
+            XCTAssertEqual(error.code, .timedOut)
+        } catch {
+            XCTFail("Expected URLError.timedOut, got \(error)")
+        }
+    }
+
+    func testNonInternalCancellationDoesNotBecomeSuccess() async {
+        ForecastURLProtocol.install(
+            prefix: Data(),
+            tail: Data(),
+            immediateErrorCode: .cancelled
+        )
+        defer { ForecastURLProtocol.reset() }
+        let client = ForecastClient(
+            loader: URLSessionHTTPDataLoader(configurationFactory: forecastURLProtocolConfiguration),
+            appVersion: "1.6.1"
+        )
+
+        do {
+            _ = try await client.fetch(now: Date(timeIntervalSince1970: 1))
+            XCTFail("Expected a cancellation without a summary to fail")
+        } catch let error as URLError {
+            XCTAssertEqual(error.code, .cancelled)
+        } catch {
+            XCTFail("Expected URLError.cancelled, got \(error)")
+        }
+    }
+
+    func testCancellingCallerCancelsDataTaskAndThrowsCancellationError() async throws {
+        ForecastURLProtocol.install(prefix: Data(), tail: Data(), tailDelay: 0.5)
+        defer { ForecastURLProtocol.reset() }
+        let client = ForecastClient(
+            loader: URLSessionHTTPDataLoader(configurationFactory: forecastURLProtocolConfiguration),
+            appVersion: "1.6.1"
+        )
+        let task = Task { try await client.fetch(now: Date(timeIntervalSince1970: 1)) }
+
+        for _ in 0..<50 where !ForecastURLProtocol.wasStarted {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertTrue(ForecastURLProtocol.wasStarted)
+        task.cancel()
+
+        switch await task.result {
+        case .success:
+            XCTFail("Expected caller cancellation to fail")
+        case let .failure(error):
+            XCTAssertTrue(error is CancellationError, "Expected CancellationError, got \(error)")
+        }
+        XCTAssertTrue(ForecastURLProtocol.wasStopped)
     }
 
     func testPrefixAccumulatorReturnsCompactSummaryWhenFedOneByteAtATime() throws {
@@ -201,6 +270,23 @@ final class ForecastClientTests: XCTestCase {
             }
         }
     }
+
+    func testProductionSessionConfigurationIsPrivateAndShortLived() {
+        let configuration = URLSessionHTTPDataLoader.makePrivateConfiguration()
+
+        XCTAssertEqual(configuration.requestCachePolicy, .reloadIgnoringLocalCacheData)
+        XCTAssertNil(configuration.urlCache)
+        XCTAssertNil(configuration.httpCookieStorage)
+        XCTAssertNil(configuration.urlCredentialStorage)
+        XCTAssertEqual(configuration.timeoutIntervalForRequest, 10)
+        XCTAssertEqual(configuration.timeoutIntervalForResource, 15)
+    }
+
+    private func forecastURLProtocolConfiguration() -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ForecastURLProtocol.self]
+        return configuration
+    }
 }
 
 private final class RecordingHTTPDataLoader: HTTPDataLoading {
@@ -229,15 +315,33 @@ private final class ForecastURLProtocol: URLProtocol {
     private static let lock = NSLock()
     private static var prefix = Data()
     private static var tail = Data()
-    private(set) static var wasStopped = false
-    private(set) static var didDeliverTail = false
+    private static var immediateErrorCode: URLError.Code?
+    private static var postPrefixErrorCode: URLError.Code?
+    private static var tailDelay: TimeInterval = 0.05
+    private static var _wasStarted = false
+    private static var _wasStopped = false
+    private static var _didDeliverTail = false
 
-    static func install(prefix: Data, tail: Data) {
+    static var wasStarted: Bool { read { _wasStarted } }
+    static var wasStopped: Bool { read { _wasStopped } }
+    static var didDeliverTail: Bool { read { _didDeliverTail } }
+
+    static func install(
+        prefix: Data,
+        tail: Data,
+        immediateErrorCode: URLError.Code? = nil,
+        postPrefixErrorCode: URLError.Code? = nil,
+        tailDelay: TimeInterval = 0.05
+    ) {
         lock.lock()
         self.prefix = prefix
         self.tail = tail
-        wasStopped = false
-        didDeliverTail = false
+        self.immediateErrorCode = immediateErrorCode
+        self.postPrefixErrorCode = postPrefixErrorCode
+        self.tailDelay = tailDelay
+        _wasStarted = false
+        _wasStopped = false
+        _didDeliverTail = false
         lock.unlock()
     }
 
@@ -245,8 +349,12 @@ private final class ForecastURLProtocol: URLProtocol {
         lock.lock()
         prefix = Data()
         tail = Data()
-        wasStopped = false
-        didDeliverTail = false
+        immediateErrorCode = nil
+        postPrefixErrorCode = nil
+        tailDelay = 0.05
+        _wasStarted = false
+        _wasStopped = false
+        _didDeliverTail = false
         lock.unlock()
     }
 
@@ -257,6 +365,10 @@ private final class ForecastURLProtocol: URLProtocol {
     override func startLoading() {
         Self.lock.lock()
         let responseData = Self.prefix
+        let immediateErrorCode = Self.immediateErrorCode
+        let postPrefixErrorCode = Self.postPrefixErrorCode
+        let tailDelay = Self.tailDelay
+        Self._wasStarted = true
         Self.lock.unlock()
         let response = HTTPURLResponse(
             url: request.url!,
@@ -265,13 +377,21 @@ private final class ForecastURLProtocol: URLProtocol {
             headerFields: ["Content-Type": "application/json"]
         )!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        if let immediateErrorCode {
+            client?.urlProtocol(self, didFailWithError: URLError(immediateErrorCode))
+            return
+        }
         client?.urlProtocol(self, didLoad: responseData)
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) { [weak self] in
+        if let postPrefixErrorCode {
+            client?.urlProtocol(self, didFailWithError: URLError(postPrefixErrorCode))
+            return
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + tailDelay) { [weak self] in
             guard let self else { return }
             Self.lock.lock()
-            let shouldDeliver = !Self.wasStopped
+            let shouldDeliver = !Self._wasStopped
             let tail = Self.tail
-            Self.didDeliverTail = shouldDeliver
+            Self._didDeliverTail = shouldDeliver
             Self.lock.unlock()
             guard shouldDeliver else { return }
             self.client?.urlProtocol(self, didLoad: tail)
@@ -281,7 +401,13 @@ private final class ForecastURLProtocol: URLProtocol {
 
     override func stopLoading() {
         Self.lock.lock()
-        Self.wasStopped = true
+        Self._wasStopped = true
         Self.lock.unlock()
+    }
+
+    private static func read<T>(_ value: () -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return value()
     }
 }

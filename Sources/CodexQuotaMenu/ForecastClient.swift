@@ -390,17 +390,17 @@ struct ForecastPrefixAccumulator {
 
 final class URLSessionHTTPDataLoader: HTTPDataLoading {
     static let maximumResponseBytes = 64 * 1_024
-    private let configuration: URLSessionConfiguration
+    private let configurationFactory: () -> URLSessionConfiguration
 
     convenience init() {
-        self.init(configuration: Self.privateConfiguration())
+        self.init(configurationFactory: Self.makePrivateConfiguration)
     }
 
-    init(configuration: URLSessionConfiguration) {
-        self.configuration = configuration
+    init(configurationFactory: @escaping () -> URLSessionConfiguration) {
+        self.configurationFactory = configurationFactory
     }
 
-    private static func privateConfiguration() -> URLSessionConfiguration {
+    static func makePrivateConfiguration() -> URLSessionConfiguration {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.urlCache = nil
@@ -413,7 +413,7 @@ final class URLSessionHTTPDataLoader: HTTPDataLoading {
 
     func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let receiver = ForecastPrefixHTTPReceiver(
-            configuration: configuration,
+            configuration: configurationFactory(),
             maximumBytes: Self.maximumResponseBytes
         )
         return try await receiver.load(request)
@@ -422,13 +422,16 @@ final class URLSessionHTTPDataLoader: HTTPDataLoading {
 
 private final class ForecastPrefixHTTPReceiver: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private let configuration: URLSessionConfiguration
+    private let stateLock = NSLock()
     private var accumulator: ForecastPrefixAccumulator
     private var response: HTTPURLResponse?
     private var terminalError: Error?
     private var compactResponse: Data?
     private var cancelledAfterSummary = false
+    private var callerCancelled = false
     private var continuation: CheckedContinuation<(Data, HTTPURLResponse), Error>?
     private var session: URLSession?
+    private var dataTask: URLSessionDataTask?
 
     init(configuration: URLSessionConfiguration, maximumBytes: Int) {
         self.configuration = configuration
@@ -436,12 +439,14 @@ private final class ForecastPrefixHTTPReceiver: NSObject, URLSessionDataDelegate
     }
 
     func load(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        try await withCheckedThrowingContinuation { continuation in
-            self.continuation = continuation
-            let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
-            self.session = session
-            session.dataTask(with: request).resume()
-        }
+        try await withTaskCancellationHandler(operation: {
+            try Task.checkCancellation()
+            return try await withCheckedThrowingContinuation { continuation in
+                self.start(request, continuation: continuation)
+            }
+        }, onCancel: {
+            self.cancelFromCaller()
+        })
     }
 
     func urlSession(
@@ -450,49 +455,107 @@ private final class ForecastPrefixHTTPReceiver: NSObject, URLSessionDataDelegate
         didReceive response: URLResponse,
         completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
     ) {
-        guard let http = response as? HTTPURLResponse else {
-            terminalError = ForecastNetworkError.invalidResponse
-            completionHandler(.cancel)
-            return
-        }
-        self.response = http
-        if !(200...299).contains(http.statusCode) {
-            terminalError = ForecastNetworkError.httpStatus(http.statusCode)
-            completionHandler(.cancel)
+        stateLock.lock()
+        let disposition: URLSession.ResponseDisposition
+        if callerCancelled {
+            disposition = .cancel
+        } else if let http = response as? HTTPURLResponse {
+            self.response = http
+            if (200...299).contains(http.statusCode) {
+                disposition = .allow
+            } else {
+                terminalError = ForecastNetworkError.httpStatus(http.statusCode)
+                disposition = .cancel
+            }
         } else {
-            completionHandler(.allow)
+            terminalError = ForecastNetworkError.invalidResponse
+            disposition = .cancel
         }
+        stateLock.unlock()
+        completionHandler(disposition)
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive chunk: Data) {
-        guard terminalError == nil, compactResponse == nil else { return }
-        do {
-            if let compact = try accumulator.append(chunk) {
-                compactResponse = compact
-                cancelledAfterSummary = true
-                dataTask.cancel()
+        var shouldCancel = false
+        stateLock.lock()
+        if !callerCancelled, terminalError == nil, compactResponse == nil {
+            do {
+                if let compact = try accumulator.append(chunk) {
+                    compactResponse = compact
+                    cancelledAfterSummary = true
+                    shouldCancel = true
+                }
+            } catch {
+                terminalError = error
+                shouldCancel = true
             }
-        } catch {
-            terminalError = error
-            dataTask.cancel()
         }
+        stateLock.unlock()
+        if shouldCancel { dataTask.cancel() }
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        guard let continuation else { return }
+        stateLock.lock()
+        guard let continuation else {
+            stateLock.unlock()
+            return
+        }
+        let callerCancelled = self.callerCancelled
+        let terminalError = self.terminalError
+        let compactResponse = self.compactResponse
+        let response = self.response
+        let cancelledAfterSummary = self.cancelledAfterSummary
         self.continuation = nil
         self.session = nil
+        self.dataTask = nil
+        stateLock.unlock()
         session.finishTasksAndInvalidate()
 
-        if let terminalError {
+        if callerCancelled {
+            continuation.resume(throwing: CancellationError())
+        } else if let terminalError {
             continuation.resume(throwing: terminalError)
-        } else if let compactResponse, let response, cancelledAfterSummary {
+        } else if let compactResponse, let response, cancelledAfterSummary,
+                  Self.isInternalCancellation(error) {
             continuation.resume(returning: (compactResponse, response))
         } else if let error {
             continuation.resume(throwing: error)
         } else {
             continuation.resume(throwing: ForecastNetworkError.invalidResponse)
         }
+    }
+
+    private func start(
+        _ request: URLRequest,
+        continuation: CheckedContinuation<(Data, HTTPURLResponse), Error>
+    ) {
+        let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+        let dataTask = session.dataTask(with: request)
+        stateLock.lock()
+        self.continuation = continuation
+        self.session = session
+        self.dataTask = dataTask
+        let callerCancelled = self.callerCancelled
+        stateLock.unlock()
+
+        dataTask.resume()
+        if callerCancelled {
+            dataTask.cancel()
+        }
+    }
+
+    private func cancelFromCaller() {
+        stateLock.lock()
+        callerCancelled = true
+        let dataTask = self.dataTask
+        stateLock.unlock()
+        dataTask?.cancel()
+    }
+
+    private static func isInternalCancellation(_ error: Error?) -> Bool {
+        guard let error else { return true }
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
     }
 }
 
