@@ -127,6 +127,51 @@ final class LaunchctlControllerTests: XCTestCase {
         )
     }
 
+    func testDomainInventoryRecognizesMacOSActiveServiceRows() throws {
+        let pending = "com.local.codexquotamenu.activation.0630"
+        let inactive = "com.local.codexquotamenu.activation.1102"
+        let running = "com.local.codexquotamenu.activation.1530"
+        let runner = RecordingLaunchctlRunner(results: [
+            .init(
+                terminationStatus: 0,
+                standardOutput: """
+                services = {
+                    0   (pe)  \(pending)
+                    0   -     \(inactive)
+                    0   712   \(running)
+                }
+                disabled services = {
+                    0   (pe)  com.local.codexquotamenu.activation.2359
+                }
+                """,
+                standardError: ""
+            )
+        ])
+
+        XCTAssertEqual(
+            try LaunchctlController(guiUserID: 501, runner: runner).loadedOwnedLabels(),
+            [pending, inactive, running]
+        )
+    }
+
+    func testUnknownActiveServiceRowMakesDomainInventoryUnavailable() {
+        let runner = RecordingLaunchctlRunner(results: [
+            .init(
+                terminationStatus: 0,
+                standardOutput: """
+                services = {
+                    unexpected service row
+                }
+                """,
+                standardError: ""
+            )
+        ])
+
+        XCTAssertThrowsError(
+            try LaunchctlController(guiUserID: 501, runner: runner).loadedOwnedLabels()
+        )
+    }
+
     func testTruncatedDomainInventoryIsUnavailableRatherThanIncomplete() {
         let runner = RecordingLaunchctlRunner(results: [
             .init(

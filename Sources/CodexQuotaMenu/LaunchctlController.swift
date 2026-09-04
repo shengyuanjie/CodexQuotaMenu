@@ -191,17 +191,27 @@ struct LaunchctlController: LaunchctlControlling {
         let serviceLines = try activeServiceLines(in: output)
         let prefix = NSRegularExpression.escapedPattern(for: ActivationLaunchAgentPolicy.labelPrefix)
         let labelPattern = "\(prefix)(?:[01][0-9]|2[0-3])[0-5][0-9]"
-        let rowPattern = "^(?:(?:0x[0-9A-Fa-f]+|[0-9]+)\\s*=\\s*)?(\(labelPattern))$"
-        guard let expression = try? NSRegularExpression(pattern: rowPattern) else {
+        let servicePrefix = "(?:(?:0x[0-9A-Fa-f]+|[0-9]+)\\s*=\\s*|[0-9]+\\s+\\([A-Za-z]+\\)\\s+|[0-9]+\\s+-\\s+|[0-9]+\\s+[0-9]+\\s+)?"
+        let rowPattern = "^\(servicePrefix)([^\\s{}]+)$"
+        let ownedLabelPattern = "^\(labelPattern)$"
+        guard let expression = try? NSRegularExpression(pattern: rowPattern),
+              let ownedLabelExpression = try? NSRegularExpression(pattern: ownedLabelPattern) else {
             throw LaunchctlControllerError.ambiguousInventory
         }
-        let labels = serviceLines.compactMap { line -> String? in
+        var labels: [String] = []
+        for line in serviceLines {
             let range = NSRange(line.startIndex..., in: line)
             guard let match = expression.firstMatch(in: line, range: range),
                   let labelRange = Range(match.range(at: 1), in: line) else {
-                return nil
+                throw LaunchctlControllerError.ambiguousInventory
             }
-            return String(line[labelRange])
+            let label = String(line[labelRange])
+            if ownedLabelExpression.firstMatch(
+                in: label,
+                range: NSRange(label.startIndex..., in: label)
+            ) != nil {
+                labels.append(label)
+            }
         }
         guard Set(labels).count == labels.count else {
             throw LaunchctlControllerError.ambiguousInventory
