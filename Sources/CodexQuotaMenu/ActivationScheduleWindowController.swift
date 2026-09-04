@@ -131,7 +131,7 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
             syncFeedback = .applied
             render()
             return true
-        } catch CodexAutomationSynchronizationError.recoveryRequired(let path) {
+        } catch ActivationLaunchAgentSynchronizationError.recoveryRequired(let path) {
             syncFeedback = .failed
             inlineError = textProvider().activationRecoveryRequiredError(path: path)
             render()

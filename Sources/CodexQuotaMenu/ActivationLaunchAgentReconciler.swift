@@ -1,5 +1,26 @@
 import Foundation
 
+struct AutomationDifference: Equatable, Sendable {
+    var missing: [ActivationTime] = []
+    var extra: [ActivationTime] = []
+    var duplicate: [ActivationTime] = []
+    var paused: [ActivationTime] = []
+    var misconfigured: [ActivationTime] = []
+    var unmatchedNames: [String] = []
+
+    var isEmpty: Bool {
+        missing.isEmpty && extra.isEmpty && duplicate.isEmpty && paused.isEmpty
+            && misconfigured.isEmpty
+    }
+}
+
+enum AutomationSyncState: Equatable, Sendable {
+    case unconfigured
+    case synced
+    case pending(AutomationDifference)
+    case unavailable(String)
+}
+
 enum ActivationSchedulerSnapshot: Equatable, Sendable {
     case available(agents: [ActivationLaunchAgent], loadedLabels: Set<String>)
     case unavailable(String)

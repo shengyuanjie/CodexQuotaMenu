@@ -55,15 +55,6 @@ final class CodexAutomationSynchronizerTests: XCTestCase {
         ).synchronize(entries: entries, timeZoneIdentifier: "Asia/Shanghai")
 
         XCTAssertEqual(try String(contentsOf: unrelated, encoding: .utf8), unrelatedSource)
-        let readResult = CodexAutomationReader(rootURL: root).readManagedAutomations()
-        XCTAssertEqual(
-            AutomationReconciler.evaluate(
-                entries: entries,
-                readResult: readResult,
-                timeZoneIdentifier: "Asia/Shanghai"
-            ),
-            .synced
-        )
         XCTAssertTrue(FileManager.default.fileExists(
             atPath: root.appendingPathComponent("codexquotamenu-06-30/automation.toml").path
         ))

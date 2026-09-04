@@ -17,8 +17,8 @@ final class LocalizationTests: XCTestCase {
         let chinese = AppText(language: .simplifiedChinese)
         let english = AppText(language: .english)
 
-        XCTAssertEqual(chinese.activationUnavailableDescription, "无法读取 Codex 计划任务状态。请稍后重试。")
-        XCTAssertEqual(english.activationUnavailableDescription, "Could not read Codex automation status. Try again later.")
+        XCTAssertEqual(chinese.activationUnavailableDescription, "无法读取后台激活任务状态。请稍后重试。")
+        XCTAssertEqual(english.activationUnavailableDescription, "Could not read background activation job status. Try again later.")
     }
 
     func testActivationScheduleFeedbackExplainsDirectSynchronization() {
@@ -27,23 +27,23 @@ final class LocalizationTests: XCTestCase {
 
         XCTAssertEqual(
             chinese.activationTasksAppliedStatus,
-            "已应用到 Codex，状态将自动检测。"
+            "后台激活任务已应用，状态将自动检测。"
         )
         XCTAssertEqual(
             english.activationTasksAppliedStatus,
-            "Applied to Codex. Status will be checked automatically."
+            "Background activation jobs applied. Status will be checked automatically."
         )
         XCTAssertEqual(
             chinese.activationDirectSyncFailedStatus,
-            "无法安全应用。Codex 计划任务可能未更改，或已恢复原状。"
+            "无法安全应用。后台激活任务可能未更改，或已恢复原状。"
         )
         XCTAssertEqual(
             english.activationDirectSyncFailedStatus,
-            "Could not apply safely. Codex automations may be unchanged or already restored."
+            "Could not apply safely. Background activation jobs may be unchanged or already restored."
         )
         XCTAssertEqual(
             chinese.activationRecoveryRequiredError(path: "/tmp/recovery"),
-            "无法确认计划任务已恢复。请勿删除恢复副本：/tmp/recovery"
+            "无法确认后台激活任务已恢复。请勿删除恢复副本：/tmp/recovery"
         )
         XCTAssertEqual(
             english.activationScheduleFullError,
