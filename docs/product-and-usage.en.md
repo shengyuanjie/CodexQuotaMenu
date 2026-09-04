@@ -15,7 +15,7 @@ Codex Usage is a native macOS menu bar utility for checking:
 - remaining Codex usage;
 - reset dates and countdowns;
 - tasks that are currently active;
-- the next-48-hour probability of a global bonus reset from Codex Reset Monitor.
+- the next-48-hour probability of a global bonus reset from the independent community source `willcodexreset.com`.
 
 The app has no main window or Dock icon. Completed-task counts are intentionally omitted.
 
@@ -33,7 +33,7 @@ Codex 90% · 4h 25m · ↻30% · ▶ 1
 |---|---|
 | `Codex 90%` | Remaining percentage for the shortest usage window |
 | `4h 25m` | Time until that window resets |
-| `↻30%` | Primary probability of a global bonus reset in the next 24 hours |
+| `↻48h 30%` | Probability of a global bonus reset in the next 48 hours |
 | `▶ 1` | Number of tasks that are still active |
 
 Open the menu to see every returned usage window, exact reset times, the Codex plan, task titles, the latest successful update time, and app actions.
@@ -64,9 +64,13 @@ Choose **Refresh Now** or press `R` while the menu is open to refresh immediatel
 
 If a refresh fails after a successful result, the menu bar keeps the last result and the menu shows the error. Automatic reconnection attempts continue.
 
-Forecasts refresh independently every five minutes from `codexreset.org/api/monitor-summary`. Data is marked cached after 15 minutes and hidden after two hours; forecast failure cannot block personal quota or task refreshes.
+Forecasts refresh independently every five minutes from `https://willcodexreset.com/api/reset-radar`. The app reads at most the first 64 KiB of each response, extracts only the response code, 48-hour probability, and source update time, and never retains or caches `events` text. Forecast failure cannot block personal quota or task refreshes.
 
-These are public community forecasts, not an official reset schedule or guarantee.
+The displayed update time is `data.updatedAt`, meaning when the community source updated its own forecast. The local fetch time is stored separately and determines freshness: data is marked cached after 15 minutes and hidden after two hours. The compact summary uses the v3 cache key `globalReset.willCodexResetForecast.v3`.
+
+When a low-probability cycle first reaches or exceeds 50%, the menu shows its encouragement message. It does not start another cycle while the probability stays high; after a completed reset it remains dismissed until the probability drops below 50% and crosses the threshold again.
+
+`willcodexreset.com` is an independent community service with no affiliation with or endorsement by OpenAI. Its forecast is not an official reset schedule or guarantee.
 
 ## Daily Activation Times
 
@@ -114,16 +118,16 @@ The release archive uses the ASCII name `CodexQuotaMenu` to prevent GitHub from 
 
 Apple Silicon:
 
-Use the following filenames to verify the official v1.6.6 release assets:
+Use the following filenames to verify the official v1.6.7 release assets:
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.6.6-macOS-arm64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.6.7-macOS-arm64.zip.sha256
 ```
 
 Intel:
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.6.6-macOS-x86_64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.6.7-macOS-x86_64.zip.sha256
 ```
 
 An `OK` result confirms that the ZIP matches its checksum file. Download both files from the same official Release.
@@ -163,14 +167,14 @@ The app processes:
 - local session-log paths returned by Codex;
 - up to the last 512 KB of relevant session logs;
 - the selected interface language;
-- public forecast values, status, and timestamps;
+- public forecast probability, source update time, and local fetch time;
 - whether the phone feed is enabled and its access token.
 
 For ordinary synchronization and reconciliation, the app reads only exact-owned files such as `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` and checks their per-user service state through `launchctl`. During first migration, it locally reads `~/.codex/automations/*/automation.toml` to identify and safely migrate entries with the exact complete name `CodexQuotaMenu · HH:mm`; it does not read their run conversations or modify other automations. A local check can confirm matching plist and loaded state, but cannot prove that an individual background run succeeded. The exact legacy entry is removed only after successful verification of the new LaunchAgents.
 
 Session-log fragments may contain task titles, tool-call metadata, and the current response. They are processed in memory and are not copied, uploaded, or stored in a project database. The app does not read or save Codex account tokens, passwords, or API keys and has no advertising, analytics, or telemetry.
 
-The app sends GET requests only to the documented `codexreset.org` public forecast endpoint and sends it no personal quota, task, identity, session, or Codex credential data. `UserDefaults` stores language, the phone-feed toggle, the non-personal forecast cache, and each activation entry's hour, minute, enabled state, and stable local ID; macOS Keychain stores the 32-byte phone token. Phone JSON excludes task titles, paths, and conversations. Scriptable stores its address and token in Scriptable Keychain and writes only non-sensitive JSON to its file cache.
+The app sends GET requests only to the documented `https://willcodexreset.com/api/reset-radar` public forecast endpoint and sends it no personal quota, task, identity, session, or Codex credential data. It reads at most a 64 KiB response prefix and never retains event text. `UserDefaults` stores language, the phone-feed toggle, the non-personal v3 forecast summary containing only probability and timestamps, and each activation entry's hour, minute, enabled state, and stable local ID; macOS Keychain stores the 32-byte phone token. Phone JSON excludes task titles, paths, and conversations. Scriptable stores its address and token in Scriptable Keychain and writes only non-sensitive JSON to its file cache.
 
 App Sandbox is not enabled because the app must launch a local Codex subprocess and read Codex session logs. The app does not request camera, microphone, contacts, calendar, location, photo-library, or Accessibility permissions.
 

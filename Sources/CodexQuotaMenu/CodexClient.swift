@@ -99,7 +99,7 @@ final class CodexClient {
             "id": 1,
             "method": "initialize",
             "params": [
-                "clientInfo": ["name": "codex-quota-menubar", "title": "Codex Usage", "version": "1.6.6"],
+                "clientInfo": ["name": "codex-quota-menubar", "title": "Codex Usage", "version": "1.6.7"],
                 "capabilities": ["experimentalApi": true]
             ]
         ], to: newInput.fileHandleForWriting)

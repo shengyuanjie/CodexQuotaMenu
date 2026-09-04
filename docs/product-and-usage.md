@@ -22,7 +22,7 @@ Codex 用量是一款原生 macOS 菜单栏工具，用于快速查看 Codex 剩
 - 显示用量窗口的具体重置时间和剩余倒计时；
 - 同时展示 Codex 返回的各个用量窗口和当前方案类型；
 - 使用 `▶` 显示当前仍处于活动状态的任务数量；
-- 使用 `↻48h` 显示 Codex Reset Monitor 的未来48小时全局额外重置概率；
+- 使用 `↻48h` 显示独立社区来源 `willcodexreset.com` 的未来48小时全局额外重置概率；
 - 在下拉菜单中列出最近的活动任务；
 - 支持跟随系统、简体中文和 English，并可即时切换；
 - 查询失败时保留菜单栏中的上次成功结果；
@@ -110,9 +110,11 @@ Codex 明确返回系统错误状态时，下拉菜单会显示 `⚠ 异常` 数
 
 ### 全局额外重置预测
 
-- `codexreset.org/api/monitor-summary` 是菜单栏和手机 `↻48h` 概率的唯一来源；
-- 每5分钟请求一次，失败不会阻塞个人用量和任务刷新；
-- 预测15分钟内视为实时，之后显示为缓存，超过2小时则隐藏。
+- `https://willcodexreset.com/api/reset-radar` 是菜单栏和手机 `↻48h` 概率的唯一来源；它是独立社区服务，与 OpenAI 无隶属或官方认可关系，预测不是官方计划或保证；
+- 每5分钟请求一次，失败不会阻塞个人用量和任务刷新；每次最多读取响应前缀 64 KiB，只提取响应代码、未来48小时概率和来源更新时间，不保留或缓存 `events` 事件文本；
+- 菜单和手机显示的预测更新时间来自 `data.updatedAt`，表示预测来源自身的更新时间；本机获取时间单独记录，只用于判断数据新鲜度；
+- 摘要使用 `globalReset.willCodexResetForecast.v3` 键缓存；本机获取后15分钟内视为实时，之后显示为缓存，超过2小时则隐藏；
+- 概率在一轮低概率状态后首次达到或超过 50% 时显示鼓励提示。概率保持高位时不会重复开始新一轮；两组用量进入下一重置周期后停止提示，概率先降到 50% 以下再重新越过阈值时才重新开始。
 
 ## 六、系统要求与版本选择
 
@@ -166,16 +168,16 @@ uname -m
 
 Apple Silicon：
 
-以下文件名用于校验 v1.6.6 的正式发布资产：
+以下文件名用于校验 v1.6.7 的正式发布资产：
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.6.6-macOS-arm64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.6.7-macOS-arm64.zip.sha256
 ```
 
 Intel：
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.6.6-macOS-x86_64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.6.7-macOS-x86_64.zip.sha256
 ```
 
 显示 `OK` 表示 ZIP 与发布时生成的校验值一致。校验只能证明文件与对应校验清单匹配，因此 ZIP 和 `.sha256` 都应从本项目的同一个 GitHub Release 下载。
@@ -256,7 +258,7 @@ shasum -a 256 -c CodexQuotaMenu-v1.6.6-macOS-x86_64.zip.sha256
 - Codex 返回的本机会话日志路径；
 - 相关会话日志末尾最多 512KB；
 - 用户选择的界面语言；
-- 公开预测接口返回的未来48小时概率、状态和时间；
+- 公开预测接口返回的未来48小时概率、来源更新时间和本机获取时间；
 - 用户是否启用手机接口，以及手机接口访问令牌。
 
 为同步和对账每日激活时间，应用日常读取并验证 `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` 这类精确归属的文件，并通过 `launchctl` 检查对应用户级服务是否已加载。首次迁移旧版调度时，会在本机读取 `~/.codex/automations/*/automation.toml`，以识别并安全迁移完整名称严格匹配 `CodexQuotaMenu · HH:mm` 的条目；不读取这些自动化的运行对话，也不修改其他 automation。应用不读取激活运行对话，也不上传调度配置。本地检测只能确认 plist 配置和加载状态一致，不能证明某次后台运行成功。
@@ -272,9 +274,9 @@ shasum -a 256 -c CodexQuotaMenu-v1.6.6-macOS-x86_64.zip.sha256
 - 不用于广告、遥测、崩溃上传或用户分析；
 - 不向预测站点发送个人余量、任务、身份、会话或 Codex 凭据。
 
-macOS `UserDefaults` 保存界面语言、手机接口开关、不含个人数据的公开预测缓存，以及每条激活时间的小时、分钟、启用状态和稳定本地 ID；缓存超过两小时不再显示。32 字节随机手机令牌只保存在 macOS Keychain。手机接口响应不含任务标题、路径或对话内容。Scriptable 把地址和令牌存入自己的 Keychain，本地文件只缓存非敏感 JSON 和接收时间。
+macOS `UserDefaults` 保存界面语言、手机接口开关、不含个人数据的公开预测摘要缓存，以及每条激活时间的小时、分钟、启用状态和稳定本地 ID。预测摘要使用 v3 键 `globalReset.willCodexResetForecast.v3`，只含概率、来源更新时间和本机获取时间，不含 `events`；缓存超过两小时不再显示。32 字节随机手机令牌只保存在 macOS Keychain。手机接口响应不含任务标题、路径或对话内容。Scriptable 把地址和令牌存入自己的 Keychain，本地文件只缓存非敏感 JSON 和接收时间。
 
-应用只额外请求已披露的 `codexreset.org` 公开预测 GET，不上传个人数据。它启动的 Codex 子进程可能按照 Codex 产品本身的正常方式连接 OpenAI 服务。
+应用只额外请求已披露的 `https://willcodexreset.com/api/reset-radar` 公开预测 GET，不上传个人数据。读取以 64 KiB 响应前缀为上限，事件文本不会进入本地缓存。它启动的 Codex 子进程可能按照 Codex 产品本身的正常方式连接 OpenAI 服务。
 
 由于核心功能需要启动本机 Codex 子进程并读取 Codex 返回路径对应的会话日志，应用没有启用 App Sandbox。应用不请求相机、麦克风、通讯录、日历、位置、照片或辅助功能权限。
 
@@ -395,7 +397,7 @@ defaults delete com.local.codexquotamenu
 - 任务状态依赖本机 Codex 接口和会话日志格式，Codex 后续更新可能影响兼容性；
 - 应用不区分活动任务是在实际执行，还是正在等待用户操作；
 - 菜单栏只显示最短用量窗口，其他窗口需点击后查看；
-- 全局额外重置概率来自公开社区预测，只表示不确定性估计，不保证一定发生；
+- 全局额外重置概率来自独立社区预测，与 OpenAI 无隶属或官方认可关系，只表示不确定性估计，不保证一定发生；
 - 应用仅提供信息展示，不会修改用量、重置时间或 Codex 任务；
 - 当前没有 Apple Developer 证书和公证，首次启动体验不如已公证应用；
 - 本项目核心应用仅支持 macOS；iPhone 端为 Scriptable 脚本，不是独立原生 App，后台刷新时间由 iOS 决定。
