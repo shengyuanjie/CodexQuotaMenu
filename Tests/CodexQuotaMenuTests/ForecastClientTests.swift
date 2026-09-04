@@ -3,14 +3,18 @@ import XCTest
 
 final class ForecastClientTests: XCTestCase {
     func testRequestUsesExactResetMonitorContract() async throws {
-        let json = #"{"reset":{"calibrationState":"experimental","score48h":82,"unit":"probability"}}"#
+        let json = #"{"code":0,"data":{"updatedAt":"2026-09-04T02:42:22.950Z","probability48h":82}}"#
         let loader = RecordingHTTPDataLoader(data: Data(json.utf8), statusCode: 200)
         let client = ForecastClient(loader: loader, appVersion: "1.6.1")
         let now = Date(timeIntervalSince1970: 123_456)
+        let sourceUpdatedAtFormatter = ISO8601DateFormatter()
+        sourceUpdatedAtFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let sourceUpdatedAt = try XCTUnwrap(sourceUpdatedAtFormatter.date(from: "2026-09-04T02:42:22.950Z"))
 
         let value = try await client.fetch(now: now)
 
         XCTAssertEqual(value.probability48h, 82)
+        XCTAssertEqual(value.sourceUpdatedAt, sourceUpdatedAt)
         XCTAssertEqual(value.fetchedAt, now)
         let request = try XCTUnwrap(loader.requests.first)
         XCTAssertEqual(request.url?.absoluteString, "https://codexreset.org/api/monitor-summary")
