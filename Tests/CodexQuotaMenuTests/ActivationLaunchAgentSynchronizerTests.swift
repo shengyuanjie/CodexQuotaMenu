@@ -162,6 +162,42 @@ final class ActivationLaunchAgentSynchronizerTests: XCTestCase {
         XCTAssertEqual(try fixture.recoveryDirectories(), [])
     }
 
+    func testConcurrentReplacementImmediatelyAfterInstallIsNotClaimedByRollback() throws {
+        let fixture = try Fixture(codexURL: codexURL, homeURL: homeURL)
+        defer { fixture.remove() }
+        let six = try ActivationTime(hour: 6, minute: 0)
+        let eleven = try ActivationTime(hour: 11, minute: 0)
+        let sixFile = fixture.policy.fileURL(for: six, in: fixture.launchAgentsURL)
+        let elevenFile = fixture.policy.fileURL(for: eleven, in: fixture.launchAgentsURL)
+        let concurrentData = Data("concurrent post-install replacement".utf8)
+        let synchronizer = fixture.synchronizer(hooks: .init(
+            beforeInstallingAgent: { url in
+                if url == elevenFile {
+                    throw FixtureError.injected
+                }
+            },
+            afterInstallingAgent: { url in
+                if url == sixFile {
+                    try concurrentData.write(to: url, options: .atomic)
+                }
+            }
+        ))
+        var recoveryPath: String?
+
+        XCTAssertThrowsError(try synchronizer.synchronize(entries: [
+            .init(time: six),
+            .init(time: eleven)
+        ])) { error in
+            guard case ActivationLaunchAgentSynchronizationError.recoveryRequired(let path) = error else {
+                return XCTFail("expected recoveryRequired, got \(error)")
+            }
+            recoveryPath = path
+        }
+
+        XCTAssertEqual(try Data(contentsOf: sixFile), concurrentData)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(recoveryPath)))
+    }
+
     func testConcurrentReplacementAtExistingRemovalBoundaryIsRestoredWithoutOverwrite() throws {
         let fixture = try Fixture(codexURL: codexURL, homeURL: homeURL)
         defer { fixture.remove() }

@@ -110,17 +110,20 @@ struct CodexProcessRunner: CodexCommandRunning {
 
 struct ActivationLaunchAgentSynchronizationHooks {
     var beforeInstallingAgent: (URL) throws -> Void
+    var afterInstallingAgent: (URL) throws -> Void
     var beforeIsolatingExistingAgent: (URL) throws -> Void
     var beforeIsolatingInstalledAgentDuringRollback: (URL) throws -> Void
     var beforeRollback: () throws -> Void
 
     init(
         beforeInstallingAgent: @escaping (URL) throws -> Void = { _ in },
+        afterInstallingAgent: @escaping (URL) throws -> Void = { _ in },
         beforeIsolatingExistingAgent: @escaping (URL) throws -> Void = { _ in },
         beforeIsolatingInstalledAgentDuringRollback: @escaping (URL) throws -> Void = { _ in },
         beforeRollback: @escaping () throws -> Void = {}
     ) {
         self.beforeInstallingAgent = beforeInstallingAgent
+        self.afterInstallingAgent = afterInstallingAgent
         self.beforeIsolatingExistingAgent = beforeIsolatingExistingAgent
         self.beforeIsolatingInstalledAgentDuringRollback = beforeIsolatingInstalledAgentDuringRollback
         self.beforeRollback = beforeRollback
@@ -290,8 +293,10 @@ struct ActivationLaunchAgentSynchronizer: ActivationLaunchAgentSynchronizing {
                     throw ActivationLaunchAgentSynchronizationError.targetCollision
                 }
                 let staged = policy.fileURL(for: agent.time, in: stagingRoot)
+                let expectedFingerprint = try fileFingerprint(at: staged)
                 try installExclusively(staged, at: destination)
-                installedFingerprints[destination] = try fileFingerprint(at: destination)
+                try hooks.afterInstallingAgent(destination)
+                installedFingerprints[destination] = expectedFingerprint
                 try controller.bootstrap(plistURL: destination)
                 successfullyBootstrappedLabels.insert(agent.label)
             }
