@@ -1,0 +1,75 @@
+import Foundation
+
+enum ActivationSchedulerSnapshot: Equatable, Sendable {
+    case available(agents: [ActivationLaunchAgent], loadedLabels: Set<String>)
+    case unavailable(String)
+
+    static func read(
+        readResult: ActivationLaunchAgentReadResult,
+        controller: LaunchctlControlling
+    ) -> Self {
+        switch readResult {
+        case .unavailable(let reason):
+            return .unavailable(reason)
+        case .available(let agents):
+            do {
+                var loadedLabels = Set<String>()
+                for label in Set(agents.map(\.label)) where try controller.isLoaded(label: label) {
+                    loadedLabels.insert(label)
+                }
+                return .available(agents: agents, loadedLabels: loadedLabels)
+            } catch {
+                return .unavailable("LaunchAgent loaded state is unavailable")
+            }
+        }
+    }
+}
+
+enum ActivationLaunchAgentReconciler {
+    static func evaluate(
+        entries: [ActivationScheduleEntry],
+        snapshot: ActivationSchedulerSnapshot
+    ) -> AutomationSyncState {
+        guard case .available(let agents, let loadedLabels) = snapshot else {
+            if case .unavailable(let reason) = snapshot {
+                return .unavailable(reason)
+            }
+            return .unavailable("LaunchAgent scheduler state is unavailable")
+        }
+
+        let desired = Set(entries.filter(\.isEnabled).map(\.time))
+        let groupedAgents = Dictionary(grouping: agents, by: \.time)
+        let configuredTimes = Set(groupedAgents.keys)
+        let loadedTimes = Set(loadedLabels.compactMap(time(forOwnedLabel:)))
+        let actualTimes = configuredTimes.union(loadedTimes)
+        var difference = AutomationDifference()
+
+        difference.missing = desired.subtracting(configuredTimes).sorted()
+        difference.extra = actualTimes.subtracting(desired).sorted()
+        difference.duplicate = groupedAgents.compactMap { time, values in
+            values.count > 1 ? time : nil
+        }.sorted()
+        difference.paused = desired
+            .intersection(configuredTimes)
+            .subtracting(loadedTimes)
+            .sorted()
+
+        if desired.isEmpty && actualTimes.isEmpty {
+            return .unconfigured
+        }
+        return difference.isEmpty ? .synced : .pending(difference)
+    }
+
+    private static func time(forOwnedLabel label: String) -> ActivationTime? {
+        guard label.hasPrefix(ActivationLaunchAgentPolicy.labelPrefix) else { return nil }
+        let suffix = label.dropFirst(ActivationLaunchAgentPolicy.labelPrefix.count)
+        let bytes = Array(suffix.utf8)
+        guard bytes.count == 4,
+              bytes.allSatisfy({ (48...57).contains($0) }),
+              let hour = Int(suffix.prefix(2)),
+              let minute = Int(suffix.suffix(2)) else {
+            return nil
+        }
+        return try? ActivationTime(hour: hour, minute: minute)
+    }
+}
