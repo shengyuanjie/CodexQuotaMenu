@@ -65,6 +65,21 @@ final class MenuPresentationTests: XCTestCase {
         )
     }
 
+    func testFallbackKeepsQuotaDetailsBelowFiftyPercentForecast() {
+        XCTAssertEqual(
+            MenuPresentation.title(
+                shortRemainingPercent: 81,
+                shortResetText: "3时",
+                weeklyRemainingPercent: 62,
+                weeklyResetText: "2天",
+                forecast: forecast(49),
+                runningCount: 2,
+                language: .simplifiedChinese
+            ),
+            "Codex  晌81%余3时  周62%余2天  ▶2"
+        )
+    }
+
     func testEnglishTitleReplacesQuotaDetailsWhenCelebrationIsActive() {
         XCTAssertEqual(
             MenuPresentation.title(

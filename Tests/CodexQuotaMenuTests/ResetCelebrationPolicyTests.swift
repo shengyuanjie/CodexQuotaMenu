@@ -169,6 +169,7 @@ final class ResetCelebrationPolicyTests: XCTestCase {
 
         store.save(expected)
 
+        XCTAssertNotNil(defaults.data(forKey: "resetCelebration.state.v2"))
         XCTAssertEqual(UserDefaultsResetCelebrationStateStore(defaults: defaults).load(), expected)
     }
 
