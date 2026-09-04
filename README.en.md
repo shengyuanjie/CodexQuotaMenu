@@ -71,7 +71,7 @@ Do not download builds from unofficial mirror sites. Public release archives are
 6. For an iPhone lock-screen display, follow the [Scriptable setup guide](mobile/README.md) and enable the **Phone Widget** read-only feed.
 7. Choose **Quit**, or press `Q` while the menu is open, to stop all queries and the phone feed.
 
-Managed LaunchAgent labels and filenames exactly match `com.local.codexquotamenu.activation.HHMM` under `~/Library/LaunchAgents/`. Prefix-sharing files are not owned and remain untouched. With an empty time list, **Apply to Codex** removes only the app's own LaunchAgents. Local status checks are read-only; managed scheduling changes only when the user chooses **Apply to Codex**. Successful runs are silent; the CLI's notification policy applies only when a run fails. After sleep, macOS may coalesce a missed calendar trigger into one catch-up run.
+Managed LaunchAgent labels and filenames exactly match `com.local.codexquotamenu.activation.HHMM` under `~/Library/LaunchAgents/`. Prefix-sharing files are not owned and remain untouched. With an empty time list, **Apply to Codex** removes only the app's own LaunchAgents. Local status checks are read-only; managed scheduling changes only when the user chooses **Apply to Codex**. Both standard output and standard error go to `/dev/null`; individual run results are not persisted, displayed, or notified, so success and failure are currently silent. **Synced** means only that configuration and loaded state agree. After sleep, macOS may coalesce a missed calendar trigger into one catch-up run.
 
 To start the app at login, open **System Settings → General → Login Items**, click **+**, and select `Codex用量.app` from Applications.
 
@@ -81,7 +81,7 @@ The app queries local usage and tasks every five seconds and refreshes public fo
 
 The app queries usage and task metadata through a local Codex process. To identify whether a task is still active or completed, it may parse structured lifecycle events from up to the last 512 KB of relevant local Codex session logs. It no longer analyzes response text to infer user intent.
 
-For daily activation, the app normally reads and validates only exact-owned LaunchAgent plists under `~/Library/LaunchAgents/` and checks their per-user `launchctl` loaded state. During first migration, it scans legacy automation names only to identify the exact `CodexQuotaMenu · HH:mm` entries; it does not read their conversations or unrelated configuration, and it does not modify any other automation. It stages and validates the new target set before replacement and attempts to restore this run's changes on failure. A local check can confirm matching plist and loaded state, but cannot prove that an individual background run succeeded.
+For daily activation, the app normally reads and validates only exact-owned LaunchAgent plists under `~/Library/LaunchAgents/` and checks their per-user `launchctl` loaded state. During first migration, it locally reads `~/.codex/automations/*/automation.toml` to identify and safely migrate entries with the exact complete name `CodexQuotaMenu · HH:mm`; it does not read their run conversations or modify any other automation. It stages and validates the new target set before replacement and attempts to restore this run's changes on failure. A local check can confirm matching plist and loaded state, but cannot prove that an individual background run succeeded.
 
 All session content is processed in memory. It is not copied, stored in a project database, uploaded, or used for telemetry.
 
@@ -105,6 +105,8 @@ See the [English privacy notice](PRIVACY.en.md) for the complete statement.
 - **macOS cannot verify the developer:** Confirm that the archive came from this project's Release page and passed SHA-256 verification, then right-click the app in Finder and choose **Open**.
 
 See the [full product and usage guide](docs/product-and-usage.en.md) for additional troubleshooting and uninstall instructions.
+
+If the app is still installed, remove every time in **Activation Times…**, choose **Apply to Codex**, and confirm **Not Configured** before deleting the app. If the app has already been deleted, unload and remove only LaunchAgents whose filename and plist `Label` both exactly match `com.local.codexquotamenu.activation.HHMM` (`HH` is `00`–`23`; `MM` is `00`–`59`). Never use a prefix wildcard to delete LaunchAgents; the linked guide provides per-item inspection and commands.
 
 ## Build from Source
 

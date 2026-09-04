@@ -71,7 +71,7 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         let model = ActivationScheduleSettingsModel(
             store: ActivationScheduleStore(defaults: defaults),
             readSnapshot: { .available(agents: [], loadedLabels: []) },
-            synchronizer: ThrowingWindowSynchronizer(error: .recoveryRequired(recoveryPath))
+            synchronizer: ThrowingWindowSynchronizer(error: .recoveryRequired([recoveryPath]))
         )
         model.load()
         let controller = ActivationScheduleWindowController(
@@ -88,6 +88,66 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         XCTAssertNil(findTextField(in: controller.window?.contentView) {
             $0.stringValue.contains("existing Codex automations were preserved")
         })
+    }
+
+    func testRecoveryRequiredShowsEveryRetainedRecoveryDirectory() throws {
+        let suite = "ActivationScheduleWindowControllerTests.RecoveryPaths.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let recoveryPaths = [
+            "/tmp/.codexquotamenu-recovery-legacy",
+            "/tmp/.codexquotamenu-launchagent-recovery-current"
+        ]
+        let model = ActivationScheduleSettingsModel(
+            store: ActivationScheduleStore(defaults: defaults),
+            readSnapshot: { .available(agents: [], loadedLabels: []) },
+            synchronizer: ThrowingWindowSynchronizer(error: .recoveryRequired(recoveryPaths))
+        )
+        model.load()
+        let controller = ActivationScheduleWindowController(
+            model: model,
+            textProvider: { AppText(language: .english) }
+        )
+
+        XCTAssertFalse(controller.performSync(timeZoneIdentifier: "Asia/Shanghai"))
+
+        XCTAssertEqual(controller.syncFeedback, .failed)
+        XCTAssertNotNil(findTextField(in: controller.window?.contentView) {
+            $0.stringValue == "Recovery could not be verified. Do not delete these recovery copies:\n"
+                + recoveryPaths.joined(separator: "\n")
+        })
+    }
+
+    func testDeleteButtonOnlyUpdatesSavedSettingsUntilApply() throws {
+        let suite = "ActivationScheduleWindowControllerTests.DeleteNoSync.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ActivationScheduleStore(defaults: defaults)
+        let entry = ActivationScheduleEntry(time: try ActivationTime(hour: 6, minute: 0))
+        try store.save([entry])
+        let synchronizer = RecordingWindowSynchronizer()
+        let model = ActivationScheduleSettingsModel(
+            store: store,
+            readSnapshot: { .available(agents: [], loadedLabels: []) },
+            synchronizer: synchronizer
+        )
+        model.load()
+        let controller = ActivationScheduleWindowController(
+            model: model,
+            textProvider: { AppText(language: .english) }
+        )
+        let deleteButton = try XCTUnwrap(
+            findButton(in: controller.window?.contentView, title: "Delete")
+        )
+
+        deleteButton.performClick(nil)
+
+        XCTAssertEqual(model.entries, [])
+        XCTAssertEqual(try store.load(), [])
+        XCTAssertEqual(synchronizer.entries, [])
+        guard case .pending = model.syncState else {
+            return XCTFail("deleting a saved entry must remain pending until Apply to Codex")
+        }
     }
 
     func testKeyWindowRefreshStartsTenSecondTimerAndCloseStopsIt() async {

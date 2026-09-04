@@ -221,7 +221,7 @@ shasum -a 256 -c CodexQuotaMenu-v1.6.6-macOS-x86_64.zip.sha256
 
 应用只管理文件名和标签均严格匹配 `com.local.codexquotamenu.activation.HHMM` 的 LaunchAgent，文件位于 `~/Library/LaunchAgents/`。仅共享前缀但不完整匹配的文件不属于本工具并保持不变。若时间列表为空，“应用到 Codex”会移除本工具自己的 LaunchAgent。
 
-应用会先在临时目录生成并验证完整目标配置，再替换受管 LaunchAgent；失败时尝试恢复本轮变更。写入后窗口自动重新检查 plist 配置和 `launchctl` 加载状态，只有两者与本地设置完全一致时才显示“已同步”。正常状态下不需要手动刷新，只有读取失败时才显示“重试检测”。本地对账不能证明某次后台运行成功。只有修改时间后才需再次应用；退出 CodexQuotaMenu 不会停止或删除已创建的后台任务。首次迁移时，只有完整名称严格匹配 `CodexQuotaMenu · HH:mm` 的旧版自动化会在新调度验证成功后移除，其他自动化保持不变。成功运行保持静默，失败时由 CLI 按任务通知策略提示。Mac 从睡眠唤醒时，macOS 可能将错过的日历触发合并为一次补执行；应用不会自行追赶多次。
+应用会先在临时目录生成并验证完整目标配置，再替换受管 LaunchAgent；失败时尝试恢复本轮变更。写入后窗口自动重新检查 plist 配置和 `launchctl` 加载状态，只有两者与本地设置完全一致时才显示“已同步”。正常状态下不需要手动刷新，只有读取失败时才显示“重试检测”。本地对账不能证明某次后台运行成功。只有修改时间后才需再次应用；退出 CodexQuotaMenu 不会停止或删除已创建的后台任务。首次迁移时，只有完整名称严格匹配 `CodexQuotaMenu · HH:mm` 的旧版自动化会在新调度验证成功后移除，其他自动化保持不变。后台命令的标准输出和标准错误均写入 `/dev/null`，单次执行结果不持久化，当前应用也不显示或通知其成败，因此成功和失败都保持静默。Mac 从睡眠唤醒时，macOS 可能将错过的日历触发合并为一次补执行；应用不会自行追赶多次。
 
 本机状态检测本身只读；只有用户点击“应用到 Codex”时，应用才会更改自己的 LaunchAgent，并执行范围严格限定的旧版迁移。
 
@@ -259,7 +259,7 @@ shasum -a 256 -c CodexQuotaMenu-v1.6.6-macOS-x86_64.zip.sha256
 - 公开预测接口返回的未来48小时概率、状态和时间；
 - 用户是否启用手机接口，以及手机接口访问令牌。
 
-为同步和对账每日激活时间，应用日常读取并验证 `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` 这类精确归属的文件，并通过 `launchctl` 检查对应用户级服务是否已加载。首次迁移旧版调度时，只扫描旧 automation 的名称来识别完整名称严格匹配 `CodexQuotaMenu · HH:mm` 的条目，不读取运行对话或超出识别所需的内容，也不修改其他 automation。应用不读取激活运行对话，也不上传调度配置。本地检测只能确认 plist 配置和加载状态一致，不能证明某次后台运行成功。
+为同步和对账每日激活时间，应用日常读取并验证 `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` 这类精确归属的文件，并通过 `launchctl` 检查对应用户级服务是否已加载。首次迁移旧版调度时，会在本机读取 `~/.codex/automations/*/automation.toml`，以识别并安全迁移完整名称严格匹配 `CodexQuotaMenu · HH:mm` 的条目；不读取这些自动化的运行对话，也不修改其他 automation。应用不读取激活运行对话，也不上传调度配置。本地检测只能确认 plist 配置和加载状态一致，不能证明某次后台运行成功。
 
 日志片段只用于识别任务开始、用户消息、任务完成等结构化生命周期事件，以及近期是否仍有任务活动。应用不再分析回复文字或工具调用内容来判断用户意图。
 
@@ -355,9 +355,29 @@ CODEX_CLI_PATH=/完整路径/codex
 
 ### 完全卸载
 
-1. 先退出应用；
-2. 从“系统设置 → 通用 → 登录项”中移除；
-3. 将“应用程序”中的 `Codex用量.app` 移到废纸篓。
+1. 应用仍在时，先打开“激活时间设置…”，删除全部时间，点击“应用到 Codex”，并确认状态为“未配置”；这会卸载并删除本工具严格归属的 LaunchAgent；
+2. 退出应用；
+3. 从“系统设置 → 通用 → 登录项”中移除；
+4. 将“应用程序”中的 `Codex用量.app` 移到废纸篓。
+
+若应用已经删除，先只读列出可能的文件：
+
+```sh
+find "$HOME/Library/LaunchAgents" -maxdepth 1 -type f \
+  -name 'com.local.codexquotamenu.activation.*.plist' -print
+```
+
+仅处理文件名严格符合 `com.local.codexquotamenu.activation.HHMM.plist`、其中 `HH` 为 `00`–`23`、`MM` 为 `00`–`59`，并且 plist 内 `Label` 与文件名（去掉 `.plist`）完全相同的项目。逐项把下面示例中的 `0630` 换成刚确认的四位时间；先检查输出的 `Label`，再卸载并删除这一项。若 `bootout` 提示服务未加载，仍可删除已确认的精确 plist 文件。
+
+```sh
+label='com.local.codexquotamenu.activation.0630'
+plist="$HOME/Library/LaunchAgents/$label.plist"
+plutil -extract Label raw -o - "$plist"
+launchctl bootout "gui/$(id -u)/$label"
+rm -- "$plist"
+```
+
+不要用 `com.local.codexquotamenu.activation.*` 之类通配符执行 `bootout` 或删除；共享前缀但不完整匹配的 LaunchAgent 不属于本工具。
 
 应用不创建用户数据库或独立缓存目录，但会在 `UserDefaults` 保存公开预测缓存和开关，在 Keychain 保存手机令牌。卸载本工具不会删除 Codex 应用、Codex 登录状态或原有任务记录。
 

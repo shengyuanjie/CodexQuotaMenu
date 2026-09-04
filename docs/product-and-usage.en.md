@@ -74,7 +74,7 @@ Open **Activation Times…**, add the times you need each day, then choose **App
 
 The app manages only LaunchAgent files and labels that exactly match `com.local.codexquotamenu.activation.HHMM` under `~/Library/LaunchAgents/`. Prefix-sharing files are not owned and remain untouched. If the time list is empty, **Apply to Codex** removes only the app's own LaunchAgents.
 
-The app first stages and validates the complete target configuration, then replaces the managed LaunchAgents and attempts to restore this run's changes if synchronization fails. The window checks plist contents and actual `launchctl` loaded state automatically and shows **Synced** only when both match the saved settings. Manual refresh is hidden during normal operation; **Retry Check** appears only when status cannot be read. A local reconciliation cannot prove that an individual background run succeeded. You need to apply again only after changing a time; quitting CodexQuotaMenu does not stop or remove background LaunchAgents already created. During first migration, only legacy automations with the exact complete name `CodexQuotaMenu · HH:mm` are removed after the new scheduler verifies successfully; all other automations remain untouched. Successful scheduled runs are silent; the CLI's notification policy applies when a run fails. After sleep, macOS may coalesce a missed calendar trigger into one catch-up run; the app does not perform additional catch-up runs.
+The app first stages and validates the complete target configuration, then replaces the managed LaunchAgents and attempts to restore this run's changes if synchronization fails. The window checks plist contents and actual `launchctl` loaded state automatically and shows **Synced** only when both match the saved settings. Manual refresh is hidden during normal operation; **Retry Check** appears only when status cannot be read. A local reconciliation cannot prove that an individual background run succeeded. You need to apply again only after changing a time; quitting CodexQuotaMenu does not stop or remove background LaunchAgents already created. During first migration, only legacy automations with the exact complete name `CodexQuotaMenu · HH:mm` are removed after the new scheduler verifies successfully; all other automations remain untouched. Both standard output and standard error go to `/dev/null`; individual run results are not persisted, displayed, or notified, so success and failure are currently silent. After sleep, macOS may coalesce a missed calendar trigger into one catch-up run; the app does not perform additional catch-up runs.
 
 Local status checks are read-only. The app changes its exact-owned LaunchAgents, and performs the narrowly scoped legacy migration, only when you choose **Apply to Codex**.
 
@@ -166,7 +166,7 @@ The app processes:
 - public forecast values, status, and timestamps;
 - whether the phone feed is enabled and its access token.
 
-For ordinary synchronization and reconciliation, the app reads only exact-owned files such as `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` and checks their per-user service state through `launchctl`. During first migration, it scans legacy automation names only to identify the exact complete name `CodexQuotaMenu · HH:mm`; it does not read run conversations or unrelated configuration, and it does not modify other automations. A local check can confirm matching plist and loaded state, but cannot prove that an individual background run succeeded. The exact legacy entry is removed only after successful verification of the new LaunchAgents.
+For ordinary synchronization and reconciliation, the app reads only exact-owned files such as `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` and checks their per-user service state through `launchctl`. During first migration, it locally reads `~/.codex/automations/*/automation.toml` to identify and safely migrate entries with the exact complete name `CodexQuotaMenu · HH:mm`; it does not read their run conversations or modify other automations. A local check can confirm matching plist and loaded state, but cannot prove that an individual background run succeeded. The exact legacy entry is removed only after successful verification of the new LaunchAgents.
 
 Session-log fragments may contain task titles, tool-call metadata, and the current response. They are processed in memory and are not copied, uploaded, or stored in a project database. The app does not read or save Codex account tokens, passwords, or API keys and has no advertising, analytics, or telemetry.
 
@@ -208,9 +208,29 @@ Choose **Quit** or press `Q` while the menu is open.
 
 To uninstall:
 
-1. Quit the app.
-2. Remove it from Login Items.
-3. Move `Codex用量.app` from Applications to Trash.
+1. While the app is still installed, open **Activation Times…**, remove every time, choose **Apply to Codex**, and confirm **Not Configured**. This unloads and removes the app's exact-owned LaunchAgents.
+2. Quit the app.
+3. Remove it from Login Items.
+4. Move `Codex用量.app` from Applications to Trash.
+
+If the app has already been deleted, first list possible files without changing them:
+
+```sh
+find "$HOME/Library/LaunchAgents" -maxdepth 1 -type f \
+  -name 'com.local.codexquotamenu.activation.*.plist' -print
+```
+
+Handle only items whose filename exactly matches `com.local.codexquotamenu.activation.HHMM.plist`, where `HH` is `00`–`23` and `MM` is `00`–`59`, and whose plist `Label` exactly equals the filename without `.plist`. For each confirmed item, replace `0630` below with that four-digit time, inspect the printed label, then unload and remove only that item. If `bootout` says the service is not loaded, the confirmed exact plist can still be removed.
+
+```sh
+label='com.local.codexquotamenu.activation.0630'
+plist="$HOME/Library/LaunchAgents/$label.plist"
+plutil -extract Label raw -o - "$plist"
+launchctl bootout "gui/$(id -u)/$label"
+rm -- "$plist"
+```
+
+Never use a wildcard such as `com.local.codexquotamenu.activation.*` for `bootout` or deletion. Prefix-sharing LaunchAgents are not owned by this app.
 
 The app creates no user database or separate cache directory, but keeps public forecast cache and preferences, including activation entries, in `UserDefaults` and the phone token in Keychain. To remove the preferences and forecast cache:
 

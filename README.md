@@ -71,7 +71,7 @@ Codex 90% · 4时25分 · ↻30% · ▶ 1
 6. 如需 iPhone 锁屏显示，按 [Scriptable 配置说明](mobile/README.md) 启用“手机小组件”只读接口。
 7. 选择“退出”，或在菜单打开时按 `Q`，可停止应用及本机状态查询和手机接口。
 
-受管 LaunchAgent 只使用完整标签 `com.local.codexquotamenu.activation.HHMM`，对应文件位于 `~/Library/LaunchAgents/`；共享前缀但不完整匹配的文件保持不变。时间列表为空时，“应用到 Codex”会移除本工具自己的 LaunchAgent。同步会先验证新 LaunchAgent，再严格迁移并移除旧版由本工具创建的 Codex 自动化；其他自动化不受影响。本机状态检查本身只读，只有用户点击“应用到 Codex”时才会更改调度。成功运行保持静默，失败时由 CLI 按其通知策略提示。Mac 从睡眠唤醒时，macOS 可能将错过的日历触发合并为一次补执行；应用不会自行追赶多次。
+受管 LaunchAgent 只使用完整标签 `com.local.codexquotamenu.activation.HHMM`，对应文件位于 `~/Library/LaunchAgents/`；共享前缀但不完整匹配的文件保持不变。时间列表为空时，“应用到 Codex”会移除本工具自己的 LaunchAgent。同步会先验证新 LaunchAgent，再严格迁移并移除旧版由本工具创建的 Codex 自动化；其他自动化不受影响。本机状态检查本身只读，只有用户点击“应用到 Codex”时才会更改调度。后台命令的标准输出和标准错误均写入 `/dev/null`，单次执行结果不持久化，当前也不在应用中显示或通知，因此成功和失败都保持静默；“已同步”只表示配置与加载状态一致。Mac 从睡眠唤醒时，macOS 可能将错过的日历触发合并为一次补执行；应用不会自行追赶多次。
 
 如需登录后自动启动，请打开“系统设置 → 通用 → 登录项”，点击“+”并选择“应用程序”中的 `Codex用量.app`。
 
@@ -81,7 +81,7 @@ Codex 90% · 4时25分 · ↻30% · ▶ 1
 
 应用会通过本机 Codex 进程查询用量和任务列表，并在本机读取 Codex 会话日志末尾最多 512KB，按结构化生命周期事件识别任务是否仍在活动、是否已经完成。会话内容只在内存中处理，不保存、不上传，也不包含遥测。
 
-为同步和对账每日激活时间，应用日常只读取并验证 `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` 这类精确归属的文件，并通过 `launchctl` 检查对应用户级服务是否已加载。首次迁移旧版调度时，只扫描旧 automation 的名称来识别完整名称严格匹配 `CodexQuotaMenu · HH:mm` 的条目，不读取运行对话或超出识别所需的内容，也不修改其他 automation。写入前会暂存并验证完整目标配置；失败时尝试恢复本轮变更。应用不读取激活运行对话，也不上传调度配置；本地检测只能确认配置和加载状态，不能证明某次后台运行成功。
+为同步和对账每日激活时间，应用日常只读取并验证 `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` 这类精确归属的文件，并通过 `launchctl` 检查对应用户级服务是否已加载。首次迁移旧版调度时，会在本机读取 `~/.codex/automations/*/automation.toml`，用于识别并安全迁移完整名称严格匹配 `CodexQuotaMenu · HH:mm` 的条目；不会读取这些自动化的运行对话，也不会修改其他 automation。写入前会暂存并验证完整目标配置；失败时尝试恢复本轮变更。应用不读取激活运行对话，也不上传调度配置；本地检测只能确认配置和加载状态，不能证明某次后台运行成功。
 
 为显示公开预测，应用只请求 `codexreset.org/api/monitor-summary`，并只展示未来48小时概率；不发送个人余量、任务、身份或 Codex 凭据。公开预测缓存、手机接口开关，以及每条激活时间的小时、分钟、启用状态和稳定本地 ID 保存在 `UserDefaults`；手机访问令牌保存在 macOS Keychain。手机接口默认关闭，响应只含汇总数值。
 
@@ -103,6 +103,8 @@ Codex 90% · 4时25分 · ↻30% · ▶ 1
 - **安装后提示无法验证开发者**：先确认安装包来自本项目 Release 且 SHA-256 校验通过，再在 Finder 中右键应用并选择“打开”。
 
 更多排查方法和卸载步骤见 [产品功能与使用说明](docs/product-and-usage.md)。
+
+卸载前若应用仍在，先在“激活时间设置…”中删除全部时间并点击“应用到 Codex”，确认显示“未配置”后再删除应用。若应用已经删除，只应逐项卸载并移除文件名和 plist 内 `Label` 都严格匹配 `com.local.codexquotamenu.activation.HHMM`（`HH` 为 `00`–`23`、`MM` 为 `00`–`59`）的 LaunchAgent；不要用前缀通配批量删除。安全的逐项检查与命令见上述完整说明。
 
 ## 从源码构建
 

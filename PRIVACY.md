@@ -2,7 +2,7 @@
 
 [English](PRIVACY.en.md) | 简体中文
 
-更新日期：2026-09-02
+更新日期：2026-09-04
 
 Codex 用量菜单栏以本地处理为原则，不运营公网服务，不包含广告、遥测或用户分析。用户可以主动开启一个仅供手机小组件读取的本机局域网服务；该服务默认关闭。
 
@@ -15,7 +15,7 @@ Codex 用量菜单栏以本地处理为原则，不运营公网服务，不包�
 - Codex 返回的本机会话日志路径；
 - 每个相关会话日志末尾最多 512KB，仅用于识别任务开始、用户消息、任务完成等结构化生命周期事件，以及任务日志近期是否仍有活动。
 
-为同步和对账每日激活时间，应用日常只读取并验证 `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` 这类严格归属的文件，以及通过 `launchctl` 获取对应用户级服务的加载状态。首次迁移旧版调度时，应用只扫描旧 automation 的名称，以识别完整名称严格匹配 `CodexQuotaMenu · HH:mm` 的条目；不会读取运行对话或超出识别所需的内容，也不会修改其他 automation 或仅共享前缀的条目。
+为同步和对账每日激活时间，应用日常只读取并验证 `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` 这类严格归属的文件，以及通过 `launchctl` 获取对应用户级服务的加载状态。首次迁移旧版调度时，应用会在本机读取 `~/.codex/automations/*/automation.toml`，用于识别并安全迁移完整名称严格匹配 `CodexQuotaMenu · HH:mm` 的条目；不会读取这些自动化的运行对话，也不会修改其他 automation 或仅共享前缀的条目。
 
 会话日志片段可能包含任务标题、工具调用元数据和当前轮回复文本。
 应用不会分析回复文字或工具调用内容来推断用户是否需要批准、选择、输入、上传或回复。
@@ -48,7 +48,7 @@ Scriptable 脚本在 iPhone 上把地址和令牌保存到 Scriptable Keychain�
 
 Codex 子进程可能按照 Codex 产品本身的正常工作方式连接 OpenAI 服务。本项目不控制 Codex 自身的数据处理行为。
 
-本机对账只能确认保存的激活时间、受管 plist 配置和用户级加载状态是否一致，不能证明某次后台运行成功。创建后的成功激活保持静默，失败时由 CLI 按通知策略提示；退出本应用不影响已创建的 LaunchAgent。激活调度只在 CodexQuotaMenu 的激活时间设置中管理，不会出现在 Codex 的“已安排”列表中。
+本机对账只能确认保存的激活时间、受管 plist 配置和用户级加载状态是否一致，不能证明某次后台运行成功。后台命令的标准输出和标准错误均写入 `/dev/null`，单次执行结果不持久化，当前应用也不显示或通知其成败，因此成功和失败都保持静默。退出本应用不影响已创建的 LaunchAgent。激活调度只在 CodexQuotaMenu 的激活时间设置中管理，不会出现在 Codex 的“已安排”列表中。
 
 ## 权限与沙盒
 
@@ -64,7 +64,9 @@ Codex 子进程可能按照 Codex 产品本身的正常工作方式连接 OpenAI
 
 停止所有读取和本机服务的方式是退出应用；也可以单独关闭“手机小组件”接口。疑似泄露时可重新生成令牌，旧令牌立即失效。
 
-卸载时删除 `Codex用量.app`。如需同时移除 `UserDefaults` 中的语言、开关、激活时间条目、预测缓存和重置检测状态，可运行 `defaults delete com.local.codexquotamenu`。Keychain 令牌不会因删除应用而自动消失，可在“钥匙串访问”中搜索服务 `com.local.codexquotamenu.widget` 并手动删除。iPhone 上的 Scriptable Keychain 和缓存由 Scriptable 管理，需要在手机上另行移除。
+完全卸载前，如果应用仍在，请先在“激活时间设置…”中删除全部时间并点击“应用到 Codex”，确认“未配置”后再删除应用。若应用已删除，只能逐项处理文件名和 plist 内 `Label` 均严格匹配 `com.local.codexquotamenu.activation.HHMM`（有效 24 小时时间）的 LaunchAgent；先检查，再对每个精确标签执行 `launchctl bootout gui/$(id -u)/<精确标签>` 并删除对应的单个精确 plist，切勿使用前缀通配删除。完整逐项命令见产品使用说明。
+
+如需同时移除 `UserDefaults` 中的语言、开关、激活时间条目、预测缓存和重置检测状态，可运行 `defaults delete com.local.codexquotamenu`。Keychain 令牌不会因删除应用而自动消失，可在“钥匙串访问”中搜索服务 `com.local.codexquotamenu.widget` 并手动删除。iPhone 上的 Scriptable Keychain 和缓存由 Scriptable 管理，需要在手机上另行移除。
 
 ## 项目关系
 

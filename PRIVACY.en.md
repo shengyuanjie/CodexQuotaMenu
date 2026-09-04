@@ -2,7 +2,7 @@
 
 English | [简体中文](PRIVACY.md)
 
-Last updated: September 2, 2026
+Last updated: September 4, 2026
 
 Codex Usage Menu Bar is designed around local processing. The project operates no public service and includes no advertising, telemetry, or user analytics. A user may explicitly enable a Mac-local LAN service for the phone widget; it is off by default.
 
@@ -15,7 +15,7 @@ The app starts `codex app-server --stdio` through a Codex executable already ins
 - local session-log paths returned by Codex;
 - up to the last 512 KB of each relevant session log, used only to identify structured lifecycle events such as task starts, user messages, and task completions, plus whether the log has been active recently.
 
-For ordinary daily reconciliation, the app reads and validates only exact-owned LaunchAgent plists such as `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` and checks their per-user loaded state through `launchctl`. During first migration, it scans legacy automation names only to identify entries whose complete name exactly matches `CodexQuotaMenu · HH:mm`; it does not read run conversations or unrelated configuration, and it does not modify other automations or prefix-sharing names.
+For ordinary daily reconciliation, the app reads and validates only exact-owned LaunchAgent plists such as `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` and checks their per-user loaded state through `launchctl`. During first migration, it locally reads `~/.codex/automations/*/automation.toml` to identify and safely migrate entries whose complete name exactly matches `CodexQuotaMenu · HH:mm`; it does not read their run conversations, and it does not modify other automations or prefix-sharing names.
 
 Session-log fragments may include task titles, tool-call metadata, and text from the current response.
 The app does not analyze response text or tool-call contents to infer whether the user needs to approve, choose, enter information, upload, or reply.
@@ -48,7 +48,7 @@ On iPhone, the Scriptable script stores its address and token in Scriptable Keyc
 
 The Codex subprocess may connect to OpenAI as part of Codex's normal operation. This project does not control Codex's own data handling.
 
-Local reconciliation can confirm only whether saved activation times, managed plist configuration, and per-user loaded state match; it cannot prove that an individual background run succeeded. Successful runs are silent, and the CLI's notification policy applies when a run fails. Activation schedules are managed only in CodexQuotaMenu and do not appear in Codex's scheduled-task list. Quitting this app does not affect existing LaunchAgents.
+Local reconciliation can confirm only whether saved activation times, managed plist configuration, and per-user loaded state match; it cannot prove that an individual background run succeeded. Both standard output and standard error go to `/dev/null`; individual run results are not persisted, displayed, or notified, so success and failure are currently silent. Activation schedules are managed only in CodexQuotaMenu and do not appear in Codex's scheduled-task list. Quitting this app does not affect existing LaunchAgents.
 
 ## Permissions and Sandbox
 
@@ -64,7 +64,9 @@ The app does not request camera, microphone, contacts, calendar, location, photo
 
 Quit the app to stop all reads and the local service, or disable the phone feed independently. If a token may have leaked, regenerate it in the menu; the old token becomes invalid immediately.
 
-To uninstall, remove `Codex用量.app`. To remove the language, toggle, activation entries, public forecast cache, and reset-detection state from `UserDefaults`, run:
+Before completely uninstalling, if the app is still present, remove every time in **Activation Times…**, choose **Apply to Codex**, and confirm **Not Configured** before deleting the app. If the app has already been deleted, handle only LaunchAgents whose filename and plist `Label` both exactly match `com.local.codexquotamenu.activation.HHMM` for a valid 24-hour time. Inspect each item, run `launchctl bootout gui/$(id -u)/<exact-label>` for that exact label, and remove only its corresponding exact plist; never use a prefix wildcard for deletion. The product guide provides the complete per-item commands.
+
+To remove the language, toggle, activation entries, public forecast cache, and reset-detection state from `UserDefaults`, run:
 
 ```sh
 defaults delete com.local.codexquotamenu

@@ -177,9 +177,19 @@ struct AppText {
     }
 
     func activationRecoveryRequiredError(path: String) -> String {
-        language == .simplifiedChinese
-            ? "无法确认后台激活任务已恢复。请勿删除恢复副本：\(path)"
-            : "Recovery could not be verified. Do not delete the recovery copy at: \(path)"
+        activationRecoveryRequiredError(paths: [path])
+    }
+
+    func activationRecoveryRequiredError(paths: [String]) -> String {
+        if paths.count == 1, let path = paths.first {
+            return language == .simplifiedChinese
+                ? "无法确认后台激活任务已恢复。请勿删除恢复副本：\(path)"
+                : "Recovery could not be verified. Do not delete the recovery copy at: \(path)"
+        }
+        let pathList = paths.joined(separator: "\n")
+        return language == .simplifiedChinese
+            ? "无法确认后台激活任务已恢复。请勿删除以下恢复副本：\n\(pathList)"
+            : "Recovery could not be verified. Do not delete these recovery copies:\n\(pathList)"
     }
 
     var activationCorruptStorageStatus: String {

@@ -266,11 +266,165 @@ final class CodexAutomationSynchronizerTests: XCTestCase {
         let recovery = try XCTUnwrap(recoveryDirectories.first)
         XCTAssertEqual(
             try String(
-                contentsOf: recovery.appendingPathComponent("codexquotamenu-06-30/automation.toml"),
+                contentsOf: recovery.appendingPathComponent(
+                    "isolated-existing/codexquotamenu-06-30/automation.toml"
+                ),
                 encoding: .utf8
             ),
             originalSource
         )
+    }
+
+    func testConcurrentDirectoryReplacementBeforeRemovalIsNeverDeleted() throws {
+        let root = try temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let time = try ActivationTime(hour: 6, minute: 30)
+        let initial = CodexAutomationSynchronizer(rootURL: root)
+        try initial.synchronize(
+            entries: [.init(time: time)],
+            timeZoneIdentifier: "Asia/Shanghai"
+        )
+        let managedDirectory = root.appendingPathComponent(
+            "codexquotamenu-06-30",
+            isDirectory: true
+        )
+        let originalSource = try automationSource(at: managedDirectory)
+        let displacedOriginal = root.appendingPathComponent(
+            "displaced-original",
+            isDirectory: true
+        )
+        let concurrentSource = "name = \"CodexQuotaMenu · 06:30 copy\"\n"
+        let synchronizer = CodexAutomationSynchronizer(
+            rootURL: root,
+            hooks: .init(beforeIsolatingExistingTask: { url in
+                XCTAssertEqual(url, managedDirectory)
+                try FileManager.default.moveItem(at: url, to: displacedOriginal)
+                try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+                try Data(concurrentSource.utf8).write(
+                    to: url.appendingPathComponent("automation.toml")
+                )
+            })
+        )
+        var recoveryPath: String?
+
+        XCTAssertThrowsError(try synchronizer.removeAllManagedAutomations()) { error in
+            guard case CodexAutomationSynchronizationError.recoveryRequired(let path) = error else {
+                return XCTFail("expected recoveryRequired, got \(error)")
+            }
+            recoveryPath = path
+        }
+
+        XCTAssertEqual(try automationSource(at: managedDirectory), concurrentSource)
+        XCTAssertEqual(try automationSource(at: displacedOriginal), originalSource)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(recoveryPath)))
+    }
+
+    func testPartialIsolationFailureRestoresEarlierManagedTaskAndPreservesConcurrentReplacement() throws {
+        let root = try temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let six = try ActivationTime(hour: 6, minute: 30)
+        let eleven = try ActivationTime(hour: 11, minute: 33)
+        let initial = CodexAutomationSynchronizer(rootURL: root)
+        try initial.synchronize(
+            entries: [.init(time: six), .init(time: eleven)],
+            timeZoneIdentifier: "Asia/Shanghai"
+        )
+        let sixDirectory = root.appendingPathComponent(
+            "codexquotamenu-06-30",
+            isDirectory: true
+        )
+        let elevenDirectory = root.appendingPathComponent(
+            "codexquotamenu-11-33",
+            isDirectory: true
+        )
+        let sixSource = try automationSource(at: sixDirectory)
+        let elevenSource = try automationSource(at: elevenDirectory)
+        let displacedEleven = root.appendingPathComponent(
+            "displaced-eleven",
+            isDirectory: true
+        )
+        let concurrentSource = "name = \"Personal concurrent task\"\n"
+        let synchronizer = CodexAutomationSynchronizer(
+            rootURL: root,
+            hooks: .init(beforeIsolatingExistingTask: { url in
+                guard url == elevenDirectory else { return }
+                try FileManager.default.moveItem(at: url, to: displacedEleven)
+                try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+                try Data(concurrentSource.utf8).write(
+                    to: url.appendingPathComponent("automation.toml")
+                )
+            })
+        )
+        var recoveryPath: String?
+
+        XCTAssertThrowsError(try synchronizer.removeAllManagedAutomations()) { error in
+            guard case CodexAutomationSynchronizationError.recoveryRequired(let path) = error else {
+                return XCTFail("expected recoveryRequired, got \(error)")
+            }
+            recoveryPath = path
+        }
+
+        XCTAssertEqual(try automationSource(at: sixDirectory), sixSource)
+        XCTAssertEqual(try automationSource(at: elevenDirectory), concurrentSource)
+        XCTAssertEqual(try automationSource(at: displacedEleven), elevenSource)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(recoveryPath)))
+    }
+
+    func testRollbackNeverDeletesConcurrentReplacementOfTaskInstalledByThisRun() throws {
+        let root = try temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sixDirectory = root.appendingPathComponent(
+            "codexquotamenu-06-30",
+            isDirectory: true
+        )
+        let displacedInstalled = root.appendingPathComponent(
+            "displaced-installed",
+            isDirectory: true
+        )
+        let concurrentSource = "name = \"Personal concurrent task\"\n"
+        let synchronizer = CodexAutomationSynchronizer(
+            rootURL: root,
+            hooks: .init(
+                beforeInstallingTask: { id in
+                    if id == "codexquotamenu-11-33" {
+                        throw FixtureError.stopAfterRemoval
+                    }
+                },
+                beforeRollback: {
+                    try FileManager.default.moveItem(
+                        at: sixDirectory,
+                        to: displacedInstalled
+                    )
+                    try FileManager.default.createDirectory(
+                        at: sixDirectory,
+                        withIntermediateDirectories: false
+                    )
+                    try Data(concurrentSource.utf8).write(
+                        to: sixDirectory.appendingPathComponent("automation.toml")
+                    )
+                }
+            )
+        )
+        var recoveryPath: String?
+
+        XCTAssertThrowsError(try synchronizer.synchronize(
+            entries: [
+                .init(time: try ActivationTime(hour: 6, minute: 30)),
+                .init(time: try ActivationTime(hour: 11, minute: 33))
+            ],
+            timeZoneIdentifier: "Asia/Shanghai"
+        )) { error in
+            guard case CodexAutomationSynchronizationError.recoveryRequired(let path) = error else {
+                return XCTFail("expected recoveryRequired, got \(error)")
+            }
+            recoveryPath = path
+        }
+
+        XCTAssertEqual(try automationSource(at: sixDirectory), concurrentSource)
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: displacedInstalled.appendingPathComponent("automation.toml").path
+        ))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(recoveryPath)))
     }
 
     private func temporaryRoot() throws -> URL {
@@ -278,6 +432,13 @@ final class CodexAutomationSynchronizerTests: XCTestCase {
             .appendingPathComponent("CodexAutomationSynchronizerTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         return root
+    }
+
+    private func automationSource(at directory: URL) throws -> String {
+        try String(
+            contentsOf: directory.appendingPathComponent("automation.toml"),
+            encoding: .utf8
+        )
     }
 }
 

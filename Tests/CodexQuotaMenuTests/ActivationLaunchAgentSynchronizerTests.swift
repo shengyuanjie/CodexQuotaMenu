@@ -140,6 +140,75 @@ final class ActivationLaunchAgentSynchronizerTests: XCTestCase {
         XCTAssertEqual(try fixture.recoveryDirectories(), [])
     }
 
+    func testLegacyRecoveryPathIsMappedIntoActivationRecoveryErrorAfterRollback() throws {
+        let fixture = try Fixture(codexURL: codexURL, homeURL: homeURL)
+        defer { fixture.remove() }
+        let six = try ActivationTime(hour: 6, minute: 0)
+        let legacyRecovery = fixture.automationsURL.appendingPathComponent(
+            ".codexquotamenu-recovery-legacy",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: legacyRecovery,
+            withIntermediateDirectories: false
+        )
+        let synchronizer = fixture.synchronizer(legacyAutomationRemover: {
+            throw CodexAutomationSynchronizationError.recoveryRequired(legacyRecovery.path)
+        })
+
+        XCTAssertThrowsError(try synchronizer.synchronize(entries: [.init(time: six)])) { error in
+            XCTAssertEqual(
+                error as? ActivationLaunchAgentSynchronizationError,
+                .recoveryRequired([legacyRecovery.path])
+            )
+        }
+
+        XCTAssertFalse(fixture.fileExists(for: six))
+        XCTAssertEqual(fixture.controller.loadedLabels, [])
+        XCTAssertEqual(try fixture.recoveryDirectories(), [])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: legacyRecovery.path))
+    }
+
+    func testLegacyAndLaunchAgentRecoveryPathsAreBothReportedWhenRollbackFails() throws {
+        let fixture = try Fixture(codexURL: codexURL, homeURL: homeURL)
+        defer { fixture.remove() }
+        let legacyRecovery = fixture.automationsURL.appendingPathComponent(
+            ".codexquotamenu-recovery-legacy",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: legacyRecovery,
+            withIntermediateDirectories: false
+        )
+        let synchronizer = fixture.synchronizer(
+            hooks: .init(beforeRollback: { throw FixtureError.injected }),
+            legacyAutomationRemover: {
+                throw CodexAutomationSynchronizationError.recoveryRequired(legacyRecovery.path)
+            }
+        )
+
+        XCTAssertThrowsError(try synchronizer.synchronize(entries: [
+            .init(time: try ActivationTime(hour: 6, minute: 0))
+        ])) { error in
+            guard case ActivationLaunchAgentSynchronizationError.recoveryRequired(let paths) = error else {
+                return XCTFail("expected recoveryRequired, got \(error)")
+            }
+            XCTAssertEqual(paths.count, 2)
+            XCTAssertTrue(paths.contains(legacyRecovery.path))
+            XCTAssertEqual(
+                paths.filter {
+                    URL(fileURLWithPath: $0).lastPathComponent.hasPrefix(
+                        ".codexquotamenu-launchagent-recovery-"
+                    )
+                }.count,
+                1
+            )
+            for path in paths {
+                XCTAssertTrue(FileManager.default.fileExists(atPath: path))
+            }
+        }
+    }
+
     func testConcurrentTargetCreationIsNeverOverwrittenOrDeleted() throws {
         let fixture = try Fixture(codexURL: codexURL, homeURL: homeURL)
         defer { fixture.remove() }
@@ -188,7 +257,9 @@ final class ActivationLaunchAgentSynchronizerTests: XCTestCase {
             .init(time: six),
             .init(time: eleven)
         ])) { error in
-            guard case ActivationLaunchAgentSynchronizationError.recoveryRequired(let path) = error else {
+            guard case ActivationLaunchAgentSynchronizationError.recoveryRequired(let paths) = error,
+                  paths.count == 1,
+                  let path = paths.first else {
                 return XCTFail("expected recoveryRequired, got \(error)")
             }
             recoveryPath = path
@@ -216,7 +287,9 @@ final class ActivationLaunchAgentSynchronizerTests: XCTestCase {
         var recoveryPath: String?
 
         XCTAssertThrowsError(try synchronizer.synchronize(entries: [.init(time: eleven)])) { error in
-            guard case ActivationLaunchAgentSynchronizationError.recoveryRequired(let path) = error else {
+            guard case ActivationLaunchAgentSynchronizationError.recoveryRequired(let paths) = error,
+                  paths.count == 1,
+                  let path = paths.first else {
                 return XCTFail("expected recoveryRequired, got \(error)")
             }
             recoveryPath = path
@@ -254,7 +327,9 @@ final class ActivationLaunchAgentSynchronizerTests: XCTestCase {
             .init(time: six),
             .init(time: eleven)
         ])) { error in
-            guard case ActivationLaunchAgentSynchronizationError.recoveryRequired(let path) = error else {
+            guard case ActivationLaunchAgentSynchronizationError.recoveryRequired(let paths) = error,
+                  paths.count == 1,
+                  let path = paths.first else {
                 return XCTFail("expected recoveryRequired, got \(error)")
             }
             recoveryPath = path
@@ -292,7 +367,9 @@ final class ActivationLaunchAgentSynchronizerTests: XCTestCase {
             .init(time: six),
             .init(time: eleven)
         ])) { error in
-            guard case ActivationLaunchAgentSynchronizationError.recoveryRequired(let path) = error else {
+            guard case ActivationLaunchAgentSynchronizationError.recoveryRequired(let paths) = error,
+                  paths.count == 1,
+                  let path = paths.first else {
                 return XCTFail("expected recoveryRequired, got \(error)")
             }
             recoveryPath = path
@@ -315,7 +392,9 @@ final class ActivationLaunchAgentSynchronizerTests: XCTestCase {
 
         XCTAssertThrowsError(try fixture.synchronizer().synchronize(entries: [.init(time: six)])) {
             error in
-            guard case ActivationLaunchAgentSynchronizationError.recoveryRequired(let path) = error else {
+            guard case ActivationLaunchAgentSynchronizationError.recoveryRequired(let paths) = error,
+                  paths.count == 1,
+                  let path = paths.first else {
                 return XCTFail("expected recoveryRequired, got \(error)")
             }
             recoveryPath = path
@@ -336,7 +415,9 @@ final class ActivationLaunchAgentSynchronizerTests: XCTestCase {
         try FileManager.default.createDirectory(at: recovery, withIntermediateDirectories: false)
 
         XCTAssertThrowsError(try fixture.synchronizer().synchronize(entries: [])) { error in
-            guard case ActivationLaunchAgentSynchronizationError.recoveryRequired(let path) = error else {
+            guard case ActivationLaunchAgentSynchronizationError.recoveryRequired(let paths) = error,
+                  paths.count == 1,
+                  let path = paths.first else {
                 return XCTFail("expected recoveryRequired, got \(error)")
             }
             XCTAssertEqual(

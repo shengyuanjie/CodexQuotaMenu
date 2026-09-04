@@ -13,7 +13,7 @@ enum ActivationLaunchAgentSynchronizationError: Error, Equatable, Sendable {
     case unreadableState
     case targetCollision
     case verificationFailed
-    case recoveryRequired(String)
+    case recoveryRequired([String])
 }
 
 struct CodexCommandResult: Equatable, Sendable {
@@ -182,7 +182,7 @@ struct ActivationLaunchAgentSynchronizer: ActivationLaunchAgentSynchronizing {
     func synchronize(entries: [ActivationScheduleEntry]) throws {
         try fileManager.createDirectory(at: launchAgentsURL, withIntermediateDirectories: true)
         if let recovery = try existingRecoveryDirectory() {
-            throw ActivationLaunchAgentSynchronizationError.recoveryRequired(recovery.path)
+            throw ActivationLaunchAgentSynchronizationError.recoveryRequired([recovery.path])
         }
 
         let normalizedEntries = try ActivationScheduleEntry.normalized(entries)
@@ -321,6 +321,7 @@ struct ActivationLaunchAgentSynchronizer: ActivationLaunchAgentSynchronizing {
             try legacyAutomationRemover()
         } catch let synchronizationError {
             let mustRetainRecovery = synchronizationError is LaunchAgentIsolationError
+            let inheritedRecoveryPaths = recoveryPaths(from: synchronizationError)
             do {
                 try hooks.beforeRollback()
                 try rollback(
@@ -334,10 +335,19 @@ struct ActivationLaunchAgentSynchronizer: ActivationLaunchAgentSynchronizing {
                     removeRecoveryOnSuccess: !mustRetainRecovery
                 )
             } catch {
-                throw ActivationLaunchAgentSynchronizationError.recoveryRequired(recoveryRoot.path)
+                throw ActivationLaunchAgentSynchronizationError.recoveryRequired(
+                    uniquePaths(inheritedRecoveryPaths + [recoveryRoot.path])
+                )
             }
             if mustRetainRecovery {
-                throw ActivationLaunchAgentSynchronizationError.recoveryRequired(recoveryRoot.path)
+                throw ActivationLaunchAgentSynchronizationError.recoveryRequired(
+                    uniquePaths(inheritedRecoveryPaths + [recoveryRoot.path])
+                )
+            }
+            if !inheritedRecoveryPaths.isEmpty {
+                throw ActivationLaunchAgentSynchronizationError.recoveryRequired(
+                    inheritedRecoveryPaths
+                )
             }
             throw synchronizationError
         }
@@ -556,8 +566,23 @@ struct ActivationLaunchAgentSynchronizer: ActivationLaunchAgentSynchronizing {
         do {
             try fileManager.removeItem(at: recoveryRoot)
         } catch {
-            throw ActivationLaunchAgentSynchronizationError.recoveryRequired(recoveryRoot.path)
+            throw ActivationLaunchAgentSynchronizationError.recoveryRequired([recoveryRoot.path])
         }
+    }
+
+    private func recoveryPaths(from error: Error) -> [String] {
+        if case CodexAutomationSynchronizationError.recoveryRequired(let path) = error {
+            return [path]
+        }
+        if case ActivationLaunchAgentSynchronizationError.recoveryRequired(let paths) = error {
+            return uniquePaths(paths)
+        }
+        return []
+    }
+
+    private func uniquePaths(_ paths: [String]) -> [String] {
+        var seen = Set<String>()
+        return paths.filter { seen.insert($0).inserted }
     }
 }
 

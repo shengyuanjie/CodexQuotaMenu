@@ -1,3 +1,5 @@
+import CryptoKit
+import Darwin
 import Foundation
 
 enum CodexAutomationSynchronizationError: Error, Equatable {
@@ -10,13 +12,16 @@ enum CodexAutomationSynchronizationError: Error, Equatable {
 
 struct CodexAutomationSynchronizationHooks {
     var beforeInstallingTask: (String) throws -> Void
+    var beforeIsolatingExistingTask: (URL) throws -> Void
     var beforeRollback: () throws -> Void
 
     init(
         beforeInstallingTask: @escaping (String) throws -> Void = { _ in },
+        beforeIsolatingExistingTask: @escaping (URL) throws -> Void = { _ in },
         beforeRollback: @escaping () throws -> Void = {}
     ) {
         self.beforeInstallingTask = beforeInstallingTask
+        self.beforeIsolatingExistingTask = beforeIsolatingExistingTask
         self.beforeRollback = beforeRollback
     }
 }
@@ -76,22 +81,10 @@ struct CodexAutomationSynchronizer {
         let transactionRoot = fileManager.temporaryDirectory
             .appendingPathComponent("CodexAutomationSync-\(UUID().uuidString)", isDirectory: true)
         let stagedRoot = transactionRoot.appendingPathComponent("staged", isDirectory: true)
-        let recoveryRoot = rootURL.appendingPathComponent(
-            ".codexquotamenu-recovery-\(UUID().uuidString)",
-            isDirectory: true
-        )
         try fileManager.createDirectory(at: stagedRoot, withIntermediateDirectories: true)
-        try fileManager.createDirectory(at: recoveryRoot, withIntermediateDirectories: false)
         defer { try? fileManager.removeItem(at: transactionRoot) }
-        var removeRecoveryOnExit = true
-        defer {
-            if removeRecoveryOnExit {
-                try? fileManager.removeItem(at: recoveryRoot)
-            }
-        }
 
         let timestamp = timestampProvider()
-        var stagedSources: [String: Data] = [:]
         for entry in desiredEntries {
             let id = identifier(for: entry.time)
             let directory = stagedRoot.appendingPathComponent(id, isDirectory: true)
@@ -102,7 +95,6 @@ struct CodexAutomationSynchronizer {
                 timestamp: timestamp
             ).utf8)
             try data.write(to: directory.appendingPathComponent("automation.toml"), options: .atomic)
-            stagedSources[id] = data
         }
         guard isExpectedState(evaluate(
             rootURL: stagedRoot,
@@ -112,25 +104,64 @@ struct CodexAutomationSynchronizer {
             throw CodexAutomationSynchronizationError.verificationFailed
         }
 
-        for task in existingTasks {
-            try fileManager.copyItem(
-                at: rootURL.appendingPathComponent(task.id, isDirectory: true),
-                to: recoveryRoot.appendingPathComponent(task.id, isDirectory: true)
+        let recoveryRoot = rootURL.appendingPathComponent(
+            ".codexquotamenu-recovery-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        let isolatedExistingRoot = recoveryRoot.appendingPathComponent(
+            "isolated-existing",
+            isDirectory: true
+        )
+        let isolatedInstalledRoot = recoveryRoot.appendingPathComponent(
+            "isolated-installed",
+            isDirectory: true
+        )
+        try fileManager.createDirectory(at: recoveryRoot, withIntermediateDirectories: false)
+        do {
+            try fileManager.createDirectory(
+                at: isolatedExistingRoot,
+                withIntermediateDirectories: false
             )
+            try fileManager.createDirectory(
+                at: isolatedInstalledRoot,
+                withIntermediateDirectories: false
+            )
+        } catch {
+            try removeRecoveryOrThrow(recoveryRoot)
+            throw error
         }
 
-        var installedSources: [String: Data] = [:]
+        let backups: [AutomationBackup]
         do {
-            for task in existingTasks {
-                try fileManager.removeItem(at: rootURL.appendingPathComponent(task.id, isDirectory: true))
+            backups = try prepareBackups(
+                for: existingTasks,
+                isolatedExistingRoot: isolatedExistingRoot
+            )
+        } catch {
+            try removeRecoveryOrThrow(recoveryRoot)
+            throw error
+        }
+
+        var installedFingerprints: [URL: AutomationDirectoryFingerprint] = [:]
+        do {
+            for backup in backups {
+                try hooks.beforeIsolatingExistingTask(backup.destinationURL)
+                try isolateExpectedDirectory(
+                    at: backup.destinationURL,
+                    to: backup.isolatedURL,
+                    expectedFingerprint: backup.originalFingerprint,
+                    expectedTask: backup.task,
+                    validationRoot: isolatedExistingRoot,
+                    missingIsAcceptable: false
+                )
             }
             for id in desiredIDs.sorted() {
                 try hooks.beforeInstallingTask(id)
-                try fileManager.moveItem(
-                    at: stagedRoot.appendingPathComponent(id, isDirectory: true),
-                    to: rootURL.appendingPathComponent(id, isDirectory: true)
-                )
-                installedSources[id] = stagedSources[id]
+                let staged = stagedRoot.appendingPathComponent(id, isDirectory: true)
+                let destination = rootURL.appendingPathComponent(id, isDirectory: true)
+                let expectedFingerprint = try directoryFingerprint(at: staged)
+                try installExclusively(staged, at: destination)
+                installedFingerprints[destination] = expectedFingerprint
             }
 
             guard isExpectedState(evaluate(
@@ -141,18 +172,30 @@ struct CodexAutomationSynchronizer {
                 throw CodexAutomationSynchronizationError.verificationFailed
             }
         } catch let synchronizationError {
+            let mustRetainRecovery = synchronizationError is AutomationIsolationError
             do {
                 try hooks.beforeRollback()
                 try rollback(
-                    installedSources: installedSources,
-                    existingTasks: existingTasks,
-                    recoveryRoot: recoveryRoot
+                    installedFingerprints: installedFingerprints,
+                    backups: backups,
+                    isolatedInstalledRoot: isolatedInstalledRoot,
+                    recoveryRoot: recoveryRoot,
+                    removeRecoveryOnSuccess: !mustRetainRecovery
                 )
             } catch {
-                removeRecoveryOnExit = false
+                throw CodexAutomationSynchronizationError.recoveryRequired(recoveryRoot.path)
+            }
+            if mustRetainRecovery {
                 throw CodexAutomationSynchronizationError.recoveryRequired(recoveryRoot.path)
             }
             throw synchronizationError
+        }
+
+        do {
+            try verifyIsolatedBackups(backups, validationRoot: isolatedExistingRoot)
+            try fileManager.removeItem(at: recoveryRoot)
+        } catch {
+            throw CodexAutomationSynchronizationError.recoveryRequired(recoveryRoot.path)
         }
     }
 
@@ -171,42 +214,207 @@ struct CodexAutomationSynchronizer {
         }
     }
 
-    private func rollback(
-        installedSources: [String: Data],
-        existingTasks: [CodexAutomation],
-        recoveryRoot: URL
-    ) throws {
-        for (id, expectedSource) in installedSources {
-            let directory = rootURL.appendingPathComponent(id, isDirectory: true)
-            guard fileManager.fileExists(atPath: directory.path) else { continue }
-            let file = directory.appendingPathComponent("automation.toml")
-            guard try Data(contentsOf: file) == expectedSource else {
-                throw RollbackError.destinationChanged
-            }
-            try fileManager.removeItem(at: directory)
-        }
-
-        for task in existingTasks {
-            let backup = recoveryRoot.appendingPathComponent(task.id, isDirectory: true)
+    private func prepareBackups(
+        for tasks: [CodexAutomation],
+        isolatedExistingRoot: URL
+    ) throws -> [AutomationBackup] {
+        let backups = try tasks.map { task in
             let destination = rootURL.appendingPathComponent(task.id, isDirectory: true)
-            guard fileManager.fileExists(atPath: backup.path) else {
-                throw RollbackError.missingBackup
-            }
-            if fileManager.fileExists(atPath: destination.path) {
-                guard try automationSource(at: destination) == automationSource(at: backup) else {
-                    throw RollbackError.destinationChanged
-                }
-                continue
-            }
-            try fileManager.copyItem(at: backup, to: destination)
-            guard try automationSource(at: destination) == automationSource(at: backup) else {
+            return AutomationBackup(
+                task: task,
+                destinationURL: destination,
+                isolatedURL: isolatedExistingRoot.appendingPathComponent(
+                    task.id,
+                    isDirectory: true
+                ),
+                originalFingerprint: try directoryFingerprint(at: destination)
+            )
+        }
+        guard CodexAutomationReader(rootURL: rootURL, fileManager: fileManager)
+            .readManagedAutomations() == .available(tasks) else {
+            throw CodexAutomationSynchronizationError.unsafeManagedTask
+        }
+        return backups
+    }
+
+    private func verifyIsolatedBackups(
+        _ backups: [AutomationBackup],
+        validationRoot: URL
+    ) throws {
+        for backup in backups {
+            guard try directoryFingerprint(at: backup.isolatedURL) == backup.originalFingerprint,
+                  isExpectedManagedTask(backup.task, in: validationRoot) else {
                 throw RollbackError.restoreVerificationFailed
             }
         }
     }
 
-    private func automationSource(at directory: URL) throws -> Data {
-        try Data(contentsOf: directory.appendingPathComponent("automation.toml"))
+    private func isExpectedManagedTask(_ task: CodexAutomation, in root: URL) -> Bool {
+        guard ManagedAutomationPolicy.managedTime(from: task.name) != nil,
+              case .available(let tasks) = CodexAutomationReader(
+                rootURL: root,
+                fileManager: fileManager
+              ).readManagedAutomations() else {
+            return false
+        }
+        return tasks.contains(task)
+    }
+
+    private func isolateExpectedDirectory(
+        at source: URL,
+        to isolated: URL,
+        expectedFingerprint: AutomationDirectoryFingerprint,
+        expectedTask: CodexAutomation?,
+        validationRoot: URL?,
+        missingIsAcceptable: Bool
+    ) throws {
+        let result = source.path.withCString { sourcePath in
+            isolated.path.withCString { isolatedPath in
+                renamex_np(sourcePath, isolatedPath, UInt32(RENAME_EXCL))
+            }
+        }
+        if result != 0 {
+            if errno == ENOENT, missingIsAcceptable {
+                return
+            }
+            throw AutomationIsolationError.ownershipChanged
+        }
+
+        do {
+            guard try directoryFingerprint(at: isolated) == expectedFingerprint else {
+                throw AutomationIsolationError.ownershipChanged
+            }
+            if let expectedTask {
+                guard let validationRoot,
+                      isExpectedManagedTask(expectedTask, in: validationRoot) else {
+                    throw AutomationIsolationError.ownershipChanged
+                }
+            }
+        } catch {
+            do {
+                try installExclusively(isolated, at: source)
+            } catch {
+                // A concurrently occupied public path is never overwritten.
+            }
+            throw AutomationIsolationError.ownershipChanged
+        }
+    }
+
+    private func installExclusively(_ staged: URL, at destination: URL) throws {
+        let result = staged.path.withCString { sourcePath in
+            destination.path.withCString { destinationPath in
+                renamex_np(sourcePath, destinationPath, UInt32(RENAME_EXCL))
+            }
+        }
+        guard result == 0 else {
+            if errno == EEXIST || errno == ENOTEMPTY {
+                throw CodexAutomationSynchronizationError.targetCollision
+            }
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+        }
+    }
+
+    private func directoryFingerprint(at root: URL) throws -> AutomationDirectoryFingerprint {
+        var entries: [AutomationTreeEntryFingerprint] = []
+        try appendFingerprintEntry(at: root, relativePath: ".", to: &entries)
+        return AutomationDirectoryFingerprint(entries: entries)
+    }
+
+    private func appendFingerprintEntry(
+        at url: URL,
+        relativePath: String,
+        to entries: inout [AutomationTreeEntryFingerprint]
+    ) throws {
+        let attributes = try fileManager.attributesOfItem(atPath: url.path)
+        guard let type = attributes[.type] as? FileAttributeType,
+              let systemNumber = attributes[.systemNumber] as? NSNumber,
+              let fileNumber = attributes[.systemFileNumber] as? NSNumber else {
+            throw RollbackError.unverifiableIdentity
+        }
+        let kind: AutomationTreeEntryFingerprint.Kind
+        let hash: Data?
+        switch type {
+        case .typeDirectory:
+            kind = .directory
+            hash = nil
+        case .typeRegular:
+            kind = .regularFile
+            hash = Data(SHA256.hash(data: try Data(contentsOf: url)))
+        default:
+            throw RollbackError.unverifiableIdentity
+        }
+        entries.append(.init(
+            relativePath: relativePath,
+            kind: kind,
+            systemNumber: systemNumber.uint64Value,
+            fileNumber: fileNumber.uint64Value,
+            hash: hash
+        ))
+        guard kind == .directory else { return }
+        let children = try fileManager.contentsOfDirectory(
+            at: url,
+            includingPropertiesForKeys: nil,
+            options: []
+        ).sorted { $0.lastPathComponent < $1.lastPathComponent }
+        for child in children {
+            let childPath = relativePath == "."
+                ? child.lastPathComponent
+                : relativePath + "/" + child.lastPathComponent
+            try appendFingerprintEntry(at: child, relativePath: childPath, to: &entries)
+        }
+    }
+
+    private func removeRecoveryOrThrow(_ recoveryRoot: URL) throws {
+        do {
+            try fileManager.removeItem(at: recoveryRoot)
+        } catch {
+            throw CodexAutomationSynchronizationError.recoveryRequired(recoveryRoot.path)
+        }
+    }
+
+    private func rollback(
+        installedFingerprints: [URL: AutomationDirectoryFingerprint],
+        backups: [AutomationBackup],
+        isolatedInstalledRoot: URL,
+        recoveryRoot: URL,
+        removeRecoveryOnSuccess: Bool
+    ) throws {
+        for (directory, expectedFingerprint) in installedFingerprints.sorted(
+            by: { $0.key.path < $1.key.path }
+        ) {
+            try isolateExpectedDirectory(
+                at: directory,
+                to: isolatedInstalledRoot.appendingPathComponent(directory.lastPathComponent),
+                expectedFingerprint: expectedFingerprint,
+                expectedTask: nil,
+                validationRoot: nil,
+                missingIsAcceptable: true
+            )
+        }
+
+        for backup in backups {
+            guard fileManager.fileExists(atPath: backup.isolatedURL.path) else {
+                throw RollbackError.missingBackup
+            }
+            guard try directoryFingerprint(at: backup.isolatedURL) == backup.originalFingerprint,
+                  isExpectedManagedTask(
+                    backup.task,
+                    in: backup.isolatedURL.deletingLastPathComponent()
+                  ) else {
+                throw RollbackError.restoreVerificationFailed
+            }
+            guard !fileManager.fileExists(atPath: backup.destinationURL.path) else {
+                throw RollbackError.destinationChanged
+            }
+            try installExclusively(backup.isolatedURL, at: backup.destinationURL)
+            guard try directoryFingerprint(at: backup.destinationURL) == backup.originalFingerprint else {
+                throw RollbackError.restoreVerificationFailed
+            }
+        }
+
+        if removeRecoveryOnSuccess {
+            try fileManager.removeItem(at: recoveryRoot)
+        }
     }
 
     private func evaluate(
@@ -265,6 +473,35 @@ private enum RollbackError: Error {
     case destinationChanged
     case missingBackup
     case restoreVerificationFailed
+    case unverifiableIdentity
+}
+
+private struct AutomationBackup {
+    let task: CodexAutomation
+    let destinationURL: URL
+    let isolatedURL: URL
+    let originalFingerprint: AutomationDirectoryFingerprint
+}
+
+private struct AutomationDirectoryFingerprint: Equatable {
+    let entries: [AutomationTreeEntryFingerprint]
+}
+
+private struct AutomationTreeEntryFingerprint: Equatable {
+    enum Kind: Equatable {
+        case directory
+        case regularFile
+    }
+
+    let relativePath: String
+    let kind: Kind
+    let systemNumber: UInt64
+    let fileNumber: UInt64
+    let hash: Data?
+}
+
+private enum AutomationIsolationError: Error {
+    case ownershipChanged
 }
 
 private enum LegacyAutomationReconciler {
