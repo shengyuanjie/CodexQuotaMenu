@@ -63,7 +63,7 @@ appendRefreshDiagnostic(diagnostic, memoryManager)
 assert.deepEqual(JSON.parse(storedLog), [diagnostic])
 
 const now = new Date().toISOString()
-const valid = validatePayload({
+const currentPayload = {
   schemaVersion: 2,
   generatedAt: now,
   quotaStatus: "unavailable",
@@ -72,16 +72,25 @@ const valid = validatePayload({
   forecastStatus: "fresh",
   forecast: {
     probability48h: 82,
-    calibrationState: "experimental",
     updatedAt: now,
     isCached: false,
-    source: "codexreset.org"
+    source: "willcodexreset.com"
   }
-})
+}
+const valid = validatePayload(currentPayload)
 
 assert.equal(valid.forecast.probability48h, 82)
-assert.equal(valid.forecast.source, "codexreset.org")
+assert.equal(valid.forecast.calibrationState, null)
+assert.equal(valid.forecast.source, "willcodexreset.com")
 assert.equal(valid.resetCelebrationActive, true)
+assert.throws(() => validatePayload({
+  ...currentPayload,
+  forecast: { ...currentPayload.forecast, source: "codexreset.org" }
+}), /forecast/)
+assert.throws(() => validatePayload({
+  ...currentPayload,
+  forecast: { ...currentPayload.forecast, calibrationState: null }
+}), /forecast_flags/)
 assert.throws(() => validatePayload({ schemaVersion: 1 }), /schema_v2_required/)
 assert.throws(() => validatePayload({
   schemaVersion: 2,
@@ -95,9 +104,13 @@ assert.throws(() => validatePayload({
     calibrationState: "a".repeat(65),
     updatedAt: now,
     isCached: false,
-    source: "codexreset.org"
+    source: "willcodexreset.com"
   }
 }), /forecast_flags/)
+assert.throws(() => validatePayload({
+  ...currentPayload,
+  forecast: { ...currentPayload.forecast, probability48h: 101 }
+}), /percent/)
 assert.equal(isRecentDate(new Date(Date.now() - 2 * 60 * 60 * 1000 - 1).toISOString(), Date.now()), false)
 
 const fixedNow = Date.parse("2026-08-13T05:00:00Z")
@@ -136,10 +149,9 @@ const resetCompletedPayload = validatePayload({
   forecastStatus: "fresh",
   forecast: {
     probability48h: 90,
-    calibrationState: "experimental",
     updatedAt: "2026-08-13T05:00:00.000Z",
     isCached: false,
-    source: "codexreset.org"
+    source: "willcodexreset.com"
   },
   resetCelebrationActive: false
 })
@@ -163,10 +175,9 @@ const validLivePayload = validatePayload({
   forecastStatus: "fresh",
   forecast: {
     probability48h: 23,
-    calibrationState: "experimental",
     updatedAt: "2026-08-13T05:00:00.000Z",
     isCached: false,
-    source: "codexreset.org"
+    source: "willcodexreset.com"
   }
 })
 

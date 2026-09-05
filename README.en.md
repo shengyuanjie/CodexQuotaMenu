@@ -13,11 +13,11 @@ A native macOS menu bar utility that shows remaining Codex usage, reset countdow
 - Shows the remaining percentage, exact reset time, and countdown for Codex usage windows.
 - Shows every usage window returned by Codex and the current plan type.
 - Uses `▶` for the number of tasks that are still active.
-- Uses `↻48h` for the single next-48-hour global bonus-reset probability from Codex Reset Monitor.
+- Shows the single next-48-hour global bonus-reset probability from the independent community source `willcodexreset.com` in the menu.
 - Lists recent active tasks in the menu and shows explicit error states.
 - Refreshes every five seconds, supports an immediate manual refresh, and preserves the last successful result during temporary query failures.
-- Refreshes the public forecast independently every five minutes and hides cached forecast data after two hours.
-- Shows an encouragement message at an 80% reset probability, then restores normal quota details on both devices after detecting that both quota windows entered their next reset cycle.
+- Refreshes the public forecast independently every five minutes, reads only a 64 KiB response prefix without retaining `events`, and hides cached forecast data after two hours.
+- Shows an encouragement message on the first crossing to 50% or higher, then restores normal quota details on both devices after detecting that both quota windows entered their next reset cycle.
 - Provides an optional, default-off, token-protected local feed for an iPhone Scriptable lock-screen widget.
 - Uses a text-only menu-bar display without a leading icon for a cleaner appearance.
 - Supports Follow System, Simplified Chinese, and English interface languages.
@@ -30,19 +30,18 @@ Completed tasks are not included in the menu bar counts, and no completed-task c
 ## Menu Bar Display
 
 ```text
-Codex 90% · 4h 25m · ↻30% · ▶ 1
+Codex  5h90% left4h  W62% left2d  ▶1
 ```
 
 | Display | Meaning |
 |---|---|
-| `Codex 90%` | Remaining percentage for the shortest usage window |
-| `4h 25m` | Time until that window resets |
-| `↻30%` | Primary probability of a global bonus reset in the next 24 hours |
-| `▶ 1` | Number of tasks that are still active |
+| `5h90% left4h` | Remaining percentage and reset countdown for the five-hour window |
+| `W62% left2d` | Remaining percentage and reset countdown for the weekly window |
+| `▶1` | Number of tasks that are still active |
 
-Open the menu for every usage window, the 48-hour forecast and source, recent task titles, errors, and update times. The **Phone Widget** submenu controls the read-only local feed and copies its address or access token.
+The title never shows a forecast percentage: at 50% or higher while encouragement is active it becomes `Codex  Go go go~ Pedal harder~  ▶1`; otherwise it shows quota details. Open the menu for the `↻48h 82%` forecast, its source, recent task titles, errors, and update times. The **Phone Widget** submenu controls the read-only local feed and copies its address or access token.
 
-Global bonus-reset probabilities are public community forecasts. They express uncertainty and are neither an official schedule nor a guarantee.
+Global bonus-reset probabilities are public community forecasts from `willcodexreset.com`. They express uncertainty and are neither an official schedule nor a guarantee. The displayed forecast timestamp is source field `data.updatedAt`, while local fetch time separately determines freshness.
 
 The app no longer classifies tasks as waiting for user action and does not analyze response text to infer intent. Any task still marked active by Codex is counted under `▶`; a detected completion marker removes it from the count.
 
@@ -68,7 +67,7 @@ Do not download builds from unofficial mirror sites. Public release archives are
 3. Click the item for details. Choose **Refresh Now**, or press `R` while the menu is open, to query immediately.
 4. Choose **Language** to switch instantly between Follow System, Simplified Chinese, and English.
 5. For daily activation, open **Activation Times…**, add the times you need, then choose **Apply to Codex**. The app creates or updates matching user-level LaunchAgents that invoke the official `codex exec --ephemeral` CLI; these schedules appear only in CodexQuotaMenu and do not create entries in Codex's scheduled-task list or recent-task conversations. **Retry Check** appears only if actual state cannot be read. The list is empty on first launch; quitting CodexQuotaMenu does not affect created LaunchAgents.
-6. For an iPhone lock-screen display, follow the [Scriptable setup guide](mobile/README.md) and enable the **Phone Widget** read-only feed.
+6. For an iPhone lock-screen display, follow the [Scriptable setup guide](mobile/README.md) and enable the **Phone Widget** read-only feed. Existing Scriptable users must manually replace their imported `CodexQuotaWidget.js` with this version.
 7. Choose **Quit**, or press `Q` while the menu is open, to stop all queries and the phone feed.
 
 Managed LaunchAgent labels and filenames exactly match `com.local.codexquotamenu.activation.HHMM` under `~/Library/LaunchAgents/`. Prefix-sharing files are not owned and remain untouched. With an empty time list, **Apply to Codex** removes only the app's own LaunchAgents. Local status checks are read-only; managed scheduling changes only when the user chooses **Apply to Codex**. Both standard output and standard error go to `/dev/null`; individual run results are not persisted, displayed, or notified, so success and failure are currently silent. **Synced** means only that configuration and loaded state agree. After sleep, macOS may coalesce a missed calendar trigger into one catch-up run.
@@ -85,7 +84,7 @@ For daily activation, the app normally reads and validates only exact-owned Laun
 
 All session content is processed in memory. It is not copied, stored in a project database, uploaded, or used for telemetry.
 
-Forecasting performs GET requests only to `codexreset.org/api/monitor-summary` and displays only its next-48-hour probability; no personal usage, task, identity, or Codex credential is sent. `UserDefaults` stores the public forecast cache, phone-feed toggle, and each activation entry's hour, minute, enabled state, and stable local ID, while the phone access token is stored in macOS Keychain. The default-off phone response contains aggregate values only.
+Forecasting performs GET requests only to `https://willcodexreset.com/api/reset-radar`, an independent community source with no OpenAI affiliation or endorsement. It reads at most 64 KiB and retains only the response code, `data.probability48h`, and `data.updatedAt`, never `events`; no personal usage, task, identity, or Codex credential is sent. `UserDefaults` stores the v3 public forecast summary, phone-feed toggle, and each activation entry's hour, minute, enabled state, and stable local ID, while the phone access token is stored in macOS Keychain. The default-off phone response contains aggregate values only: `probability48h`, `updatedAt`, `isCached`, `source`, and an optional omitted `calibrationState` forecast field.
 
 See the [English privacy notice](PRIVACY.en.md) for the complete statement.
 
@@ -93,7 +92,7 @@ See the [English privacy notice](PRIVACY.en.md) for the complete statement.
 
 - App Sandbox is not enabled because the app must start a local Codex subprocess and read Codex session logs.
 - Release builds use Hardened Runtime and ad-hoc signing, but are not trusted by Gatekeeper like a notarized Developer ID build.
-- Codex itself may connect to OpenAI normally. This utility additionally contacts only the documented `codexreset.org` public forecast endpoint and sends it no personal data.
+- Codex itself may connect to OpenAI normally. This utility additionally contacts only the documented `willcodexreset.com` public forecast endpoint and sends it no personal data.
 - Plain HTTP for the phone feed is intended only for a trusted LAN or an existing encrypted VPN/home tunnel. Never port-forward it to the public internet.
 - See the [English security policy](SECURITY.en.md) for responsible vulnerability reporting.
 

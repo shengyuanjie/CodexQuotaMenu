@@ -283,19 +283,22 @@ function sanitizeQuota(raw) {
 }
 
 function sanitizeForecast(raw) {
-  if (!isObject(raw) || raw.source !== "codexreset.org") throw new Error("forecast")
+  if (!isObject(raw) || raw.source !== "willcodexreset.com") throw new Error("forecast")
+  const calibrationState = raw.calibrationState === undefined ? null : raw.calibrationState
   if (
-    typeof raw.calibrationState !== "string" ||
-    raw.calibrationState.length === 0 ||
-    raw.calibrationState.length > 64 ||
+    (raw.calibrationState !== undefined && (
+      typeof calibrationState !== "string" ||
+      calibrationState.length === 0 ||
+      calibrationState.length > 64
+    )) ||
     typeof raw.isCached !== "boolean"
   ) throw new Error("forecast_flags")
   return {
     probability48h: nullablePercent(raw.probability48h),
-    calibrationState: raw.calibrationState,
+    calibrationState,
     updatedAt: nullableDate(raw.updatedAt),
     isCached: raw.isCached,
-    source: "codexreset.org"
+    source: "willcodexreset.com"
   }
 }
 

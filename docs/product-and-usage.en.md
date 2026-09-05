@@ -26,17 +26,16 @@ The menu bar uses a text-only presentation with no extra icon before `Codex`, ke
 The English interface looks similar to:
 
 ```text
-Codex 90% · 4h 25m · ↻30% · ▶ 1
+Codex  5h90% left4h  W62% left2d  ▶1
 ```
 
 | Item | Meaning |
 |---|---|
-| `Codex 90%` | Remaining percentage for the shortest usage window |
-| `4h 25m` | Time until that window resets |
-| `↻48h 30%` | Probability of a global bonus reset in the next 48 hours |
-| `▶ 1` | Number of tasks that are still active |
+| `5h90% left4h` | Remaining percentage and reset countdown for the five-hour window |
+| `W62% left2d` | Remaining percentage and reset countdown for the weekly window |
+| `▶1` | Number of tasks that are still active |
 
-Open the menu to see every returned usage window, exact reset times, the Codex plan, task titles, the latest successful update time, and app actions.
+The title never shows a forecast percentage: at 50% or higher while encouragement is active it becomes `Codex  Go go go~ Pedal harder~  ▶1`; otherwise it shows quota details. Open the menu to see the `↻48h 82%` forecast, every returned usage window, exact reset times, the Codex plan, task titles, the latest successful update time, and app actions.
 
 The app queries up to the 50 most recently updated Codex tasks. Each task category lists up to five titles in the menu; the menu bar count reflects all tasks recognized in that query.
 

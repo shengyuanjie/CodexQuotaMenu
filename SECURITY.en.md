@@ -30,7 +30,7 @@ Do not submit account tokens, API keys, passwords, complete session logs, or ano
 
 ## External Forecast Boundary
 
-The app makes public GET requests only to `codexreset.org/api/monitor-summary` and uses only its next-48-hour probability. It sends no personal usage, task, identity, session, or Codex credential data.
+The app makes public GET requests only to `https://willcodexreset.com/api/reset-radar`, an independent community source with no OpenAI affiliation or endorsement. It reads at most a 64 KiB response prefix and uses only `data.probability48h` and `data.updatedAt`, never retaining or caching `events`. It sends no personal usage, task, identity, session, or Codex credential data.
 
 ## Release Boundaries
 

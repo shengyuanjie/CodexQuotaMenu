@@ -22,7 +22,7 @@ Codex 用量菜单栏以本地处理为原则，不运营公网服务，不包�
 
 ## 公开预测请求
 
-应用每5分钟请求 `GET https://codexreset.org/api/monitor-summary`，并只读取未来48小时概率。
+应用每5分钟请求 `GET https://willcodexreset.com/api/reset-radar`。这是与 OpenAI 无隶属或官方认可关系的独立社区来源；应用最多读取响应前缀 64 KiB，只提取响应代码、`data.probability48h` 和 `data.updatedAt`，不会保留或缓存 `events` 事件文本。
 
 请求只包含标准 HTTP 元数据、JSON 接受类型和应用版本 User-Agent。应用不会向该站点发送个人 Codex 余量、方案、任务、会话内容、身份信息或 Codex 凭据。预测失败不会阻断本机用量查询。
 
@@ -38,11 +38,11 @@ Codex 用量菜单栏以本地处理为原则，不运营公网服务，不包�
 
 应用会在本机保存：
 
-- macOS `UserDefaults`：界面语言、手机接口开关、不含个人数据的公开预测缓存、用于判断本轮重置是否完成的两组余量和重置时间，以及每条激活时间的小时、分钟、启用状态和稳定本地 ID；这些状态只保存在本机，预测超过两小时后不再显示；
+- macOS `UserDefaults`：界面语言、手机接口开关、不含个人数据的 v3 公开预测摘要缓存、用于判断本轮重置是否完成的两组余量和重置时间，以及每条激活时间的小时、分钟、启用状态和稳定本地 ID；预测摘要只含概率、来源更新时间和本机获取时间，不含 `events`，这些状态只保存在本机，预测超过两小时后不再显示；
 - macOS Keychain：首次启用手机接口时生成的 32 字节随机访问令牌；
 - 进程内存：最近一次个人余量、任务汇总和已生成的手机 JSON 快照。
 
-应用不会把手机令牌写入 `UserDefaults`、URL、日志或响应。手机 JSON 只含余量、重置时间、运行任务数量和预测汇总，不含任务标题、文件路径或对话内容。
+应用不会把手机令牌写入 `UserDefaults`、URL、日志或响应。手机 JSON 只含余量、重置时间、运行任务数量和预测汇总；预测字段为 `probability48h`、`updatedAt`、`isCached`、`source`，以及可省略的 `calibrationState`，不含任务标题、文件路径、对话内容或 `events`。
 
 Scriptable 脚本在 iPhone 上把地址和令牌保存到 Scriptable Keychain，并在本地文件中仅缓存最后成功的非敏感 JSON 与接收时间。缓存不含地址或令牌；超过两小时后不再显示旧余量或旧预测百分比。
 

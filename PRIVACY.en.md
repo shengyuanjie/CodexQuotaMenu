@@ -22,7 +22,7 @@ The app does not analyze response text or tool-call contents to infer whether th
 
 ## Public Forecast Requests
 
-Every five minutes, the app requests `GET https://codexreset.org/api/monitor-summary` and reads only its next-48-hour probability.
+Every five minutes, the app requests `GET https://willcodexreset.com/api/reset-radar`. This is an independent community source with no OpenAI affiliation or endorsement. The app reads at most a 64 KiB response prefix and extracts only the response code, `data.probability48h`, and `data.updatedAt`; it never retains or caches `events` text.
 
 Requests contain only normal HTTP metadata, a JSON Accept header, and an app-version User-Agent. The app does not send personal Codex quota, plan, task, session, identity, or credential data to the site. Forecast failure cannot block local quota queries.
 
@@ -33,16 +33,16 @@ Requests contain only normal HTTP metadata, a JSON Accept header, and an app-ver
 - The app does not write, copy, or upload Codex session content.
 - The app writes only its own user-level LaunchAgent plists when the user chooses **Apply to Codex**, and performs the narrowly scoped legacy migration. It does not read activation-run conversations or upload scheduler configuration.
 - The app does not read or save Codex account tokens, passwords, or API keys.
-- The app implements no telemetry, crash reporting, or user-data upload. Network behavior is limited to the documented `codexreset.org` public forecast GET, the user-enabled local read-only feed, and Codex's own normal connections.
+- The app implements no telemetry, crash reporting, or user-data upload. Network behavior is limited to the documented `willcodexreset.com` public forecast GET, the user-enabled local read-only feed, and Codex's own normal connections.
 - In-memory query results are released when the app exits.
 
 The app stores locally:
 
-- macOS `UserDefaults`: interface language, the phone-feed toggle, the public forecast cache, the two quota summaries and reset times used to detect completion of the current reset cycle, and each activation entry's hour, minute, enabled state, and stable local ID. This state remains local; forecast data is hidden after two hours;
+- macOS `UserDefaults`: interface language, the phone-feed toggle, the non-personal v3 public forecast summary cache, the two quota summaries and reset times used to detect completion of the current reset cycle, and each activation entry's hour, minute, enabled state, and stable local ID. The forecast summary contains only probability, source update time, and local fetch time, never `events`; this state remains local and forecast data is hidden after two hours;
 - macOS Keychain: the 32-byte random access token created when the phone feed is first enabled;
 - process memory: the latest personal quota, task summary, and generated phone JSON snapshot.
 
-The phone token is never placed in `UserDefaults`, URLs, logs, or responses. Phone JSON contains only quota, reset dates, running-task count, and forecast summaries; it contains no task title, file path, or conversation content.
+The phone token is never placed in `UserDefaults`, URLs, logs, or responses. Phone JSON contains only quota, reset dates, running-task count, and forecast summaries. Forecast fields are `probability48h`, `updatedAt`, `isCached`, `source`, and an optionally omitted `calibrationState`; it contains no task title, file path, conversation content, or `events`.
 
 On iPhone, the Scriptable script stores its address and token in Scriptable Keychain. Its local file cache contains only the last successful non-sensitive JSON and receipt time, never the address or token. After two hours, stale quota and forecast percentages are hidden.
 
