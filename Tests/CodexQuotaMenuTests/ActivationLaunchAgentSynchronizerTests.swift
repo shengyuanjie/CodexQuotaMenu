@@ -71,6 +71,47 @@ final class ActivationLaunchAgentSynchronizerTests: XCTestCase {
         XCTAssertEqual(try fixture.recoveryDirectories(), [])
     }
 
+    func testApplyTransactionallyReplacesStaleCodexPathWithCurrentLocatorPath() throws {
+        let originalURL = URL(fileURLWithPath: "/fixtures/Codex A/codex")
+        let replacementURL = URL(fileURLWithPath: "/fixtures/Codex B/codex")
+        let fixture = try Fixture(codexURL: originalURL, homeURL: homeURL)
+        defer { fixture.remove() }
+        let six = ActivationScheduleEntry(time: try ActivationTime(hour: 6, minute: 0))
+        let synchronizer = fixture.synchronizer()
+        try synchronizer.synchronize(entries: [six])
+
+        fixture.locator.url = replacementURL
+        let replacementPolicy = ActivationLaunchAgentPolicy(
+            codexURL: replacementURL,
+            homeDirectory: homeURL
+        )
+        let pendingSnapshot = ActivationSchedulerSnapshot.read(
+            readResult: ActivationLaunchAgentReader(
+                policy: replacementPolicy,
+                directoryURL: fixture.launchAgentsURL
+            ).read(),
+            controller: fixture.controller
+        )
+        XCTAssertEqual(
+            ActivationLaunchAgentReconciler.evaluate(entries: [six], snapshot: pendingSnapshot),
+            .pending(.init(misconfigured: [six.time]))
+        )
+
+        try synchronizer.synchronize(entries: [six])
+
+        let file = replacementPolicy.fileURL(for: six.time, in: fixture.launchAgentsURL)
+        let plist = try XCTUnwrap(
+            PropertyListSerialization.propertyList(
+                from: Data(contentsOf: file),
+                format: nil
+            ) as? [String: Any]
+        )
+        let arguments = try XCTUnwrap(plist["ProgramArguments"] as? [String])
+        XCTAssertEqual(arguments.first, replacementURL.path)
+        XCTAssertEqual(fixture.controller.loadedLabels, [replacementPolicy.label(for: six.time)])
+        XCTAssertEqual(try fixture.recoveryDirectories(), [])
+    }
+
     func testVerifiesNewLaunchAgentsBeforeRemovingExactLegacyAutomations() throws {
         let fixture = try Fixture(codexURL: codexURL, homeURL: homeURL)
         defer { fixture.remove() }
@@ -556,7 +597,7 @@ private final class Fixture {
 }
 
 private final class FakeCodexExecutableLocator: CodexExecutableLocating {
-    let url: URL
+    var url: URL
     private(set) var callCount = 0
 
     init(url: URL) {

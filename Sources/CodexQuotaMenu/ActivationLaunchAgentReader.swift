@@ -83,7 +83,8 @@ struct ActivationLaunchAgentReader {
 
         let expected = policy.agent(for: time)
         guard plist["Label"] as? String == expected.label,
-              plist["ProgramArguments"] as? [String] == expected.programArguments,
+              let programArguments = plist["ProgramArguments"] as? [String],
+              hasStableCommandPolicy(programArguments, expected: expected.programArguments),
               plist["WorkingDirectory"] as? String == expected.workingDirectory,
               plist["StandardOutPath"] as? String == expected.standardOutPath,
               plist["StandardErrorPath"] as? String == expected.standardErrorPath,
@@ -95,7 +96,39 @@ struct ActivationLaunchAgentReader {
             return nil
         }
 
-        return expected
+        return ActivationLaunchAgent(
+            time: time,
+            label: expected.label,
+            programArguments: programArguments,
+            workingDirectory: expected.workingDirectory,
+            standardOutPath: expected.standardOutPath,
+            standardErrorPath: expected.standardErrorPath,
+            requiresSynchronization: programArguments != expected.programArguments
+        )
+    }
+
+    private func hasStableCommandPolicy(_ actual: [String], expected: [String]) -> Bool {
+        guard actual.count == expected.count,
+              actual.dropFirst() == expected.dropFirst(),
+              let actualExecutable = actual.first,
+              let expectedExecutable = expected.first else {
+            return false
+        }
+        return isAbsoluteCodexExecutablePath(
+            actualExecutable,
+            expectedName: URL(fileURLWithPath: expectedExecutable).lastPathComponent
+        )
+    }
+
+    private func isAbsoluteCodexExecutablePath(_ path: String, expectedName: String) -> Bool {
+        guard NSString(string: path).isAbsolutePath,
+              !path.contains("\0") else {
+            return false
+        }
+        let url = URL(fileURLWithPath: path)
+        return url.standardizedFileURL.path == path &&
+            !expectedName.isEmpty &&
+            url.lastPathComponent == expectedName
     }
 
     private func strictInteger(_ value: Any?) -> Int? {

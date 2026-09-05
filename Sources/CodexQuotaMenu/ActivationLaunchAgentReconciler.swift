@@ -71,6 +71,11 @@ enum ActivationLaunchAgentReconciler {
             .intersection(configuredTimes)
             .subtracting(loadedTimes)
             .sorted()
+        difference.misconfigured = desired.compactMap { time in
+            groupedAgents[time]?.contains(where: { $0.requiresSynchronization }) == true
+                ? time
+                : nil
+        }.sorted()
 
         if desired.isEmpty && actualTimes.isEmpty {
             return .unconfigured

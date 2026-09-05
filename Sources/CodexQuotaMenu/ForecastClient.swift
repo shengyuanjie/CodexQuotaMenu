@@ -79,7 +79,7 @@ struct ForecastPrefixAccumulator {
 
     mutating func append(_ chunk: Data) throws -> Data? {
         for byte in chunk {
-            guard scannedByteCount < capacity - 1 else {
+            guard scannedByteCount < capacity else {
                 throw ForecastNetworkError.responseTooLarge
             }
             scannedByteCount += 1

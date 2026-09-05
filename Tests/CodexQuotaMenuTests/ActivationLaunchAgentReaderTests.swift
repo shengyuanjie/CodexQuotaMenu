@@ -41,6 +41,28 @@ final class ActivationLaunchAgentReaderTests: XCTestCase {
         )
     }
 
+    func testAcceptsCanonicalOwnedAgentWithStaleAbsoluteCodexPathForReconciliation() throws {
+        let sixThirty = try ActivationTime(hour: 6, minute: 30)
+        let stalePolicy = ActivationLaunchAgentPolicy(
+            codexURL: URL(fileURLWithPath: "/Applications/Codex A.app/Contents/Resources/codex"),
+            homeDirectory: policy.homeDirectory
+        )
+        try stalePolicy.agent(for: sixThirty).xmlData().write(
+            to: directory.appendingPathComponent(policy.fileName(for: sixThirty))
+        )
+
+        let result = ActivationLaunchAgentReader(policy: policy, directoryURL: directory).read()
+
+        guard case .available(let agents) = result else {
+            return XCTFail("a stale absolute Codex path must remain safely reconcilable")
+        }
+        XCTAssertEqual(agents.count, 1)
+        XCTAssertEqual(
+            agents.first?.programArguments.first,
+            "/Applications/Codex A.app/Contents/Resources/codex"
+        )
+    }
+
     func testRejectsInvalidOwnedLabelAndMismatchedFilename() throws {
         let sixThirty = try ActivationTime(hour: 6, minute: 30)
         let sevenFifteen = try ActivationTime(hour: 7, minute: 15)
@@ -81,6 +103,29 @@ final class ActivationLaunchAgentReaderTests: XCTestCase {
         let cases: [(String, (inout [String: Any]) -> Void)] = [
             ("run-at-load", { $0["RunAtLoad"] = true }),
             ("arguments", { $0["ProgramArguments"] = ["/bin/sh", "-c", "echo unexpected"] }),
+            ("arbitrary executable", {
+                var arguments = $0["ProgramArguments"] as! [String]
+                arguments[0] = "/bin/sh"
+                $0["ProgramArguments"] = arguments
+            }),
+            ("relative executable", {
+                var arguments = $0["ProgramArguments"] as! [String]
+                arguments[0] = "codex"
+                $0["ProgramArguments"] = arguments
+            }),
+            ("non-exec command", {
+                var arguments = $0["ProgramArguments"] as! [String]
+                arguments[1] = "login"
+                $0["ProgramArguments"] = arguments
+            }),
+            ("unsafe sandbox", {
+                var arguments = $0["ProgramArguments"] as! [String]
+                arguments[arguments.firstIndex(of: "read-only")!] = "danger-full-access"
+                $0["ProgramArguments"] = arguments
+            }),
+            ("pseudo-owned label", {
+                $0["Label"] = "com.local.codexquotamenu.activation.0630.backup"
+            }),
             ("stdout", { $0["StandardOutPath"] = "/tmp/output" }),
             ("stderr", { $0["StandardErrorPath"] = "/tmp/error" })
         ]

@@ -2,7 +2,6 @@ const assert = require("node:assert/strict")
 globalThis.__CODEX_WIDGET_TEST__ = true
 const {
   validatePayload,
-  isRecentDate,
   formatInlineSummary,
   buildMessageWidget,
   resolveRunMode,
@@ -83,6 +82,19 @@ assert.equal(valid.forecast.probability48h, 82)
 assert.equal(valid.forecast.calibrationState, null)
 assert.equal(valid.forecast.source, "willcodexreset.com")
 assert.equal(valid.resetCelebrationActive, true)
+assert.equal(validatePayload({
+  ...currentPayload,
+  forecast: { ...currentPayload.forecast, probability48h: 49 }
+}).resetCelebrationActive, false)
+assert.equal(validatePayload({
+  ...currentPayload,
+  forecast: { ...currentPayload.forecast, probability48h: 50 }
+}).resetCelebrationActive, true)
+assert.equal(validatePayload({
+  ...currentPayload,
+  forecast: { ...currentPayload.forecast, probability48h: 49 },
+  resetCelebrationActive: true
+}).resetCelebrationActive, true)
 assert.throws(() => validatePayload({
   ...currentPayload,
   forecast: { ...currentPayload.forecast, source: "codexreset.org" }
@@ -111,8 +123,6 @@ assert.throws(() => validatePayload({
   ...currentPayload,
   forecast: { ...currentPayload.forecast, probability48h: 101 }
 }), /percent/)
-assert.equal(isRecentDate(new Date(Date.now() - 2 * 60 * 60 * 1000 - 1).toISOString(), Date.now()), false)
-
 const fixedNow = Date.parse("2026-08-13T05:00:00Z")
 assert.equal(
   formatInlineSummary(99, "2026-08-13T05:22:30Z", 99, "2026-08-14T03:30:00Z", false, fixedNow),
@@ -179,6 +189,61 @@ const validLivePayload = validatePayload({
     isCached: false,
     source: "willcodexreset.com"
   }
+})
+
+const oldSourceFreshMacPayload = validatePayload({
+  ...validLivePayload,
+  forecastStatus: "fresh",
+  forecast: {
+    ...validLivePayload.forecast,
+    calibrationState: undefined,
+    updatedAt: "2026-08-01T05:00:00.000Z",
+    isCached: false
+  }
+})
+
+assert.deepEqual(formatRefreshFeedback({
+  payload: oldSourceFreshMacPayload,
+  receivedAt: "2026-08-13T05:00:00.000Z",
+  offline: false,
+  errorCode: null,
+  statusCode: 200
+}, fixedNow), {
+  title: "实时刷新成功",
+  message: "剩85% 余7天 刷23%\n锁屏重绘时间由 iOS 决定。"
+})
+
+assert.deepEqual(formatRefreshFeedback({
+  payload: oldSourceFreshMacPayload,
+  receivedAt: "2026-08-13T04:30:00.000Z",
+  offline: true,
+  errorCode: "network",
+  statusCode: null
+}, fixedNow), {
+  title: "实时连接失败",
+  message: "已使用本地缓存：剩85% 余7天 刷23%\n请检查 Shadowrocket 回家链路。"
+})
+
+assert.deepEqual(formatRefreshFeedback({
+  payload: validLivePayload,
+  receivedAt: "2026-08-13T02:59:59.999Z",
+  offline: true,
+  errorCode: "network",
+  statusCode: null
+}, fixedNow), {
+  title: "刷新失败",
+  message: "本地缓存已超过两小时。请检查 Shadowrocket 回家链路。"
+})
+
+assert.deepEqual(formatRefreshFeedback({
+  payload: validLivePayload,
+  receivedAt: null,
+  offline: true,
+  errorCode: "network",
+  statusCode: null
+}, fixedNow), {
+  title: "刷新失败",
+  message: "本地缓存已超过两小时。请检查 Shadowrocket 回家链路。"
 })
 
 assert.deepEqual(formatRefreshFeedback({

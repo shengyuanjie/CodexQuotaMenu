@@ -248,13 +248,35 @@ final class ForecastClientTests: XCTestCase {
         }
     }
 
-    func testPrefixAccumulatorRejectsMissingBoundaryAt64KiB() throws {
+    func testPrefixAccumulatorAllowsExactly64KiBButRejectsTheNextByte() throws {
         var accumulator = ForecastPrefixAccumulator()
 
         XCTAssertNil(try accumulator.append(Data(repeating: 0x20, count: 65_535)))
+        XCTAssertNil(try accumulator.append(Data([0x20])))
         XCTAssertThrowsError(try accumulator.append(Data([0x20]))) { error in
             XCTAssertEqual(error as? ForecastNetworkError, .responseTooLarge)
         }
+    }
+
+    func testPrefixAccumulatorAcceptsEventsBoundaryAsByte65536() throws {
+        let start = Data(
+            #"{"code":0,"data":{"updatedAt":"2026-09-04T02:42:22.950Z","probability48h":99,"#.utf8
+        )
+        let end = Data(#""events":["#.utf8)
+        let paddingCount = 65_536 - start.count - end.count
+        XCTAssertGreaterThanOrEqual(paddingCount, 0)
+        var prefix = start
+        prefix.append(Data(repeating: 0x20, count: paddingCount))
+        prefix.append(end)
+        XCTAssertEqual(prefix.count, 65_536)
+        var accumulator = ForecastPrefixAccumulator()
+
+        let compact = try accumulator.append(prefix)
+
+        XCTAssertEqual(
+            compact.flatMap { String(data: $0, encoding: .utf8) },
+            #"{"code":0,"data":{"updatedAt":"2026-09-04T02:42:22.950Z","probability48h":99}}"#
+        )
     }
 
     func testPrefixAccumulatorRejectsCompletedResponseWithoutRequiredFieldsOrEvents() {

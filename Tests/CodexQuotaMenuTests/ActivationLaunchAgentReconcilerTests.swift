@@ -96,6 +96,38 @@ final class ActivationLaunchAgentReconcilerTests: XCTestCase {
         )
     }
 
+    func testStaleAbsoluteCodexPathIsPendingMisconfiguredInsteadOfUnavailable() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "ActivationLaunchAgentReconcilerTests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let six = try ActivationTime(hour: 6, minute: 0)
+        let stalePolicy = ActivationLaunchAgentPolicy(
+            codexURL: URL(fileURLWithPath: "/Applications/Codex A.app/Contents/Resources/codex"),
+            homeDirectory: policy.homeDirectory
+        )
+        try stalePolicy.agent(for: six).xmlData().write(
+            to: directory.appendingPathComponent(policy.fileName(for: six))
+        )
+        let snapshot = ActivationSchedulerSnapshot.read(
+            readResult: ActivationLaunchAgentReader(
+                policy: policy,
+                directoryURL: directory
+            ).read(),
+            controller: SnapshotLaunchctlController(loadedLabels: [policy.label(for: six)])
+        )
+
+        XCTAssertEqual(
+            ActivationLaunchAgentReconciler.evaluate(
+                entries: [.init(time: six)],
+                snapshot: snapshot
+            ),
+            .pending(.init(misconfigured: [six]))
+        )
+    }
+
     func testFilePresentButUnloadedAgentIsPaused() throws {
         let six = try ActivationTime(hour: 6, minute: 0)
         let agent = policy.agent(for: six)

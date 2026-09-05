@@ -108,6 +108,52 @@ final class ActivationScheduleSettingsModelTests: XCTestCase {
         XCTAssertTrue(unavailableApplied)
     }
 
+    func testStaleCodexPathSurfacesAsPendingMisconfiguredInModel() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "ActivationScheduleSettingsModelTests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let time = try ActivationTime(hour: 6, minute: 30)
+        let entry = ActivationScheduleEntry(time: time)
+        let currentPolicy = ActivationLaunchAgentPolicy(
+            codexURL: URL(fileURLWithPath: "/Applications/Codex B.app/Contents/Resources/codex"),
+            homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)
+        )
+        let stalePolicy = ActivationLaunchAgentPolicy(
+            codexURL: URL(fileURLWithPath: "/Applications/Codex A.app/Contents/Resources/codex"),
+            homeDirectory: currentPolicy.homeDirectory
+        )
+        try stalePolicy.agent(for: time).xmlData().write(
+            to: directory.appendingPathComponent(currentPolicy.fileName(for: time))
+        )
+        let readResult = ActivationLaunchAgentReader(
+            policy: currentPolicy,
+            directoryURL: directory
+        ).read()
+        let snapshot: ActivationSchedulerSnapshot
+        switch readResult {
+        case .available(let agents):
+            snapshot = .available(agents: agents, loadedLabels: [currentPolicy.label(for: time)])
+        case .unavailable(let reason):
+            snapshot = .unavailable(reason)
+        }
+        let store = ActivationScheduleStore(defaults: makeDefaults())
+        try store.save([entry])
+        let model = ActivationScheduleSettingsModel(
+            store: store,
+            readSnapshot: { snapshot }
+        )
+
+        model.load()
+
+        let pendingApplied = await waitUntil {
+            model.syncState == .pending(.init(misconfigured: [time]))
+        }
+        XCTAssertTrue(pendingApplied)
+    }
+
     func testCorruptStorageRejectsEveryModelMutationWithoutSaving() throws {
         let defaults = makeDefaults()
         let original = ActivationScheduleEntry(time: try ActivationTime(hour: 6, minute: 0))

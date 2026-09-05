@@ -83,6 +83,25 @@ struct ActivationLaunchAgent: Equatable, Sendable {
     let workingDirectory: String
     let standardOutPath: String
     let standardErrorPath: String
+    let requiresSynchronization: Bool
+
+    init(
+        time: ActivationTime,
+        label: String,
+        programArguments: [String],
+        workingDirectory: String,
+        standardOutPath: String,
+        standardErrorPath: String,
+        requiresSynchronization: Bool = false
+    ) {
+        self.time = time
+        self.label = label
+        self.programArguments = programArguments
+        self.workingDirectory = workingDirectory
+        self.standardOutPath = standardOutPath
+        self.standardErrorPath = standardErrorPath
+        self.requiresSynchronization = requiresSynchronization
+    }
 
     var hour: Int { time.hour }
     var minute: Int { time.minute }
