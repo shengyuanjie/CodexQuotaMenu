@@ -36,7 +36,7 @@ enum ForecastPolicy {
             status: isCached ? .cached : .fresh,
             probability48h: forecast.probability48h,
             calibrationState: forecast.calibrationState,
-            updatedAt: forecast.fetchedAt,
+            updatedAt: forecast.sourceUpdatedAt,
             isCached: isCached
         )
     }

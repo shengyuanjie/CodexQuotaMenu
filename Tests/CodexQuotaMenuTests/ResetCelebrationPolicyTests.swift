@@ -5,6 +5,45 @@ final class ResetCelebrationPolicyTests: XCTestCase {
     private let shortReset = Date(timeIntervalSince1970: 10_000)
     private let weeklyReset = Date(timeIntervalSince1970: 20_000)
 
+    func testCelebrationStartsAtFiftyPercentAndRearmsAfterDroppingBelowThreshold() {
+        let below = ResetCelebrationPolicy.evaluate(
+            state: .initial,
+            probability48h: 49,
+            observation: observation(short: 40, weekly: 30)
+        )
+        XCTAssertFalse(below.isActive)
+
+        let first = ResetCelebrationPolicy.evaluate(
+            state: below.state,
+            probability48h: 50,
+            observation: observation(short: 40, weekly: 30)
+        )
+        XCTAssertTrue(first.isActive)
+
+        XCTAssertTrue(
+            ResetCelebrationPolicy.evaluate(
+                state: first.state,
+                probability48h: 99,
+                observation: observation(short: 35, weekly: 29)
+            ).isActive
+        )
+
+        let low = ResetCelebrationPolicy.evaluate(
+            state: first.state,
+            probability48h: 49,
+            observation: observation(short: 35, weekly: 29)
+        )
+        XCTAssertFalse(low.isActive)
+
+        XCTAssertTrue(
+            ResetCelebrationPolicy.evaluate(
+                state: low.state,
+                probability48h: 50,
+                observation: observation(short: 35, weekly: 29)
+            ).isActive
+        )
+    }
+
     func testHighForecastStartsCelebrationAndOrdinaryUpdatesKeepItActive() {
         let first = ResetCelebrationPolicy.evaluate(
             state: .initial,
@@ -89,14 +128,14 @@ final class ResetCelebrationPolicyTests: XCTestCase {
         )
         let low = ResetCelebrationPolicy.evaluate(
             state: completed.state,
-            probability48h: 79,
+            probability48h: 49,
             observation: observation(short: 95, weekly: 99)
         )
         XCTAssertFalse(low.isActive)
 
         let nextHigh = ResetCelebrationPolicy.evaluate(
             state: low.state,
-            probability48h: 80,
+            probability48h: 50,
             observation: observation(short: 94, weekly: 98)
         )
         XCTAssertTrue(nextHigh.isActive)
@@ -130,7 +169,24 @@ final class ResetCelebrationPolicyTests: XCTestCase {
 
         store.save(expected)
 
+        XCTAssertNotNil(defaults.data(forKey: "resetCelebration.state.v2"))
         XCTAssertEqual(UserDefaultsResetCelebrationStateStore(defaults: defaults).load(), expected)
+    }
+
+    func testStateStoreIgnoresV1DataWithoutDeletingIt() throws {
+        let suite = "ResetCelebrationPolicyTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let legacyState = ResetCelebrationState(
+            wasHigh: true,
+            dismissed: true,
+            observation: observation(short: 100, weekly: 100)
+        )
+        let legacyData = try JSONEncoder().encode(legacyState)
+        defaults.set(legacyData, forKey: "resetCelebration.state.v1")
+
+        XCTAssertEqual(UserDefaultsResetCelebrationStateStore(defaults: defaults).load(), .initial)
+        XCTAssertEqual(defaults.data(forKey: "resetCelebration.state.v1"), legacyData)
     }
 
     private func observation(

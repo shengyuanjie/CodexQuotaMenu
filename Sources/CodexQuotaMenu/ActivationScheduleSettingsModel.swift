@@ -3,11 +3,10 @@ import Foundation
 @MainActor
 final class ActivationScheduleSettingsModel {
     private let store: ActivationScheduleStore
-    private let readAutomations: @Sendable () -> AutomationReadResult
-    private let synchronizeAutomations: ([ActivationScheduleEntry], String) throws -> Void
-    private let timeZoneIdentifierProvider: @Sendable () -> String
+    private let readSnapshot: @Sendable () -> ActivationSchedulerSnapshot
+    private let synchronizer: any ActivationLaunchAgentSynchronizing
     private var refreshGeneration: UInt64 = 0
-    private var latestReadResult: AutomationReadResult?
+    private var latestSnapshot: ActivationSchedulerSnapshot?
 
     private(set) var entries: [ActivationScheduleEntry] = []
     private(set) var syncState: AutomationSyncState = .unconfigured
@@ -16,43 +15,32 @@ final class ActivationScheduleSettingsModel {
 
     init(
         store: ActivationScheduleStore = ActivationScheduleStore(),
-        readAutomations: @escaping @Sendable () -> AutomationReadResult = {
-            CodexAutomationReader().readManagedAutomations()
+        readSnapshot: @escaping @Sendable () -> ActivationSchedulerSnapshot = {
+            ActivationScheduleSettingsModel.readCurrentSnapshot()
         },
-        synchronizeAutomations: @escaping ([ActivationScheduleEntry], String) throws -> Void = {
-            try CodexAutomationSynchronizer().synchronize(
-                entries: $0,
-                timeZoneIdentifier: $1
-            )
-        },
-        timeZoneIdentifierProvider: @escaping @Sendable () -> String = {
-            TimeZone.current.identifier
-        }
+        synchronizer: any ActivationLaunchAgentSynchronizing = ActivationLaunchAgentSynchronizer()
     ) {
         self.store = store
-        self.readAutomations = readAutomations
-        self.synchronizeAutomations = synchronizeAutomations
-        self.timeZoneIdentifierProvider = timeZoneIdentifierProvider
+        self.readSnapshot = readSnapshot
+        self.synchronizer = synchronizer
     }
 
     func load() {
-        load(timeZoneIdentifier: timeZoneIdentifierProvider())
-    }
-
-    func load(timeZoneIdentifier: String) {
-
         do {
-            let loaded = try store.load()
-            entries = loaded
+            entries = try store.load()
             loadError = nil
             stateDidChange?()
-            refreshActualState(timeZoneIdentifier: timeZoneIdentifier)
+            refreshActualState()
         } catch {
             refreshGeneration &+= 1
             loadError = error
             syncState = .unavailable("stored schedule is unreadable")
             stateDidChange?()
         }
+    }
+
+    func load(timeZoneIdentifier: String) {
+        load()
     }
 
     func add(time: ActivationTime) throws {
@@ -75,31 +63,27 @@ final class ActivationScheduleSettingsModel {
     }
 
     func refreshActualState() {
-        refreshActualState(timeZoneIdentifier: timeZoneIdentifierProvider())
-    }
-
-    func refreshActualState(timeZoneIdentifier: String) {
         refreshGeneration &+= 1
         let generation = refreshGeneration
-        let reader = readAutomations
+        let reader = readSnapshot
         Task.detached(priority: .utility) { [weak self] in
-            let result = reader()
-            await self?.applyReadResult(
-                result,
-                timeZoneIdentifier: timeZoneIdentifier,
-                generation: generation
-            )
+            let snapshot = reader()
+            await self?.applySnapshot(snapshot, generation: generation)
         }
     }
 
+    func refreshActualState(timeZoneIdentifier: String) {
+        refreshActualState()
+    }
+
     func synchronize() throws {
-        try synchronize(timeZoneIdentifier: timeZoneIdentifierProvider())
+        try ensureMutationsAreAllowed()
+        try synchronizer.synchronize(entries: entries)
+        refreshActualState()
     }
 
     func synchronize(timeZoneIdentifier: String) throws {
-        try ensureMutationsAreAllowed()
-        try synchronizeAutomations(entries, timeZoneIdentifier)
-        refreshActualState(timeZoneIdentifier: timeZoneIdentifier)
+        try synchronize()
     }
 
     private func persist(_ value: [ActivationScheduleEntry]) throws {
@@ -107,7 +91,7 @@ final class ActivationScheduleSettingsModel {
         try store.save(normalized)
         entries = normalized
         loadError = nil
-        reconcileLatestReadResult(timeZoneIdentifier: timeZoneIdentifierProvider())
+        reconcileLatestSnapshot()
         stateDidChange?()
     }
 
@@ -117,30 +101,37 @@ final class ActivationScheduleSettingsModel {
         }
     }
 
-    private func applyReadResult(
-        _ result: AutomationReadResult,
-        timeZoneIdentifier: String,
-        generation: UInt64
-    ) {
+    private func applySnapshot(_ snapshot: ActivationSchedulerSnapshot, generation: UInt64) {
         guard loadError == nil, generation == refreshGeneration else { return }
-        latestReadResult = result
-        syncState = AutomationReconciler.evaluate(
-            entries: entries,
-            readResult: result,
-            timeZoneIdentifier: timeZoneIdentifier
-        )
+        latestSnapshot = snapshot
+        syncState = ActivationLaunchAgentReconciler.evaluate(entries: entries, snapshot: snapshot)
         stateDidChange?()
     }
 
-    private func reconcileLatestReadResult(timeZoneIdentifier: String) {
-        guard let latestReadResult else {
-            syncState = .unavailable("automation state has not been scanned")
+    private func reconcileLatestSnapshot() {
+        guard let latestSnapshot else {
+            syncState = .pending(.init())
             return
         }
-        syncState = AutomationReconciler.evaluate(
-            entries: entries,
-            readResult: latestReadResult,
-            timeZoneIdentifier: timeZoneIdentifier
-        )
+        syncState = ActivationLaunchAgentReconciler.evaluate(entries: entries, snapshot: latestSnapshot)
+        if syncState == .unconfigured {
+            syncState = .pending(.init())
+        }
+    }
+
+    nonisolated private static func readCurrentSnapshot() -> ActivationSchedulerSnapshot {
+        do {
+            let homeDirectory = FileManager.default.homeDirectoryForCurrentUser
+            let policy = ActivationLaunchAgentPolicy(
+                codexURL: try CodexExecutableLocator().findExecutable(),
+                homeDirectory: homeDirectory
+            )
+            return ActivationSchedulerSnapshot.read(
+                readResult: ActivationLaunchAgentReader(policy: policy).read(),
+                controller: LaunchctlController()
+            )
+        } catch {
+            return .unavailable("LaunchAgent scheduler state is unavailable")
+        }
     }
 }

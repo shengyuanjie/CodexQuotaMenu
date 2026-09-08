@@ -256,7 +256,7 @@ function validatePayload(raw) {
   if (raw.quotaStatus === "fresh" && quota == null) throw new Error("quota")
   if (raw.forecastStatus !== "unavailable" && forecast == null) throw new Error("forecast")
   const resetCelebrationActive = raw.resetCelebrationActive === undefined
-    ? (Number.isInteger(forecast?.probability48h) && forecast.probability48h >= 80)
+    ? (Number.isInteger(forecast?.probability48h) && forecast.probability48h >= 50)
     : raw.resetCelebrationActive
   if (typeof resetCelebrationActive !== "boolean") throw new Error("reset_celebration")
 
@@ -283,19 +283,22 @@ function sanitizeQuota(raw) {
 }
 
 function sanitizeForecast(raw) {
-  if (!isObject(raw) || raw.source !== "codexreset.org") throw new Error("forecast")
+  if (!isObject(raw) || raw.source !== "willcodexreset.com") throw new Error("forecast")
+  const calibrationState = raw.calibrationState === undefined ? null : raw.calibrationState
   if (
-    typeof raw.calibrationState !== "string" ||
-    raw.calibrationState.length === 0 ||
-    raw.calibrationState.length > 64 ||
+    (raw.calibrationState !== undefined && (
+      typeof calibrationState !== "string" ||
+      calibrationState.length === 0 ||
+      calibrationState.length > 64
+    )) ||
     typeof raw.isCached !== "boolean"
   ) throw new Error("forecast_flags")
   return {
     probability48h: nullablePercent(raw.probability48h),
-    calibrationState: raw.calibrationState,
+    calibrationState,
     updatedAt: nullableDate(raw.updatedAt),
     isCached: raw.isCached,
-    source: "codexreset.org"
+    source: "willcodexreset.com"
   }
 }
 
@@ -364,9 +367,7 @@ function buildQuotaWidget(result) {
 
   const now = Date.now()
   const payload = result.payload
-  const receivedTime = Date.parse(result.receivedAt || payload.generatedAt)
-  const cacheAge = now - receivedTime
-  const expiredOffline = result.offline && (cacheAge < -FUTURE_TOLERANCE_MS || cacheAge > FORECAST_MAX_AGE_MS)
+  const expiredOffline = isOfflineCacheExpired(result, now)
   const quota = !expiredOffline && payload.quotaStatus === "fresh" ? payload.quota : null
   const weeklyPercent = quota?.weeklyRemainingPercent
   const title = Number.isInteger(weeklyPercent)
@@ -376,12 +377,7 @@ function buildQuotaWidget(result) {
   if (expiredOffline) return buildMessageWidget(title, "Mac 离线 · 数据已过期")
 
   const forecast = payload.forecast
-  const probabilityUsable = forecast?.updatedAt
-    ? isRecentDate(forecast.updatedAt, now)
-    : false
-  const probabilityValue = probabilityUsable && Number.isInteger(forecast?.probability48h)
-    ? forecast.probability48h
-    : null
+  const probabilityValue = usableForecastProbability(payload)
   const probabilityText = Number.isInteger(probabilityValue)
     ? `↻48h ${probabilityValue}%`
     : null
@@ -411,9 +407,19 @@ function buildQuotaWidget(result) {
   return buildMessageWidget(title, detail, strong, inlineText)
 }
 
-function isRecentDate(value, now) {
-  const age = now - Date.parse(value)
-  return age >= -FUTURE_TOLERANCE_MS && age <= FORECAST_MAX_AGE_MS
+function isOfflineCacheExpired(result, now) {
+  if (!result?.offline) return false
+  const receivedTime = Date.parse(result.receivedAt)
+  if (!Number.isFinite(receivedTime)) return true
+  const cacheAge = Number(now) - receivedTime
+  return cacheAge < -FUTURE_TOLERANCE_MS || cacheAge > FORECAST_MAX_AGE_MS
+}
+
+function usableForecastProbability(payload) {
+  if (!payload || payload.forecastStatus === "unavailable") return null
+  return Number.isInteger(payload.forecast?.probability48h)
+    ? payload.forecast.probability48h
+    : null
 }
 
 function formatRemaining(value, now) {
@@ -478,18 +484,10 @@ function formatRefreshSummary(weeklyPercent, weeklyResetsAt, probability48h, now
 function inlineSummaryForResult(result, now) {
   if (!result?.payload) return "剩-- 余-- 刷--"
   const payload = result.payload
-  const receivedTime = Date.parse(result.receivedAt || payload.generatedAt)
-  const cacheAge = now - receivedTime
-  if (result.offline && (
-    cacheAge < -FUTURE_TOLERANCE_MS ||
-    cacheAge > FORECAST_MAX_AGE_MS
-  )) return "剩-- 余-- 刷--"
+  if (isOfflineCacheExpired(result, now)) return "剩-- 余-- 刷--"
 
   const quota = payload.quotaStatus === "fresh" ? payload.quota : null
-  const forecast = payload.forecast
-  const probability48h = forecast?.updatedAt && isRecentDate(forecast.updatedAt, now) && Number.isInteger(forecast.probability48h)
-    ? forecast.probability48h
-    : null
+  const probability48h = usableForecastProbability(payload)
   return formatRefreshSummary(
     quota?.weeklyRemainingPercent ?? null,
     quota?.weeklyResetsAt || null,
@@ -506,13 +504,7 @@ function formatRefreshFeedback(result, now) {
     }
   }
 
-  const receivedTime = Date.parse(result.receivedAt || result.payload.generatedAt)
-  const cacheAge = now - receivedTime
-  const cacheExpired = result.offline && (
-    cacheAge < -FUTURE_TOLERANCE_MS ||
-    cacheAge > FORECAST_MAX_AGE_MS
-  )
-  if (cacheExpired) {
+  if (isOfflineCacheExpired(result, now)) {
     return {
       title: "刷新失败",
       message: `本地缓存已超过两小时。${refreshFailureHint(result.errorCode)}`
@@ -663,7 +655,6 @@ async function finish(widget, presentPreview) {
 if (typeof module !== "undefined") {
   module.exports = {
     validatePayload,
-    isRecentDate,
     formatInlineSummary,
     buildMessageWidget,
     resolveRunMode,

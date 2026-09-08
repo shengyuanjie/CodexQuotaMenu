@@ -30,7 +30,7 @@
 
 ## 外部预测边界
 
-应用只向 `codexreset.org/api/monitor-summary` 发起公开 GET 请求，并只采用其未来48小时概率；不发送个人用量、任务、身份、会话内容或 Codex 凭据。
+应用只向 `https://willcodexreset.com/api/reset-radar` 发起公开 GET 请求；这是与 OpenAI 无隶属或官方认可关系的独立社区来源。应用最多读取响应前缀 64 KiB，并只采用 `data.probability48h` 与 `data.updatedAt`，不保留或缓存 `events`；不发送个人用量、任务、身份、会话内容或 Codex 凭据。
 
 ## 发布边界
 

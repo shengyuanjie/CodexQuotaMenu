@@ -16,20 +16,15 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         XCTAssertEqual(item.keyEquivalentModifierMask, .command)
     }
 
-    func testSyncAppliesTasksDirectlyWithoutOpeningAnotherConversation() async throws {
+    func testSyncAppliesBackgroundActivationJobsWithoutOpeningAnotherConversation() async throws {
         let suite = "ActivationScheduleWindowControllerTests.Direct.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("Controller.Direct.\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let writer = CodexAutomationSynchronizer(rootURL: root, timestampProvider: { 123 })
+        let synchronizer = RecordingWindowSynchronizer()
         let model = ActivationScheduleSettingsModel(
             store: ActivationScheduleStore(defaults: defaults),
-            readAutomations: { CodexAutomationReader(rootURL: root).readManagedAutomations() },
-            synchronizeAutomations: { entries, timeZoneIdentifier in
-                try writer.synchronize(entries: entries, timeZoneIdentifier: timeZoneIdentifier)
-            }
+            readSnapshot: { .available(agents: [], loadedLabels: []) },
+            synchronizer: synchronizer
         )
         model.load()
         try model.add(time: ActivationTime(hour: 6, minute: 0))
@@ -41,11 +36,9 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         XCTAssertTrue(controller.performSync(timeZoneIdentifier: "Asia/Shanghai"))
 
         XCTAssertEqual(controller.syncFeedback, .applied)
-        XCTAssertTrue(FileManager.default.fileExists(
-            atPath: root.appendingPathComponent("codexquotamenu-06-00/automation.toml").path
-        ))
-        let synced = await waitUntil { model.syncState == .synced }
-        XCTAssertTrue(synced)
+        XCTAssertEqual(synchronizer.entries.count, 1)
+        XCTAssertEqual(synchronizer.entries[0].map(\.time.displayValue), ["06:00"])
+        XCTAssertEqual(synchronizer.entries[0].map(\.isEnabled), [true])
     }
 
     func testSyncFailureIsReportedWithoutClaimingSuccess() throws {
@@ -55,10 +48,8 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         try model.add(time: ActivationTime(hour: 7, minute: 30))
         let failingModel = ActivationScheduleSettingsModel(
             store: ActivationScheduleStore(defaults: UserDefaults(suiteName: suite)!),
-            readAutomations: { .available([]) },
-            synchronizeAutomations: { _, _ in
-                throw CodexAutomationSynchronizationError.verificationFailed
-            }
+            readSnapshot: { .available(agents: [], loadedLabels: []) },
+            synchronizer: ThrowingWindowSynchronizer(error: .verificationFailed)
         )
         failingModel.load()
         let controller = ActivationScheduleWindowController(
@@ -79,10 +70,8 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         let recoveryPath = "/tmp/.codexquotamenu-recovery-fixture"
         let model = ActivationScheduleSettingsModel(
             store: ActivationScheduleStore(defaults: defaults),
-            readAutomations: { .available([]) },
-            synchronizeAutomations: { _, _ in
-                throw CodexAutomationSynchronizationError.recoveryRequired(recoveryPath)
-            }
+            readSnapshot: { .available(agents: [], loadedLabels: []) },
+            synchronizer: ThrowingWindowSynchronizer(error: .recoveryRequired([recoveryPath]))
         )
         model.load()
         let controller = ActivationScheduleWindowController(
@@ -101,6 +90,66 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         })
     }
 
+    func testRecoveryRequiredShowsEveryRetainedRecoveryDirectory() throws {
+        let suite = "ActivationScheduleWindowControllerTests.RecoveryPaths.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let recoveryPaths = [
+            "/tmp/.codexquotamenu-recovery-legacy",
+            "/tmp/.codexquotamenu-launchagent-recovery-current"
+        ]
+        let model = ActivationScheduleSettingsModel(
+            store: ActivationScheduleStore(defaults: defaults),
+            readSnapshot: { .available(agents: [], loadedLabels: []) },
+            synchronizer: ThrowingWindowSynchronizer(error: .recoveryRequired(recoveryPaths))
+        )
+        model.load()
+        let controller = ActivationScheduleWindowController(
+            model: model,
+            textProvider: { AppText(language: .english) }
+        )
+
+        XCTAssertFalse(controller.performSync(timeZoneIdentifier: "Asia/Shanghai"))
+
+        XCTAssertEqual(controller.syncFeedback, .failed)
+        XCTAssertNotNil(findTextField(in: controller.window?.contentView) {
+            $0.stringValue == "Recovery could not be verified. Do not delete these recovery copies:\n"
+                + recoveryPaths.joined(separator: "\n")
+        })
+    }
+
+    func testDeleteButtonOnlyUpdatesSavedSettingsUntilApply() throws {
+        let suite = "ActivationScheduleWindowControllerTests.DeleteNoSync.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ActivationScheduleStore(defaults: defaults)
+        let entry = ActivationScheduleEntry(time: try ActivationTime(hour: 6, minute: 0))
+        try store.save([entry])
+        let synchronizer = RecordingWindowSynchronizer()
+        let model = ActivationScheduleSettingsModel(
+            store: store,
+            readSnapshot: { .available(agents: [], loadedLabels: []) },
+            synchronizer: synchronizer
+        )
+        model.load()
+        let controller = ActivationScheduleWindowController(
+            model: model,
+            textProvider: { AppText(language: .english) }
+        )
+        let deleteButton = try XCTUnwrap(
+            findButton(in: controller.window?.contentView, title: "Delete")
+        )
+
+        deleteButton.performClick(nil)
+
+        XCTAssertEqual(model.entries, [])
+        XCTAssertEqual(try store.load(), [])
+        XCTAssertEqual(synchronizer.entries, [])
+        guard case .pending = model.syncState else {
+            return XCTFail("deleting a saved entry must remain pending until Apply to Codex")
+        }
+    }
+
     func testKeyWindowRefreshStartsTenSecondTimerAndCloseStopsIt() async {
         let suite = "ActivationScheduleWindowControllerTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -108,7 +157,7 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         let readCount = TestLockedCounter()
         let model = ActivationScheduleSettingsModel(
             store: ActivationScheduleStore(defaults: defaults),
-            readAutomations: { readCount.increment(); return .available([]) }
+            readSnapshot: { readCount.increment(); return .available(agents: [], loadedLabels: []) }
         )
         let controller = ActivationScheduleWindowController(
             model: model,
@@ -133,7 +182,7 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         let readCount = TestLockedCounter()
         let model = ActivationScheduleSettingsModel(
             store: ActivationScheduleStore(defaults: defaults),
-            readAutomations: { readCount.increment(); return .available([]) }
+            readSnapshot: { readCount.increment(); return .available(agents: [], loadedLabels: []) }
         )
         let controller = ActivationScheduleWindowController(
             model: model,
@@ -153,7 +202,7 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         let readCount = TestLockedCounter()
         let model = ActivationScheduleSettingsModel(
             store: ActivationScheduleStore(defaults: defaults),
-            readAutomations: { readCount.increment(); return .available([]) }
+            readSnapshot: { readCount.increment(); return .available(agents: [], loadedLabels: []) }
         )
         let controller = ActivationScheduleWindowController(
             model: model,
@@ -177,7 +226,7 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         let readCount = TestLockedCounter()
         let model = ActivationScheduleSettingsModel(
             store: ActivationScheduleStore(defaults: defaults),
-            readAutomations: { readCount.increment(); return .available([]) }
+            readSnapshot: { readCount.increment(); return .available(agents: [], loadedLabels: []) }
         )
         let controller = ActivationScheduleWindowController(
             model: model,
@@ -199,7 +248,7 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         let model = ActivationScheduleSettingsModel(
             store: ActivationScheduleStore(defaults: defaults),
-            readAutomations: { .unavailable("fixture unavailable") }
+            readSnapshot: { .unavailable("fixture unavailable") }
         )
         let controller = ActivationScheduleWindowController(
             model: model,
@@ -210,7 +259,7 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
 
         let statusRerendered = await waitUntil {
             self.findTextField(in: controller.window?.contentView) {
-                $0.stringValue == "Could not read Codex automation status. Try again later."
+                $0.stringValue == "Could not read background activation job status. Try again later."
             } != nil
         }
         XCTAssertTrue(statusRerendered)
@@ -230,7 +279,7 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         ])
         let model = ActivationScheduleSettingsModel(
             store: store,
-            readAutomations: { .available([]) }
+            readSnapshot: { .available(agents: [], loadedLabels: []) }
         )
         model.load()
         let (calendar, now) = fixedDate(hour: 23, minute: 59)
@@ -264,7 +313,7 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         )
         let model = ActivationScheduleSettingsModel(
             store: store,
-            readAutomations: { .available([]) }
+            readSnapshot: { .available(agents: [], loadedLabels: []) }
         )
         model.load()
         let (calendar, now) = fixedDate(hour: 12, minute: 34)
@@ -294,7 +343,7 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         defer { validDefaults.removePersistentDomain(forName: validSuite) }
         let validModel = ActivationScheduleSettingsModel(
             store: ActivationScheduleStore(defaults: validDefaults),
-            readAutomations: { .available([]) }
+            readSnapshot: { .available(agents: [], loadedLabels: []) }
         )
         validModel.load()
         let validController = ActivationScheduleWindowController(
@@ -309,7 +358,7 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         corruptDefaults.set(Data("not-json".utf8), forKey: ActivationScheduleStore.storageKey)
         let corruptModel = ActivationScheduleSettingsModel(
             store: ActivationScheduleStore(defaults: corruptDefaults),
-            readAutomations: { .available([]) }
+            readSnapshot: { .available(agents: [], loadedLabels: []) }
         )
         corruptModel.load()
         let corruptController = ActivationScheduleWindowController(
@@ -329,7 +378,7 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         ])
         let model = ActivationScheduleSettingsModel(
             store: store,
-            readAutomations: { .available([]) }
+            readSnapshot: { .available(agents: [], loadedLabels: []) }
         )
         model.load()
         defaults.set(Data("not-json".utf8), forKey: ActivationScheduleStore.storageKey)
@@ -353,8 +402,8 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         let model = ActivationScheduleSettingsModel(
             store: ActivationScheduleStore(defaults: defaults),
-            readAutomations: { .available([]) },
-            synchronizeAutomations: { _, _ in }
+            readSnapshot: { .available(agents: [], loadedLabels: []) },
+            synchronizer: RecordingWindowSynchronizer()
         )
         model.load()
         try model.add(time: ActivationTime(hour: 6, minute: 0))
@@ -399,7 +448,7 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
     }
 
     func testUnavailableStatusDoesNotExposeInternalReasonInEitherLanguage() {
-        let internalReason = "managed automation parse failed at /private/internal/task.toml"
+        let internalReason = "LaunchAgent scan failed at /private/internal/job.plist"
 
         let chinese = ActivationScheduleWindowController.statusText(
             for: .unavailable(internalReason),
@@ -410,8 +459,8 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
             text: AppText(language: .english)
         )
 
-        XCTAssertEqual(chinese, "无法读取 Codex 计划任务状态。请稍后重试。")
-        XCTAssertEqual(english, "Could not read Codex automation status. Try again later.")
+        XCTAssertEqual(chinese, "无法读取后台激活任务状态。请稍后重试。")
+        XCTAssertEqual(english, "Could not read background activation job status. Try again later.")
         XCTAssertFalse(chinese.contains(internalReason))
         XCTAssertFalse(english.contains(internalReason))
     }
@@ -420,27 +469,14 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         let suite = "ActivationScheduleWindowControllerTests.LongStatus.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        let automations = try (0..<480).map { index in
+        let agents = try (0..<480).map { index in
             let time = try ActivationTime(hour: index / 60, minute: index % 60)
-            return CodexAutomation(
-                id: "extra-\(index)",
-                version: 1,
-                kind: "cron",
-                name: ManagedAutomationPolicy.name(for: time),
-                prompt: ManagedAutomationPolicy.activationPrompt,
-                status: "ACTIVE",
-                rrule: "FREQ=DAILY;BYHOUR=\(time.hour);BYMINUTE=\(time.minute);TZID=Asia/Shanghai",
-                model: ManagedAutomationPolicy.model,
-                reasoningEffort: ManagedAutomationPolicy.reasoningEffort,
-                notificationPolicy: ManagedAutomationPolicy.notificationPolicy,
-                executionEnvironment: "local",
-                targetType: "projectless"
-            )
+            return fixtureAgent(for: time)
         }
         let store = ActivationScheduleStore(defaults: defaults)
         let model = ActivationScheduleSettingsModel(
             store: store,
-            readAutomations: { .available(automations) }
+            readSnapshot: { .available(agents: agents, loadedLabels: Set(agents.map(\.label))) }
         )
         model.load()
         let pendingApplied = await waitUntil {
@@ -493,10 +529,17 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
         return (
             ActivationScheduleSettingsModel(
                 store: ActivationScheduleStore(defaults: defaults),
-                readAutomations: { .available([]) }
+                readSnapshot: { .available(agents: [], loadedLabels: []) }
             ),
             suite
         )
+    }
+
+    private func fixtureAgent(for time: ActivationTime) -> ActivationLaunchAgent {
+        ActivationLaunchAgentPolicy(
+            codexURL: URL(fileURLWithPath: "/tmp/codex"),
+            homeDirectory: URL(fileURLWithPath: "/tmp/home", isDirectory: true)
+        ).agent(for: time)
     }
 
     private func findTextField(
@@ -567,6 +610,22 @@ final class ActivationScheduleWindowControllerTests: XCTestCase {
             ancestor = current.superview
         }
         return nil
+    }
+}
+
+private final class RecordingWindowSynchronizer: ActivationLaunchAgentSynchronizing {
+    private(set) var entries: [[ActivationScheduleEntry]] = []
+
+    func synchronize(entries: [ActivationScheduleEntry]) throws {
+        self.entries.append(entries)
+    }
+}
+
+private struct ThrowingWindowSynchronizer: ActivationLaunchAgentSynchronizing {
+    let error: ActivationLaunchAgentSynchronizationError
+
+    func synchronize(entries: [ActivationScheduleEntry]) throws {
+        throw error
     }
 }
 

@@ -29,7 +29,24 @@ final class ForecastPolicyTests: XCTestCase {
         )
     }
 
+    func testUsesLocalFetchTimeForFreshnessAndSourceTimeForDisplay() {
+        let now = Date(timeIntervalSince1970: 100_000)
+        let sourceUpdatedAt = now.addingTimeInterval(-86_400)
+        let locallyFetchedAt = now.addingTimeInterval(-60)
+        let forecast = ResetForecast(
+            probability48h: 82,
+            sourceUpdatedAt: sourceUpdatedAt,
+            fetchedAt: locallyFetchedAt
+        )
+
+        let snapshot = ForecastPolicy.resolve(forecast: forecast, now: now)
+
+        XCTAssertEqual(snapshot.status, .fresh)
+        XCTAssertFalse(snapshot.isCached)
+        XCTAssertEqual(snapshot.updatedAt, sourceUpdatedAt)
+    }
+
     private func forecast(at date: Date) -> ResetForecast {
-        ResetForecast(probability48h: 82, calibrationState: "experimental", fetchedAt: date)
+        ResetForecast(probability48h: 82, sourceUpdatedAt: date, fetchedAt: date)
     }
 }

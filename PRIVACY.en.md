@@ -2,7 +2,7 @@
 
 English | [简体中文](PRIVACY.md)
 
-Last updated: September 2, 2026
+Last updated: September 4, 2026
 
 Codex Usage Menu Bar is designed around local processing. The project operates no public service and includes no advertising, telemetry, or user analytics. A user may explicitly enable a Mac-local LAN service for the phone widget; it is off by default.
 
@@ -15,14 +15,14 @@ The app starts `codex app-server --stdio` through a Codex executable already ins
 - local session-log paths returned by Codex;
 - up to the last 512 KB of each relevant session log, used only to identify structured lifecycle events such as task starts, user messages, and task completions, plus whether the log has been active recently.
 
-To synchronize and reconcile daily activation times, the app reads only the managed task name, status, and required configuration fields from `~/.codex/automations/*/automation.toml`. When the user chooses **Apply to Codex**, the app creates, updates, or deletes only tasks whose complete names exactly match `CodexQuotaMenu · HH:mm`; names that merely share `CodexQuotaMenu · ` are left untouched.
+For ordinary daily reconciliation, the app reads and validates only exact-owned LaunchAgent plists such as `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` and checks their per-user loaded state through `launchctl`. During first migration, it locally reads `~/.codex/automations/*/automation.toml` to identify and safely migrate entries whose complete name exactly matches `CodexQuotaMenu · HH:mm`; it does not read their run conversations, and it does not modify other automations or prefix-sharing names.
 
 Session-log fragments may include task titles, tool-call metadata, and text from the current response.
 The app does not analyze response text or tool-call contents to infer whether the user needs to approve, choose, enter information, upload, or reply.
 
 ## Public Forecast Requests
 
-Every five minutes, the app requests `GET https://codexreset.org/api/monitor-summary` and reads only its next-48-hour probability.
+Every five minutes, the app requests `GET https://willcodexreset.com/api/reset-radar`. This is an independent community source with no OpenAI affiliation or endorsement. The app reads at most a 64 KiB response prefix and extracts only the response code, `data.probability48h`, and `data.updatedAt`; it never retains or caches `events` text.
 
 Requests contain only normal HTTP metadata, a JSON Accept header, and an app-version User-Agent. The app does not send personal Codex quota, plan, task, session, identity, or credential data to the site. Forecast failure cannot block local quota queries.
 
@@ -31,24 +31,24 @@ Requests contain only normal HTTP metadata, a JSON Accept header, and an app-ver
 - Local Codex session content and task details are processed only in device memory. Public forecast cache and user settings are stored locally as described below.
 - The app does not create its own user database.
 - The app does not write, copy, or upload Codex session content.
-- The app writes `automation.toml` only for exact-format managed tasks when the user chooses **Apply to Codex**. It does not read automation run conversations or upload automation configuration.
+- The app writes only its own user-level LaunchAgent plists when the user chooses **Apply to Codex**, and performs the narrowly scoped legacy migration. It does not read activation-run conversations or upload scheduler configuration.
 - The app does not read or save Codex account tokens, passwords, or API keys.
-- The app implements no telemetry, crash reporting, or user-data upload. Network behavior is limited to the documented `codexreset.org` public forecast GET, the user-enabled local read-only feed, and Codex's own normal connections.
+- The app implements no telemetry, crash reporting, or user-data upload. Network behavior is limited to the documented `willcodexreset.com` public forecast GET, the user-enabled local read-only feed, and Codex's own normal connections.
 - In-memory query results are released when the app exits.
 
 The app stores locally:
 
-- macOS `UserDefaults`: interface language, the phone-feed toggle, the public forecast cache, the two quota summaries and reset times used to detect completion of the current reset cycle, and each activation entry's hour, minute, enabled state, and stable local ID. This state remains local; forecast data is hidden after two hours;
+- macOS `UserDefaults`: interface language, the phone-feed toggle, the non-personal v3 public forecast summary cache, the two quota summaries and reset times used to detect completion of the current reset cycle, and each activation entry's hour, minute, enabled state, and stable local ID. The forecast summary contains only probability, source update time, and local fetch time, never `events`; this state remains local and forecast data is hidden after two hours;
 - macOS Keychain: the 32-byte random access token created when the phone feed is first enabled;
 - process memory: the latest personal quota, task summary, and generated phone JSON snapshot.
 
-The phone token is never placed in `UserDefaults`, URLs, logs, or responses. Phone JSON contains only quota, reset dates, running-task count, and forecast summaries; it contains no task title, file path, or conversation content.
+The phone token is never placed in `UserDefaults`, URLs, logs, or responses. Phone JSON contains only quota, reset dates, running-task count, and forecast summaries. Forecast fields are `probability48h`, `updatedAt`, `isCached`, `source`, and an optionally omitted `calibrationState`; it contains no task title, file path, conversation content, or `events`.
 
 On iPhone, the Scriptable script stores its address and token in Scriptable Keychain. Its local file cache contains only the last successful non-sensitive JSON and receipt time, never the address or token. After two hours, stale quota and forecast percentages are hidden.
 
 The Codex subprocess may connect to OpenAI as part of Codex's normal operation. This project does not control Codex's own data handling.
 
-Local reconciliation can confirm only whether saved activation times and managed task configuration match; it cannot prove that an individual background run succeeded. Successful scheduled runs are silent, and Codex notifies according to the task notification policy when a run fails. Quitting this app does not affect official background automations.
+Local reconciliation can confirm only whether saved activation times, managed plist configuration, and per-user loaded state match; it cannot prove that an individual background run succeeded. Both standard output and standard error go to `/dev/null`; individual run results are not persisted, displayed, or notified, so success and failure are currently silent. Activation schedules are managed only in CodexQuotaMenu and do not appear in Codex's scheduled-task list. Quitting this app does not affect existing LaunchAgents.
 
 ## Permissions and Sandbox
 
@@ -56,7 +56,7 @@ App Sandbox is not enabled because the core features require the app to:
 
 - start a local Codex subprocess;
 - read local session logs at paths returned by Codex.
-- read and write the Codex background automations explicitly configured by the user.
+- read and write its own user-level LaunchAgents.
 
 The app does not request camera, microphone, contacts, calendar, location, photo-library, or Accessibility access. macOS may show a Local Network prompt only after the user enables the phone feed.
 
@@ -64,7 +64,9 @@ The app does not request camera, microphone, contacts, calendar, location, photo
 
 Quit the app to stop all reads and the local service, or disable the phone feed independently. If a token may have leaked, regenerate it in the menu; the old token becomes invalid immediately.
 
-To uninstall, remove `Codex用量.app`. To remove the language, toggle, activation entries, public forecast cache, and reset-detection state from `UserDefaults`, run:
+Before completely uninstalling, if the app is still present, remove every time in **Activation Times…**, choose **Apply to Codex**, and confirm **Not Configured** before deleting the app. If the app has already been deleted, handle only LaunchAgents whose filename and plist `Label` both exactly match `com.local.codexquotamenu.activation.HHMM` for a valid 24-hour time. Inspect each item, run `launchctl bootout gui/$(id -u)/<exact-label>` for that exact label, and remove only its corresponding exact plist; never use a prefix wildcard for deletion. The product guide provides the complete per-item commands.
+
+To remove the language, toggle, activation entries, public forecast cache, and reset-detection state from `UserDefaults`, run:
 
 ```sh
 defaults delete com.local.codexquotamenu

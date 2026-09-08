@@ -154,32 +154,42 @@ struct AppText {
 
     var activationUnavailableDescription: String {
         language == .simplifiedChinese
-            ? "无法读取 Codex 计划任务状态。请稍后重试。"
-            : "Could not read Codex automation status. Try again later."
+            ? "无法读取后台激活任务状态。请稍后重试。"
+            : "Could not read background activation job status. Try again later."
     }
 
     var activationEmptyListDescription: String {
         language == .simplifiedChinese
-            ? "尚未设置激活时间。同步可清理全部受管任务。"
-            : "No activation times yet. Syncing can remove all managed tasks."
+            ? "尚未设置激活时间。应用可移除全部受管后台激活任务。"
+            : "No activation times yet. Applying removes all managed background activation jobs."
     }
 
     var activationTasksAppliedStatus: String {
         language == .simplifiedChinese
-            ? "已应用到 Codex，状态将自动检测。"
-            : "Applied to Codex. Status will be checked automatically."
+            ? "后台激活任务已应用，状态将自动检测。"
+            : "Background activation jobs applied. Status will be checked automatically."
     }
 
     var activationDirectSyncFailedStatus: String {
         language == .simplifiedChinese
-            ? "无法安全应用。Codex 计划任务可能未更改，或已恢复原状。"
-            : "Could not apply safely. Codex automations may be unchanged or already restored."
+            ? "无法安全应用。后台激活任务可能未更改，或已恢复原状。"
+            : "Could not apply safely. Background activation jobs may be unchanged or already restored."
     }
 
     func activationRecoveryRequiredError(path: String) -> String {
-        language == .simplifiedChinese
-            ? "无法确认计划任务已恢复。请勿删除恢复副本：\(path)"
-            : "Recovery could not be verified. Do not delete the recovery copy at: \(path)"
+        activationRecoveryRequiredError(paths: [path])
+    }
+
+    func activationRecoveryRequiredError(paths: [String]) -> String {
+        if paths.count == 1, let path = paths.first {
+            return language == .simplifiedChinese
+                ? "无法确认后台激活任务已恢复。请勿删除恢复副本：\(path)"
+                : "Recovery could not be verified. Do not delete the recovery copy at: \(path)"
+        }
+        let pathList = paths.joined(separator: "\n")
+        return language == .simplifiedChinese
+            ? "无法确认后台激活任务已恢复。请勿删除以下恢复副本：\n\(pathList)"
+            : "Recovery could not be verified. Do not delete these recovery copies:\n\(pathList)"
     }
 
     var activationCorruptStorageStatus: String {
@@ -317,7 +327,7 @@ struct AppText {
     }
 
     var forecastSourceDescription: String {
-        language == .simplifiedChinese ? "来源：Codex Reset Monitor" : "Source: Codex Reset Monitor"
+        language == .simplifiedChinese ? "来源：willcodexreset.com" : "Source: willcodexreset.com"
     }
 
     func forecastUpdatedDescription(_ time: String?, isCached: Bool) -> String {

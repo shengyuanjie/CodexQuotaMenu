@@ -6,14 +6,12 @@ protocol ForecastCaching {
 }
 
 final class UserDefaultsForecastCache: ForecastCaching {
-    static let storageKey = "globalReset.resetMonitorForecast.v2"
-    static let legacyStorageKey = "globalReset.primaryForecast.v1"
+    static let storageKey = "globalReset.willCodexResetForecast.v3"
     static let maximumCacheBytes = 64 * 1_024
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        defaults.removeObject(forKey: Self.legacyStorageKey)
     }
 
     func load() -> ResetForecast? {

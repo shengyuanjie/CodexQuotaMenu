@@ -2,9 +2,16 @@ import XCTest
 @testable import CodexQuotaMenu
 
 final class WidgetPayloadTests: XCTestCase {
-    func testBuildsSchemaVersionTwoWithOnlyTheSingleForecast() throws {
+    func testBuildsSchemaVersionTwoFromResolvedForecastAndOmitsAbsentCalibrationState() throws {
         let now = Date(timeIntervalSince1970: 100_000)
-        let forecast = ForecastDisplaySnapshot(status: .fresh, probability48h: 82, calibrationState: "experimental", updatedAt: now, isCached: false)
+        let forecast = ForecastPolicy.resolve(
+            forecast: ResetForecast(
+                probability48h: 82,
+                sourceUpdatedAt: now,
+                fetchedAt: now
+            ),
+            now: now
+        )
         let payload = WidgetPayloadBuilder.build(
             usage: nil,
             tasks: nil,
@@ -19,8 +26,9 @@ final class WidgetPayloadTests: XCTestCase {
         XCTAssertEqual(object["schemaVersion"] as? Int, 2)
         XCTAssertEqual(object["resetCelebrationActive"] as? Bool, true)
         XCTAssertEqual(value["probability48h"] as? Int, 82)
-        XCTAssertEqual(value["calibrationState"] as? String, "experimental")
-        XCTAssertEqual(value["source"] as? String, "codexreset.org")
+        XCTAssertNil(value["calibrationState"])
+        XCTAssertEqual(value["source"] as? String, "willcodexreset.com")
+        XCTAssertFalse(data.contains(Data("codexreset.org".utf8)))
         XCTAssertNil(value["probability24h"])
         XCTAssertNil(value["confidence"])
         XCTAssertNil(value["strongSignal"])
