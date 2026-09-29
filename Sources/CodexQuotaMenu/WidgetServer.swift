@@ -36,7 +36,7 @@ final class WidgetServer: @unchecked Sendable {
     static let requestTimeout: TimeInterval = 5
     static let maximumConcurrentConnections = 32
 
-    private let tokenProvider: @Sendable () -> String
+    private let tokenProvider: @Sendable () -> String?
     private let payloadProvider: @Sendable () -> Data
     private let stateHandler: @Sendable (WidgetServerState) -> Void
     private let queue = DispatchQueue(label: "com.local.codexquotamenu.widget-server")
@@ -46,7 +46,7 @@ final class WidgetServer: @unchecked Sendable {
     private var admission = WidgetConnectionAdmission(capacity: maximumConcurrentConnections)
 
     init(
-        tokenProvider: @escaping @Sendable () -> String,
+        tokenProvider: @escaping @Sendable () -> String?,
         payloadProvider: @escaping @Sendable () -> Data,
         stateHandler: @escaping @Sendable (WidgetServerState) -> Void = { _ in }
     ) {

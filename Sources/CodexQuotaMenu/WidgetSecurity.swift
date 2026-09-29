@@ -6,6 +6,23 @@ protocol WidgetTokenStoring {
     func save(_ token: String) throws
 }
 
+final class WidgetTokenCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var token: String?
+
+    func replace(with token: String?) {
+        lock.lock()
+        self.token = token
+        lock.unlock()
+    }
+
+    func current() -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return token
+    }
+}
+
 enum WidgetSecurityError: Error {
     case randomGenerationFailed(OSStatus)
     case keychainFailed(OSStatus)

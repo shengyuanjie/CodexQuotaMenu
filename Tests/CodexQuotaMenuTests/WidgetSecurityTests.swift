@@ -20,4 +20,14 @@ final class WidgetSecurityTests: XCTestCase {
         XCTAssertFalse(WidgetToken.securelyEquals("abc123", "abc1230"))
         XCTAssertFalse(WidgetToken.securelyEquals("", "abc123"))
     }
+
+    func testTokenCacheKeepsTokenAvailableWithoutReadingKeychainAgain() {
+        let cache = WidgetTokenCache()
+
+        XCTAssertNil(cache.current())
+        cache.replace(with: "first-token")
+        XCTAssertEqual(cache.current(), "first-token")
+        cache.replace(with: "replacement-token")
+        XCTAssertEqual(cache.current(), "replacement-token")
+    }
 }

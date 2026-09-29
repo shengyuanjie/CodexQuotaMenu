@@ -34,6 +34,21 @@ final class WidgetHTTPTests: XCTestCase {
         XCTAssertFalse(String(decoding: wrong.serialized(), as: UTF8.self).contains(token))
     }
 
+    func testUnavailableTokenReturnsRetryableServiceUnavailableInsteadOfUnauthorized() {
+        let response = WidgetHTTP.respond(
+            request: Data(
+                "GET /v1/widget HTTP/1.1\r\nAuthorization: Bearer \(token)\r\n\r\n".utf8
+            ),
+            expectedToken: nil,
+            payload: payload
+        )
+
+        XCTAssertEqual(response.statusCode, 503)
+        XCTAssertEqual(response.headers["Retry-After"], "2")
+        XCTAssertTrue(String(decoding: response.body, as: UTF8.self).contains("service_unavailable"))
+        XCTAssertFalse(String(decoding: response.serialized(), as: UTF8.self).contains(token))
+    }
+
     func testUnknownPathReturnsNotFound() {
         let response = respond("GET /other HTTP/1.1\r\nAuthorization: Bearer \(token)\r\n\r\n")
 

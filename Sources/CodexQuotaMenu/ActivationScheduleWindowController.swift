@@ -131,6 +131,11 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
             syncFeedback = .applied
             render()
             return true
+        } catch let error as LegacyAutomationMigrationError {
+            syncFeedback = .failed
+            inlineError = error.localizedDescription
+            render()
+            return false
         } catch ActivationLaunchAgentSynchronizationError.recoveryRequired(let paths) {
             syncFeedback = .failed
             inlineError = textProvider().activationRecoveryRequiredError(paths: paths)

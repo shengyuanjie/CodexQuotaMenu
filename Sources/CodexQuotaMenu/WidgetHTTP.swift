@@ -25,6 +25,7 @@ struct WidgetHTTPResponse: Equatable {
         case 401: "Unauthorized"
         case 404: "Not Found"
         case 405: "Method Not Allowed"
+        case 503: "Service Unavailable"
         default: "Error"
         }
     }
@@ -35,7 +36,7 @@ enum WidgetHTTP {
 
     static func respond(
         request: Data,
-        expectedToken: String,
+        expectedToken: String?,
         payload: Data
     ) -> WidgetHTTPResponse {
         guard request.count <= maximumRequestBytes,
@@ -91,6 +92,14 @@ enum WidgetHTTP {
         }
         guard path == "/v1/widget" else {
             return error(statusCode: 404, name: "not_found")
+        }
+
+        guard let expectedToken, !expectedToken.isEmpty else {
+            return response(
+                statusCode: 503,
+                body: errorBody("service_unavailable"),
+                additionalHeaders: ["Retry-After": "2"]
+            )
         }
 
         guard let authorization = authorizationValues.first,

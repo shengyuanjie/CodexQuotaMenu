@@ -9,6 +9,8 @@ const {
   makeRefreshDiagnostic,
   pruneRefreshDiagnostics,
   appendRefreshDiagnostic,
+  loadCurrentOrCached,
+  requestFailure,
   formatRefreshFeedback,
   calculateRefreshStats
 } = require("./CodexQuotaWidget.js")
@@ -309,4 +311,40 @@ const inlineWidget = buildMessageWidget("Codex 周余量 85%", "7天后恢复 ·
 assert.equal(renderedTexts.length, 1)
 assert.equal(renderedTexts[0].value, "晌81·3时  周62·2天")
 assert.equal(inlineWidget.refreshAfterDate instanceof Date, true)
-console.log("Scriptable schema v2 and inline checks passed")
+;(async () => {
+  let attempts = 0
+  let waits = 0
+  const retried = await loadCurrentOrCached({}, {
+    fetchPayload: async () => {
+      attempts += 1
+      if (attempts === 1) throw requestFailure("unauthorized", 401)
+      return validLivePayload
+    },
+    wait: async () => { waits += 1 },
+    skipCacheWrite: true,
+    loadCache: () => null
+  })
+  assert.equal(attempts, 2)
+  assert.equal(waits, 1)
+  assert.equal(retried.offline, false)
+  assert.equal(retried.statusCode, 200)
+
+  attempts = 0
+  const cachedAfterFailure = await loadCurrentOrCached({}, {
+    fetchPayload: async () => {
+      attempts += 1
+      throw requestFailure("http", 503)
+    },
+    wait: async () => { waits += 1 },
+    skipCacheWrite: true,
+    loadCache: () => ({ payload: validLivePayload, receivedAt: now })
+  })
+  assert.equal(attempts, 2)
+  assert.equal(cachedAfterFailure.offline, true)
+  assert.equal(cachedAfterFailure.payload, validLivePayload)
+  assert.equal(cachedAfterFailure.statusCode, 503)
+  console.log("Scriptable schema v2, retry, and inline checks passed")
+})().catch(error => {
+  console.error(error)
+  process.exitCode = 1
+})

@@ -141,6 +141,32 @@ final class ActivationLaunchAgentSynchronizerTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: legacyFile.path))
     }
 
+    func testDefaultMigrationRejectsActiveLegacyAndPreservesFile() throws {
+        let fixture = try Fixture(codexURL: codexURL, homeURL: homeURL)
+        defer { fixture.remove() }
+        let time = try ActivationTime(hour: 6, minute: 0)
+        let file = try fixture.writeLegacyAutomation(id: "legacy-six", time: time)
+        let original = try Data(contentsOf: file)
+        XCTAssertThrowsError(try fixture.synchronizer().synchronize(entries: [.init(time: time)])) {
+            XCTAssertTrue($0 is LegacyAutomationMigrationError)
+        }
+        XCTAssertEqual(try Data(contentsOf: file), original)
+        XCTAssertEqual(fixture.controller.loadedLabels, [])
+    }
+
+    func testDefaultMigrationPreservesPausedLegacyRecord() throws {
+        let fixture = try Fixture(codexURL: codexURL, homeURL: homeURL)
+        defer { fixture.remove() }
+        let time = try ActivationTime(hour: 6, minute: 0)
+        let file = try fixture.writeLegacyAutomation(id: "legacy-six", time: time)
+        let paused = try String(contentsOf: file, encoding: .utf8)
+            .replacingOccurrences(of: "ACTIVE", with: "PAUSED")
+        try Data(paused.utf8).write(to: file)
+        try fixture.synchronizer().synchronize(entries: [.init(time: time)])
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), paused)
+        XCTAssertEqual(fixture.controller.loadedLabels, [fixture.label(for: time)])
+    }
+
     func testFailureBeforeLaunchAgentVerificationLeavesLegacyAutomationsUntouched() throws {
         let fixture = try Fixture(codexURL: codexURL, homeURL: homeURL)
         defer { fixture.remove() }

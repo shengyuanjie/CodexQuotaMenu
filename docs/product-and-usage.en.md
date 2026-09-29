@@ -2,7 +2,18 @@
 
 English | [简体中文](product-and-usage.md)
 
-Version: v1.6.7
+Version: v1.7.0
+
+## Default Model and Reasoning Effort
+
+1. Open **Default Model…** from the Codex menu-bar menu.
+2. Wait for the current defaults and live model catalog, then choose a model and one of its supported reasoning efforts.
+3. Click **Save and Verify**. Editing a local system override may require macOS administrator authentication; the app does not receive your password.
+4. After backend verification succeeds, new chats can use the new defaults. If the desktop app still shows cached values, restart Codex after running tasks finish.
+
+Existing chats and the dedicated activation model remain unchanged. Available models depend on the signed-in account. Active profiles, unidentified managed-policy sources, or unsupported system-file formats are refused with an explanation. A failed save may leave partial updates; use **Refresh** to inspect actual values before retrying.
+
+System edits affect only the model and reasoning effort in `/etc/codex/requirements.toml` under `[models.new_thread]`. A permission-restricted original-file backup is created beside it; do not share this backup publicly. See the [privacy notice](../PRIVACY.en.md).
 
 System: macOS 14 or later
 
@@ -77,9 +88,9 @@ Open **Activation Times…**, add the times you need each day, then choose **App
 
 The app manages only LaunchAgent files and labels that exactly match `com.local.codexquotamenu.activation.HHMM` under `~/Library/LaunchAgents/`. Prefix-sharing files are not owned and remain untouched. If the time list is empty, **Apply to Codex** removes only the app's own LaunchAgents.
 
-The app first stages and validates the complete target configuration, then replaces the managed LaunchAgents and attempts to restore this run's changes if synchronization fails. The window checks plist contents and actual `launchctl` loaded state automatically and shows **Synced** only when both match the saved settings. Manual refresh is hidden during normal operation; **Retry Check** appears only when status cannot be read. A local reconciliation cannot prove that an individual background run succeeded. You need to apply again only after changing a time; quitting CodexQuotaMenu does not stop or remove background LaunchAgents already created. During first migration, only legacy automations with the exact complete name `CodexQuotaMenu · HH:mm` are removed after the new scheduler verifies successfully; all other automations remain untouched. Both standard output and standard error go to `/dev/null`; individual run results are not persisted, displayed, or notified, so success and failure are currently silent. After sleep, macOS may coalesce a missed calendar trigger into one catch-up run; the app does not perform additional catch-up runs.
+The app first stages and validates the complete target configuration, then replaces the managed LaunchAgents and attempts to restore this run's changes if synchronization fails. The window checks plist contents and actual `launchctl` loaded state automatically and shows **Synced** only when both match the saved settings. Manual refresh is hidden during normal operation; **Retry Check** appears only when status cannot be read. A local reconciliation cannot prove that an individual background run succeeded. You need to apply again only after changing a time; quitting CodexQuotaMenu does not stop or remove background LaunchAgents already created. The app's headless runner keeps activation silent. The latest summary per time and a separate diagnostic record for each run is stored in `~/Library/Logs/CodexQuotaMenu/Activation/`, containing timestamps, exit codes, error categories, usage percentages and before/after window deadlines only. Raw command output is captured in a restricted temporary directory and removed afterwards. Each run resolves the CLI again and checks structured turn completion, stable deadlines across two queries and nonzero quota usage. Unverified or transient failures are retried once after 15 seconds; authentication and quota errors are not retried immediately. If the existing window expires within ten minutes, the runner waits until five seconds after expiry; otherwise it records that the existing window remains active. After sleep, macOS may coalesce a missed calendar trigger into one catch-up run; the app does not perform additional catch-up runs. Legacy Codex automations must be paused in Codex itself. The app checks their local status and preserves their files; it does not infer scheduler cancellation from file removal.
 
-Local status checks are read-only. The app changes its exact-owned LaunchAgents, and performs the narrowly scoped legacy migration, only when you choose **Apply to Codex**.
+Local status checks are read-only. The app changes its exact-owned LaunchAgents, and performs the narrowly scoped legacy migration, only when you choose **Apply to Codex**. Legacy Codex automations must be paused in Codex itself. The app checks their local status and preserves their files; it does not infer scheduler cancellation from file removal.
 
 ## Interface Language
 
@@ -117,16 +128,16 @@ The release archive uses the ASCII name `CodexQuotaMenu` to prevent GitHub from 
 
 Apple Silicon:
 
-Use the following filenames to verify the official v1.6.7 release assets:
+Use the following filenames to verify the official v1.7.0 release assets:
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.6.7-macOS-arm64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.7.0-macOS-arm64.zip.sha256
 ```
 
 Intel:
 
 ```sh
-shasum -a 256 -c CodexQuotaMenu-v1.6.7-macOS-x86_64.zip.sha256
+shasum -a 256 -c CodexQuotaMenu-v1.7.0-macOS-x86_64.zip.sha256
 ```
 
 An `OK` result confirms that the ZIP matches its checksum file. Download both files from the same official Release.
@@ -169,7 +180,7 @@ The app processes:
 - public forecast probability, source update time, and local fetch time;
 - whether the phone feed is enabled and its access token.
 
-For ordinary synchronization and reconciliation, the app reads only exact-owned files such as `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` and checks their per-user service state through `launchctl`. During first migration, it locally reads `~/.codex/automations/*/automation.toml` to identify and safely migrate entries with the exact complete name `CodexQuotaMenu · HH:mm`; it does not read their run conversations or modify other automations. A local check can confirm matching plist and loaded state, but cannot prove that an individual background run succeeded. The exact legacy entry is removed only after successful verification of the new LaunchAgents.
+For ordinary synchronization and reconciliation, the app reads only exact-owned files such as `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` and checks their per-user service state through `launchctl`. During first migration, it locally reads `~/.codex/automations/*/automation.toml` to identify and safely migrate entries with the exact complete name `CodexQuotaMenu · HH:mm`; it does not read their run conversations or modify other automations. A local check can confirm matching plist and loaded state, but cannot prove that an individual background run succeeded. Legacy Codex automations must be paused in Codex itself. The app checks their local status and preserves their files; it does not infer scheduler cancellation from file removal.
 
 Session-log fragments may contain task titles, tool-call metadata, and the current response. They are processed in memory and are not copied, uploaded, or stored in a project database. The app does not read or save Codex account tokens, passwords, or API keys and has no advertising, analytics, or telemetry.
 

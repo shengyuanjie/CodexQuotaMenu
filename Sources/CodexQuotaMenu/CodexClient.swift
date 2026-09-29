@@ -55,6 +55,24 @@ final class CodexClient {
         }
     }
 
+    // Callers must serialize access to a client; settings use their own short-lived client.
+    func modelRequest(_ method: String, params: [String: Any]) throws -> [String: Any] {
+        do {
+            try ensureStarted()
+            guard let input, let output else { throw UsageError.usageConnectionUnavailable }
+            let id = nextRequestID
+            nextRequestID += 1
+            try send(["id": id, "method": method, "params": params], to: input.fileHandleForWriting)
+            let data = try waitForResponse(id: id, from: output.fileHandleForReading, buffer: &outputBuffer)
+            guard let envelope = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let result = envelope["result"] as? [String: Any] else { throw DefaultModelError.invalidResponse }
+            return result
+        } catch {
+            stop()
+            throw error
+        }
+    }
+
     private func fetchFromPersistentSession() throws -> UsageSnapshot {
         try ensureStarted()
         guard let input, let output else {

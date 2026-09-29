@@ -2,6 +2,10 @@
 
 English | [简体中文](SECURITY.md)
 
+## Default Model Editing Boundary
+
+Configuration writes require an explicit save in **Default Model…**. System edits use macOS administrator authentication and a fixed `/etc/codex/requirements.toml` destination, changing only the new-chat model and reasoning effort. The helper accepts neither arbitrary paths nor complete configuration contents. Original-file backups stay local with restricted permissions and must not be published. Unsupported formats and unidentified managed sources are refused. Cancelling administrator authentication prevents the subsequent user-settings write; failures later in the process warn about possible partial updates and require a refresh.
+
 ## Supported Versions
 
 Only the latest GitHub Release is maintained. Upgrade from an older release to receive security fixes.
