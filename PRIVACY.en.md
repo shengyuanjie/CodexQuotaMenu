@@ -2,7 +2,15 @@
 
 English | [简体中文](PRIVACY.md)
 
-Last updated: September 4, 2026
+Last updated: September 29, 2026
+
+## Default Model Settings
+
+Only **Save and Verify** in **Default Model…** updates the model and reasoning effort in local Codex user configuration. Catalog reads and configuration saves do not generate model responses or upload configuration to this project's servers.
+
+The app reads backend configuration and managed new-chat defaults. If an override matches local `/etc/codex/requirements.toml`, modifying it requires macOS administrator authentication; the app never reads or stores the password. Only model and reasoning-effort fields in `[models.new_thread]` change. Other contents are preserved. Ambiguous formats, conflicting edits, and unidentified override sources are refused.
+
+Before a system edit, a `requirements.toml.codexquotamenu-<random-id>.bak` file is created beside the original, containing its full contents with owner-only read/write permissions. This backup may contain other configuration and must not be uploaded to GitHub or shared publicly. Uninstalling does not restore Codex defaults or delete these backups. Existing chats and background activation models do not automatically change with global defaults.
 
 Codex Usage Menu Bar is designed around local processing. The project operates no public service and includes no advertising, telemetry, or user analytics. A user may explicitly enable a Mac-local LAN service for the phone widget; it is off by default.
 
@@ -15,7 +23,7 @@ The app starts `codex app-server --stdio` through a Codex executable already ins
 - local session-log paths returned by Codex;
 - up to the last 512 KB of each relevant session log, used only to identify structured lifecycle events such as task starts, user messages, and task completions, plus whether the log has been active recently.
 
-For ordinary daily reconciliation, the app reads and validates only exact-owned LaunchAgent plists such as `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` and checks their per-user loaded state through `launchctl`. During first migration, it locally reads `~/.codex/automations/*/automation.toml` to identify and safely migrate entries whose complete name exactly matches `CodexQuotaMenu · HH:mm`; it does not read their run conversations, and it does not modify other automations or prefix-sharing names.
+For ordinary daily reconciliation, the app reads and validates only exact-owned LaunchAgent plists such as `~/Library/LaunchAgents/com.local.codexquotamenu.activation.HHMM.plist` and checks their per-user loaded state through `launchctl`. During first migration, it locally reads `~/.codex/automations/*/automation.toml` to identify and safely migrate entries whose complete name exactly matches `CodexQuotaMenu · HH:mm`; it does not read their run conversations, and it does not modify other automations or prefix-sharing names. Legacy Codex automations must be paused in Codex itself. The app checks their local status and preserves their files; it does not infer scheduler cancellation from file removal.
 
 Session-log fragments may include task titles, tool-call metadata, and text from the current response.
 The app does not analyze response text or tool-call contents to infer whether the user needs to approve, choose, enter information, upload, or reply.
@@ -31,7 +39,7 @@ Requests contain only normal HTTP metadata, a JSON Accept header, and an app-ver
 - Local Codex session content and task details are processed only in device memory. Public forecast cache and user settings are stored locally as described below.
 - The app does not create its own user database.
 - The app does not write, copy, or upload Codex session content.
-- The app writes only its own user-level LaunchAgent plists when the user chooses **Apply to Codex**, and performs the narrowly scoped legacy migration. It does not read activation-run conversations or upload scheduler configuration.
+- The app writes only its own user-level LaunchAgent plists when the user chooses **Apply to Codex**, and performs the narrowly scoped legacy migration. It does not read activation-run conversations or upload scheduler configuration. Legacy Codex automations must be paused in Codex itself. The app checks their local status and preserves their files; it does not infer scheduler cancellation from file removal.
 - The app does not read or save Codex account tokens, passwords, or API keys.
 - The app implements no telemetry, crash reporting, or user-data upload. Network behavior is limited to the documented `willcodexreset.com` public forecast GET, the user-enabled local read-only feed, and Codex's own normal connections.
 - In-memory query results are released when the app exits.
@@ -39,7 +47,7 @@ Requests contain only normal HTTP metadata, a JSON Accept header, and an app-ver
 The app stores locally:
 
 - macOS `UserDefaults`: interface language, the phone-feed toggle, the non-personal v3 public forecast summary cache, the two quota summaries and reset times used to detect completion of the current reset cycle, and each activation entry's hour, minute, enabled state, and stable local ID. The forecast summary contains only probability, source update time, and local fetch time, never `events`; this state remains local and forecast data is hidden after two hours;
-- macOS Keychain: the 32-byte random access token created when the phone feed is first enabled;
+- macOS Keychain: the 32-byte random access token created when the phone feed is first enabled; while the feed is running, one copy remains only in app-process memory and disappears when the app exits;
 - process memory: the latest personal quota, task summary, and generated phone JSON snapshot.
 
 The phone token is never placed in `UserDefaults`, URLs, logs, or responses. Phone JSON contains only quota, reset dates, running-task count, and forecast summaries. Forecast fields are `probability48h`, `updatedAt`, `isCached`, `source`, and an optionally omitted `calibrationState`; it contains no task title, file path, conversation content, or `events`.
@@ -48,7 +56,7 @@ On iPhone, the Scriptable script stores its address and token in Scriptable Keyc
 
 The Codex subprocess may connect to OpenAI as part of Codex's normal operation. This project does not control Codex's own data handling.
 
-Local reconciliation can confirm only whether saved activation times, managed plist configuration, and per-user loaded state match; it cannot prove that an individual background run succeeded. Both standard output and standard error go to `/dev/null`; individual run results are not persisted, displayed, or notified, so success and failure are currently silent. Activation schedules are managed only in CodexQuotaMenu and do not appear in Codex's scheduled-task list. Quitting this app does not affect existing LaunchAgents.
+Local reconciliation can confirm only whether saved activation times, managed plist configuration, and per-user loaded state match; it cannot prove that an individual background run succeeded. The app's headless runner keeps activation silent. The latest summary per time and a separate diagnostic record for each run is stored in `~/Library/Logs/CodexQuotaMenu/Activation/`, containing timestamps, exit codes, error categories, usage percentages and before/after window deadlines only. Raw command output is captured in a restricted temporary directory and removed afterwards. Each run resolves the CLI again and checks structured turn completion, stable deadlines across two queries and nonzero quota usage. Unverified or transient failures are retried once after 15 seconds; authentication and quota errors are not retried immediately. If the existing window expires within ten minutes, the runner waits until five seconds after expiry; otherwise it records that the existing window remains active. Activation schedules are managed only in CodexQuotaMenu and do not appear in Codex's scheduled-task list. Quitting this app does not affect existing LaunchAgents.
 
 ## Permissions and Sandbox
 

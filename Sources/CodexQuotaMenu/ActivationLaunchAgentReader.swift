@@ -84,7 +84,7 @@ struct ActivationLaunchAgentReader {
         let expected = policy.agent(for: time)
         guard plist["Label"] as? String == expected.label,
               let programArguments = plist["ProgramArguments"] as? [String],
-              hasStableCommandPolicy(programArguments, expected: expected.programArguments),
+              acceptsArguments(programArguments, expected: expected, time: time),
               plist["WorkingDirectory"] as? String == expected.workingDirectory,
               plist["StandardOutPath"] as? String == expected.standardOutPath,
               plist["StandardErrorPath"] as? String == expected.standardErrorPath,
@@ -118,6 +118,15 @@ struct ActivationLaunchAgentReader {
             actualExecutable,
             expectedName: URL(fileURLWithPath: expectedExecutable).lastPathComponent
         )
+    }
+
+    private func acceptsArguments(_ actual: [String], expected: ActivationLaunchAgent, time: ActivationTime) -> Bool {
+        if actual == expected.programArguments { return true }
+        let direct = ActivationLaunchAgentPolicy(codexURL: policy.codexURL, homeDirectory: policy.homeDirectory, runnerURL: nil).agent(for: time).programArguments
+        if hasStableCommandPolicy(actual, expected: direct) { return true }
+        guard let runner = policy.runnerURL,
+              Array(actual.prefix(3)) == [runner.path, "--activate", expected.label] else { return false }
+        return hasStableCommandPolicy(Array(actual.dropFirst(3)), expected: direct)
     }
 
     private func isAbsoluteCodexExecutablePath(_ path: String, expectedName: String) -> Bool {

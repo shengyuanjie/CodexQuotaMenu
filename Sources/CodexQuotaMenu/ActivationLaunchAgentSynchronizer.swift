@@ -6,6 +6,29 @@ protocol ActivationLaunchAgentSynchronizing {
     func synchronize(entries: [ActivationScheduleEntry]) throws
 }
 
+enum LegacyAutomationMigrationError: LocalizedError {
+    case pauseRequired
+
+    var errorDescription: String? {
+        "请先在 Codex 的定时任务页面暂停旧的 CodexQuotaMenu 任务，再同步。Please pause the old CodexQuotaMenu automations in Codex before syncing."
+    }
+}
+
+struct LegacyAutomationMigrationCheck {
+    static func verify(rootURL: URL, fileManager: FileManager = .default) throws {
+        guard case .available(let tasks) = CodexAutomationReader(
+            rootURL: rootURL, fileManager: fileManager
+        ).readManagedAutomations() else {
+            throw ActivationLaunchAgentSynchronizationError.unreadableState
+        }
+        // Removing TOML files does not acknowledge cancellation in the app scheduler.
+        // Leave paused records intact; cancellation belongs to Codex's task manager.
+        guard tasks.allSatisfy({ $0.status == "PAUSED" }) else {
+            throw LegacyAutomationMigrationError.pauseRequired
+        }
+    }
+}
+
 enum ActivationLaunchAgentSynchronizationError: Error, Equatable, Sendable {
     case codexExecutableUnavailable
     case capabilityProbeFailed
@@ -56,7 +79,7 @@ struct CodexProcessRunner: CodexCommandRunning {
             "CodexCapabilityProbe-\(UUID().uuidString)",
             isDirectory: true
         )
-        try fileManager.createDirectory(at: captureRoot, withIntermediateDirectories: false)
+        try fileManager.createDirectory(at: captureRoot, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         defer { try? fileManager.removeItem(at: captureRoot) }
 
         let outputURL = captureRoot.appendingPathComponent("stdout")
@@ -172,10 +195,10 @@ struct ActivationLaunchAgentSynchronizer: ActivationLaunchAgentSynchronizing {
         self.controller = controller
         self.hooks = hooks
         self.legacyAutomationRemover = legacyAutomationRemover ?? {
-            try CodexAutomationSynchronizer(
+            try LegacyAutomationMigrationCheck.verify(
                 rootURL: legacyAutomationsRootURL,
                 fileManager: fileManager
-            ).removeAllManagedAutomations()
+            )
         }
     }
 

@@ -6,10 +6,12 @@ struct ActivationLaunchAgentPolicy {
 
     let codexURL: URL
     let homeDirectory: URL
+    let runnerURL: URL?
 
-    init(codexURL: URL, homeDirectory: URL) {
+    init(codexURL: URL, homeDirectory: URL, runnerURL: URL? = Bundle.main.bundleURL.pathExtension == "app" ? Bundle.main.executableURL : nil) {
         self.codexURL = codexURL
         self.homeDirectory = homeDirectory
+        self.runnerURL = runnerURL
     }
 
     func label(for time: ActivationTime) -> String {
@@ -50,7 +52,7 @@ struct ActivationLaunchAgentPolicy {
         ActivationLaunchAgent(
             time: time,
             label: label(for: time),
-            programArguments: [
+            programArguments: (runnerURL.map { [$0.path, "--activate", label(for: time)] } ?? []) + [
                 codexURL.path,
                 "exec",
                 "--ephemeral",

@@ -192,22 +192,43 @@ function isPrivateIPv4(host) {
   return values[0] === 192 && values[1] === 168
 }
 
-async function loadCurrentOrCached(credentials) {
-  try {
-    const payload = await fetchPayload(credentials)
-    const receivedAt = new Date().toISOString()
-    saveCache(payload, receivedAt)
-    return { payload, receivedAt, offline: false, errorCode: null, statusCode: 200 }
-  } catch (error) {
-    const cached = loadCache()
-    return {
-      payload: cached?.payload || null,
-      receivedAt: cached?.receivedAt || null,
-      offline: true,
-      errorCode: error?.code || "network",
-      statusCode: error?.statusCode || null
+async function loadCurrentOrCached(credentials, dependencies = {}) {
+  const fetcher = dependencies.fetchPayload || fetchPayload
+  const wait = dependencies.wait || waitBeforeRetry
+  let failure = null
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const payload = await fetcher(credentials)
+      const receivedAt = new Date().toISOString()
+      if (!dependencies.skipCacheWrite) saveCache(payload, receivedAt)
+      return { payload, receivedAt, offline: false, errorCode: null, statusCode: 200 }
+    } catch (error) {
+      failure = error
+      if (attempt === 0 && isRetryableAuthenticationFailure(error)) {
+        await wait()
+        continue
+      }
+      break
     }
   }
+
+  const cached = dependencies.loadCache ? dependencies.loadCache() : loadCache()
+  return {
+    payload: cached?.payload || null,
+    receivedAt: cached?.receivedAt || null,
+    offline: true,
+    errorCode: failure?.code || "network",
+    statusCode: failure?.statusCode || null
+  }
+}
+
+function isRetryableAuthenticationFailure(error) {
+  return error?.code === "unauthorized" || error?.statusCode === 503
+}
+
+function waitBeforeRetry() {
+  return new Promise(resolve => Timer.schedule(1, false, resolve))
 }
 
 async function fetchPayload(credentials) {
@@ -222,7 +243,10 @@ async function fetchPayload(credentials) {
     raw = await request.loadJSON()
   } catch (_) {
     const statusCode = request.response?.statusCode || null
-    throw requestFailure(statusCode === 401 ? "unauthorized" : "network", statusCode)
+    const code = statusCode === 401
+      ? "unauthorized"
+      : (Number.isInteger(statusCode) ? "http" : "network")
+    throw requestFailure(code, statusCode)
   }
   const statusCode = request.response?.statusCode || 0
   if (statusCode !== 200) throw requestFailure("http", statusCode)
@@ -662,6 +686,8 @@ if (typeof module !== "undefined") {
     makeRefreshDiagnostic,
     pruneRefreshDiagnostics,
     appendRefreshDiagnostic,
+    loadCurrentOrCached,
+    requestFailure,
     formatRefreshFeedback,
     calculateRefreshStats
   }

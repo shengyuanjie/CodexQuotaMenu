@@ -122,6 +122,9 @@ final class ActivationScheduleSettingsModel {
     nonisolated private static func readCurrentSnapshot() -> ActivationSchedulerSnapshot {
         do {
             let homeDirectory = FileManager.default.homeDirectoryForCurrentUser
+            try LegacyAutomationMigrationCheck.verify(
+                rootURL: homeDirectory.appendingPathComponent(".codex/automations")
+            )
             let policy = ActivationLaunchAgentPolicy(
                 codexURL: try CodexExecutableLocator().findExecutable(),
                 homeDirectory: homeDirectory
@@ -130,6 +133,8 @@ final class ActivationScheduleSettingsModel {
                 readResult: ActivationLaunchAgentReader(policy: policy).read(),
                 controller: LaunchctlController()
             )
+        } catch let error as LegacyAutomationMigrationError {
+            return .unavailable(error.localizedDescription)
         } catch {
             return .unavailable("LaunchAgent scheduler state is unavailable")
         }

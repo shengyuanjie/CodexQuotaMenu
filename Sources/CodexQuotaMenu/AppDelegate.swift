@@ -24,17 +24,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var resetCelebrationState = resetCelebrationStateStore.load()
     private let widgetSnapshotStore = WidgetSnapshotStore()
     private let widgetTokenStore = KeychainWidgetTokenStore()
+    private let widgetTokenCache = WidgetTokenCache()
     private let widgetPreferences = WidgetPreferences()
     private var widgetServer: WidgetServer?
     private var widgetServerState = WidgetServerState.stopped
+    private var widgetRetryAttempt = 0
+    private var widgetRetryWorkItem: DispatchWorkItem?
+    private var workspaceObservers: [NSObjectProtocol] = []
     @MainActor private lazy var activationScheduleModel = ActivationScheduleSettingsModel()
     @MainActor private var activationScheduleWindowController: ActivationScheduleWindowController?
+    @MainActor private var defaultModelWindowController: DefaultModelWindowController?
 
     private var text: AppText {
         AppText(language: languageSelection.resolved())
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        observeWorkspaceRecovery()
         statusItem.button?.title = text.loadingTitle
         rebuildMenu(message: text.loadingMessage)
         if widgetPreferences.isServerEnabled {
@@ -56,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         MainActor.assumeIsolated {
             activationScheduleModel.load()
+            if CommandLine.arguments.contains("--model-settings") { openDefaultModelSettings() }
         }
     }
 
@@ -204,6 +211,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(openActivationScheduleSettings)
         ))
 
+        let modelItem = NSMenuItem(title: text.defaultModelAction, action: #selector(openDefaultModelSettings), keyEquivalent: "")
+        modelItem.target = self
+        menu.addItem(modelItem)
+
         let languageItem = NSMenuItem(title: text.languageAction, action: nil, keyEquivalent: "")
         let languageMenu = NSMenu()
         for selection in AppLanguage.allCases {
@@ -324,11 +335,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         activationScheduleWindowController?.showWindowAndRefresh()
     }
 
+    @MainActor
+    @objc private func openDefaultModelSettings() {
+        if defaultModelWindowController == nil {
+            defaultModelWindowController = DefaultModelWindowController(textProvider: { [weak self] in self?.text ?? AppText.current })
+        }
+        defaultModelWindowController?.showWindowAndRefresh()
+    }
+
     @objc private func quit() { NSApplication.shared.terminate(nil) }
 
     @objc private func toggleWidgetServer() {
         if widgetPreferences.isServerEnabled {
             widgetPreferences.isServerEnabled = false
+            cancelWidgetServerRetry()
             widgetServer?.stop()
             widgetServerState = .stopped
             renderCurrentState()
@@ -354,6 +374,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             let token = try WidgetToken.generate()
             try widgetTokenStore.save(token)
+            widgetTokenCache.replace(with: token)
         } catch {
             widgetServerState = .failed
         }
@@ -367,12 +388,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         languageSelection = selection
         languageSelection.save()
         activationScheduleWindowController?.updateLanguage()
+        defaultModelWindowController?.updateLanguage()
         renderCurrentState()
     }
 
     @MainActor
     func applicationWillTerminate(_ notification: Notification) {
+        cancelWidgetServerRetry()
+        let notificationCenter = NSWorkspace.shared.notificationCenter
+        workspaceObservers.forEach(notificationCenter.removeObserver)
+        workspaceObservers.removeAll()
         activationScheduleWindowController?.close()
+        defaultModelWindowController?.close()
         widgetServer?.stop()
     }
 
@@ -408,33 +435,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startWidgetServer() {
+        widgetPreferences.isServerEnabled = true
         do {
-            _ = try ensureWidgetToken()
+            let token = try ensureWidgetToken()
+            widgetTokenCache.replace(with: token)
+            if widgetServerState == .failed {
+                widgetServer?.stop()
+            }
             if widgetServer == nil {
                 widgetServer = makeWidgetServer()
             }
             widgetServerState = .starting
             try widgetServer?.start()
-            widgetPreferences.isServerEnabled = true
         } catch {
-            widgetPreferences.isServerEnabled = false
             widgetServerState = .failed
+            scheduleWidgetServerRetry()
         }
         renderCurrentState()
     }
 
     private func makeWidgetServer() -> WidgetServer {
-        let tokenStore = widgetTokenStore
+        let tokenCache = widgetTokenCache
         let snapshotStore = widgetSnapshotStore
         return WidgetServer(
-            tokenProvider: { (try? tokenStore.load()) ?? "" },
+            tokenProvider: { tokenCache.current() },
             payloadProvider: { snapshotStore.current() },
             stateHandler: { [weak self] state in
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     self.widgetServerState = state
-                    if state == .failed {
-                        self.widgetPreferences.isServerEnabled = false
+                    if state == .ready {
+                        self.cancelWidgetServerRetry()
+                    } else if state == .failed {
+                        self.scheduleWidgetServerRetry()
                     }
                     self.renderCurrentState()
                 }
@@ -448,11 +481,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
            existing.allSatisfy({
                ("0"..."9").contains(String($0)) || ("a"..."f").contains(String($0))
            }) {
+            widgetTokenCache.replace(with: existing)
             return existing
         }
         let token = try WidgetToken.generate()
         try widgetTokenStore.save(token)
+        widgetTokenCache.replace(with: token)
         return token
+    }
+
+    private func observeWorkspaceRecovery() {
+        let notificationCenter = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didWakeNotification, NSWorkspace.sessionDidBecomeActiveNotification] {
+            workspaceObservers.append(notificationCenter.addObserver(
+                forName: name,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                self?.retryWidgetServerIfNeeded(resetRetryBudget: true)
+            })
+        }
+    }
+
+    private func retryWidgetServerIfNeeded(resetRetryBudget: Bool = false) {
+        guard widgetPreferences.isServerEnabled,
+              widgetServerState != .ready,
+              widgetServerState != .starting else { return }
+        if resetRetryBudget {
+            cancelWidgetServerRetry()
+        }
+        startWidgetServer()
+    }
+
+    private func scheduleWidgetServerRetry() {
+        let delays: [TimeInterval] = [1, 3, 10]
+        guard widgetPreferences.isServerEnabled,
+              widgetRetryWorkItem == nil,
+              widgetRetryAttempt < delays.count else { return }
+        let delay = delays[widgetRetryAttempt]
+        widgetRetryAttempt += 1
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.widgetRetryWorkItem = nil
+            self.retryWidgetServerIfNeeded()
+        }
+        widgetRetryWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }
+
+    private func cancelWidgetServerRetry() {
+        widgetRetryWorkItem?.cancel()
+        widgetRetryWorkItem = nil
+        widgetRetryAttempt = 0
     }
 
     private func copyToPasteboard(_ value: String) {

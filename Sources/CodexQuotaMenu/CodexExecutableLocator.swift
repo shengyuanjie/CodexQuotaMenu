@@ -24,6 +24,8 @@ struct CodexExecutableLocator: CodexExecutableLocating {
     ) {
         let home = homeDirectory ?? fileManager.homeDirectoryForCurrentUser
         let defaults = bundledCandidatePaths ?? [
+            "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+            "/Applications/Codex.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
             "/Applications/Codex.app/Contents/Resources/codex",
             "/Applications/ChatGPT.app/Contents/Resources/codex",
             home.appendingPathComponent(".local/bin/codex").path,
