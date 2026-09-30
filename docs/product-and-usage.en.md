@@ -2,7 +2,15 @@
 
 English | [简体中文](product-and-usage.md)
 
-Version: v1.7.0
+Version: v1.8.0
+
+## Scheduled Messages
+
+Open **Scheduled Message…**, choose an existing chat, model and supported reasoning effort, enter a message, and schedule one delivery. The time defaults to now; buttons adjust it by ±1 minute, ±10 minutes, ±1 hour or ±1 day. Choose a future time before scheduling. The editor supports Command+V and other standard editing shortcuts.
+
+Chats bind directly to IDs, including duplicate titles. Desktop-owned chats use the existing session and wait for an active turn to finish. Only CLI delivery directly checks working-directory permissions. `sent` requires verification of the accepted turn's completion; uncertain attempts are never automatically retried. Inspect failure details or cancel a message before delivery starts.
+
+Each message uses a separate macOS LaunchAgent, not a Codex automation. Agents remain scheduled after the menu app quits, with missed-trigger delivery limited to 24 hours after the planned time. Desktop delivery depends on the installed Codex session interface. CLI execution and Codex's own project work can still require folder permissions.
 
 ## Default Model and Reasoning Effort
 

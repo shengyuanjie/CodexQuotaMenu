@@ -4,6 +4,12 @@ English | [简体中文](PRIVACY.md)
 
 Last updated: September 29, 2026
 
+## Scheduled Message Data
+
+User-scheduled message text, target ID and title, model, reasoning effort, time and status are stored in `~/Library/Application Support/CodexQuotaMenu/ScheduledMessages/` (directory mode 700, records mode 600). LaunchAgents contain only the record ID. Records remain until removed in the window; cancel pending messages there before uninstalling.
+
+At delivery, the chosen message is passed to the local Codex desktop session or CLI and may reach Codex services under Codex's own data-handling rules. Desktop snapshots may contain conversation and tool history; they are processed only in memory, capped at 128 MB per frame, and are not saved. Raw CLI output and the outgoing prompt use restricted temporary files removed afterwards; persisted results use fixed categories. Uncertain attempts are never automatically retried.
+
 ## Default Model Settings
 
 Only **Save and Verify** in **Default Model…** updates the model and reasoning effort in local Codex user configuration. Catalog reads and configuration saves do not generate model responses or upload configuration to this project's servers.
@@ -38,8 +44,8 @@ Requests contain only normal HTTP metadata, a JSON Accept header, and an app-ver
 
 - Local Codex session content and task details are processed only in device memory. Public forecast cache and user settings are stored locally as described below.
 - The app does not create its own user database.
-- The app does not write, copy, or upload Codex session content.
-- The app writes only its own user-level LaunchAgent plists when the user chooses **Apply to Codex**, and performs the narrowly scoped legacy migration. It does not read activation-run conversations or upload scheduler configuration. Legacy Codex automations must be paused in Codex itself. The app checks their local status and preserves their files; it does not infer scheduler cancellation from file removal.
+- The app does not copy or upload existing conversation history; explicitly scheduled messages are passed to Codex as described above.
+- The app writes only its own user-level LaunchAgent plists when the user schedules a message or chooses **Apply to Codex**, and performs the narrowly scoped legacy migration. It does not read activation-run conversations or upload scheduler configuration. Legacy Codex automations must be paused in Codex itself. The app checks their local status and preserves their files; it does not infer scheduler cancellation from file removal.
 - The app does not read or save Codex account tokens, passwords, or API keys.
 - The app implements no telemetry, crash reporting, or user-data upload. Network behavior is limited to the documented `willcodexreset.com` public forecast GET, the user-enabled local read-only feed, and Codex's own normal connections.
 - In-memory query results are released when the app exits.
