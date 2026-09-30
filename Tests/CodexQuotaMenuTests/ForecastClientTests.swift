@@ -146,6 +146,10 @@ final class ForecastClientTests: XCTestCase {
         case let .failure(error):
             XCTAssertTrue(error is CancellationError, "Expected CancellationError, got \(error)")
         }
+        // URLSession reports stopLoading asynchronously after caller cancellation returns.
+        for _ in 0..<100 where !ForecastURLProtocol.wasStopped {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
         XCTAssertTrue(ForecastURLProtocol.wasStopped)
     }
 

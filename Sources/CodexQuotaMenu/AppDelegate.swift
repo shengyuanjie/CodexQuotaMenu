@@ -34,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor private lazy var activationScheduleModel = ActivationScheduleSettingsModel()
     @MainActor private var activationScheduleWindowController: ActivationScheduleWindowController?
     @MainActor private var defaultModelWindowController: DefaultModelWindowController?
+    @MainActor private var scheduledMessageWindowController: ScheduledMessageWindowController?
 
     private var text: AppText {
         AppText(language: languageSelection.resolved())
@@ -63,6 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MainActor.assumeIsolated {
             activationScheduleModel.load()
             if CommandLine.arguments.contains("--model-settings") { openDefaultModelSettings() }
+            if CommandLine.arguments.contains("--scheduled-message-settings") { openScheduledMessageSettings() }
         }
     }
 
@@ -215,6 +217,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         modelItem.target = self
         menu.addItem(modelItem)
 
+        let messageItem = NSMenuItem(title: text.modelText("定时发送消息…", "Scheduled Message…"), action: #selector(openScheduledMessageSettings), keyEquivalent: "")
+        messageItem.target = self
+        menu.addItem(messageItem)
+
         let languageItem = NSMenuItem(title: text.languageAction, action: nil, keyEquivalent: "")
         let languageMenu = NSMenu()
         for selection in AppLanguage.allCases {
@@ -343,6 +349,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         defaultModelWindowController?.showWindowAndRefresh()
     }
 
+    @MainActor
+    @objc private func openScheduledMessageSettings() {
+        if scheduledMessageWindowController == nil {
+            scheduledMessageWindowController = ScheduledMessageWindowController(textProvider: { [weak self] in self?.text ?? AppText.current })
+        }
+        scheduledMessageWindowController?.showWindowAndRefresh()
+    }
+
     @objc private func quit() { NSApplication.shared.terminate(nil) }
 
     @objc private func toggleWidgetServer() {
@@ -389,6 +403,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         languageSelection.save()
         activationScheduleWindowController?.updateLanguage()
         defaultModelWindowController?.updateLanguage()
+        scheduledMessageWindowController?.updateLanguage()
         renderCurrentState()
     }
 
@@ -400,6 +415,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspaceObservers.removeAll()
         activationScheduleWindowController?.close()
         defaultModelWindowController?.close()
+        scheduledMessageWindowController?.close()
         widgetServer?.stop()
     }
 

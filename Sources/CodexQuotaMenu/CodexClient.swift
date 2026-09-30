@@ -99,6 +99,8 @@ final class CodexClient {
         let newInput = Pipe()
         let newOutput = Pipe()
         newProcess.executableURL = executable
+        // Metadata/catalog queries must not inherit a protected project working directory.
+        newProcess.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
         newProcess.arguments = ["app-server", "--stdio"]
         newProcess.standardInput = newInput
         newProcess.standardOutput = newOutput

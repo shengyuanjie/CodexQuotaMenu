@@ -172,6 +172,28 @@ final class LaunchctlControllerTests: XCTestCase {
         )
     }
 
+    func testNegativeStatusesDoNotHideOwnedServices() throws {
+        let label = "com.local.codexquotamenu.activation.0430"
+        for row in ["0 -9 netdisk_service", "0 -15 \(label)", "123 -1 unrelated.service"] {
+            let ownedRow = row.contains(label) ? "" : "0 - \(label)"
+            let runner = RecordingLaunchctlRunner(results: [.init(
+                terminationStatus: 0,
+                standardOutput: "services = {\n\(row)\n\(ownedRow.isEmpty ? "" : ownedRow + "\n")}\n",
+                standardError: ""
+            )])
+            XCTAssertEqual(try LaunchctlController(guiUserID: 501, runner: runner).loadedOwnedLabels(), [label])
+        }
+    }
+
+    func testMalformedNegativeStatusRemainsRejected() {
+        for status in ["--9", "-9x"] {
+            let runner = RecordingLaunchctlRunner(results: [.init(
+                terminationStatus: 0, standardOutput: "services = {\n0 \(status) unrelated.service\n}", standardError: ""
+            )])
+            XCTAssertThrowsError(try LaunchctlController(guiUserID: 501, runner: runner).loadedOwnedLabels())
+        }
+    }
+
     func testTruncatedDomainInventoryIsUnavailableRatherThanIncomplete() {
         let runner = RecordingLaunchctlRunner(results: [
             .init(

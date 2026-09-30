@@ -191,7 +191,8 @@ struct LaunchctlController: LaunchctlControlling {
         let serviceLines = try activeServiceLines(in: output)
         let prefix = NSRegularExpression.escapedPattern(for: ActivationLaunchAgentPolicy.labelPrefix)
         let labelPattern = "\(prefix)(?:[01][0-9]|2[0-3])[0-5][0-9]"
-        let servicePrefix = "(?:(?:0x[0-9A-Fa-f]+|[0-9]+)\\s*=\\s*|[0-9]+\\s+\\([A-Za-z]+\\)\\s+|[0-9]+\\s+-\\s+|[0-9]+\\s+[0-9]+\\s+)?"
+        // A signal-terminated service can have a negative status (for example -9).
+        let servicePrefix = "(?:(?:0x[0-9A-Fa-f]+|[0-9]+)\\s*=\\s*|[0-9]+\\s+\\([A-Za-z]+\\)\\s+|[0-9]+\\s+-\\s+|[0-9]+\\s+-?[0-9]+\\s+)?"
         let rowPattern = "^\(servicePrefix)([^\\s{}]+)$"
         let ownedLabelPattern = "^\(labelPattern)$"
         guard let expression = try? NSRegularExpression(pattern: rowPattern),
