@@ -29,12 +29,18 @@ struct ScheduledMessage: Codable, Identifiable {
     let model: String
     let effort: String?
     let message: String
+    // Decode old preview records so they remain visible and removable, but never deliver them.
+    let targetKind: String?
+    var isUnsupportedNewTask: Bool { targetKind == "newChat" }
+    var attachments: [ScheduledMessageAttachment]?
     var state: ScheduledMessageState
     var result: String?
 
     init(id: UUID = UUID(), fireDate: Date, threadID: String, threadTitle: String, model: String,
-         message: String, effort: String? = nil, state: ScheduledMessageState = .pending, result: String? = nil) {
+         message: String, effort: String? = nil, attachments: [ScheduledMessageAttachment]? = nil, state: ScheduledMessageState = .pending, result: String? = nil) {
         self.id = id
+        self.attachments = attachments
+        self.targetKind = nil
         self.fireDate = Calendar.current.dateInterval(of: .minute, for: fireDate)?.start ?? fireDate
         self.threadID = UUID(uuidString: threadID)?.uuidString.lowercased() ?? threadID
         self.threadTitle = threadTitle
@@ -42,7 +48,7 @@ struct ScheduledMessage: Codable, Identifiable {
     }
 
     func validate(now: Date = Date()) throws {
-        guard UUID(uuidString: threadID) != nil, !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+        guard !isUnsupportedNewTask, UUID(uuidString: threadID) != nil, (!message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachmentItems.isEmpty),
               message.utf8.count <= 64_000,
               effort == nil || ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"].contains(effort!),
               model.range(of: "^[A-Za-z0-9][A-Za-z0-9._-]*$", options: .regularExpression) != nil else {
@@ -73,7 +79,7 @@ struct ScheduledMessageStore {
 
     func read(_ id: UUID) throws -> ScheduledMessage {
         let item = try JSONDecoder().decode(ScheduledMessage.self, from: Data(contentsOf: url(for: id)))
-        guard item.id == id, UUID(uuidString: item.threadID) != nil else { throw ScheduledMessageError.invalidStoredData }
+        guard item.id == id, (UUID(uuidString: item.threadID) != nil || (item.isUnsupportedNewTask && item.threadID.isEmpty)) else { throw ScheduledMessageError.invalidStoredData }
         return item
     }
 
@@ -148,6 +154,7 @@ struct ScheduledMessageScheduler {
               !FileManager.default.fileExists(atPath: store.url(for: item.id).path) else { throw ScheduledMessageError.collision }
         guard try !controller.isLoaded(label: label(item.id)) else { throw ScheduledMessageError.collision }
         try FileManager.default.createDirectory(at: agentsDirectory, withIntermediateDirectories: true)
+        try ScheduledMessageAttachmentStore(root: store.root).validate(item.attachmentItems, id: item.id)
         try store.write(item)
         do {
             try plist(item).write(to: target, options: .atomic)
@@ -155,6 +162,7 @@ struct ScheduledMessageScheduler {
         } catch {
             try? FileManager.default.removeItem(at: target)
             try? FileManager.default.removeItem(at: store.url(for: item.id))
+            try? ScheduledMessageAttachmentStore(root: store.root).remove(item.id)
             throw error
         }
     }
@@ -171,6 +179,7 @@ struct ScheduledMessageScheduler {
         }
         let target = plistURL(item.id)
         if FileManager.default.fileExists(atPath: target.path) { try FileManager.default.removeItem(at: target) }
+        try ScheduledMessageAttachmentStore(root: store.root).remove(item.id)
         try FileManager.default.removeItem(at: store.url(for: item.id))
     }
 

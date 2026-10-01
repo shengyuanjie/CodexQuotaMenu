@@ -2,13 +2,15 @@
 
 English | [简体中文](PRIVACY.md)
 
-Last updated: September 29, 2026
+Last updated: October 1, 2026
 
 ## Scheduled Message Data
 
 User-scheduled message text, target ID and title, model, reasoning effort, time and status are stored in `~/Library/Application Support/CodexQuotaMenu/ScheduledMessages/` (directory mode 700, records mode 600). LaunchAgents contain only the record ID. Records remain until removed in the window; cancel pending messages there before uninstalling.
 
 At delivery, the chosen message is passed to the local Codex desktop session or CLI and may reach Codex services under Codex's own data-handling rules. Desktop snapshots may contain conversation and tool history; they are processed only in memory, capped at 128 MB per frame, and are not saved. Raw CLI output and the outgoing prompt use restricted temporary files removed afterwards; persisted results use fixed categories. Uncertain attempts are never automatically retried.
+
+Attachments are copied into a dedicated directory beside their message record when scheduled (directory mode 700, file mode 600). Copies, filenames, kinds, sizes and checksums remain with the record and are deleted when it is removed. Originals are not modified or deleted. Photos may be converted to JPEG copies. At delivery, photos use Codex image input and other files are referenced by local path for the chat to read; Codex may send their contents to its services. Selecting attachments may trigger macOS file-access consent.
 
 ## Default Model Settings
 

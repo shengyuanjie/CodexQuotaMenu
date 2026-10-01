@@ -5,6 +5,10 @@ struct ScheduledMessageDeliveryError: LocalizedError {
     let code: String
     var errorDescription: String? {
         switch code {
+        case "new_task_removed": return "新建任务功能已移除，此消息未发送。请选择已有任务重新安排。 / New chat creation was removed. This message was not sent. Schedule it for an existing chat."
+        case "attachment_limit": return "最多 20 个附件，单个不超过 25 MB，总计不超过 100 MB。 / Up to 20 attachments, 25 MB each, 100 MB total."
+        case "attachment_invalid", "attachment_image_invalid": return "附件无效或照片格式无法读取，请选择普通文件或有效照片。 / Invalid file or unreadable image."
+        case "attachment_changed", "attachment_unavailable": return "保存的附件已变更或无法读取，消息未发送。请重新安排。 / Saved attachments changed or are unavailable. Schedule again."
         case "directory_access_denied": return "无法访问目标任务的工作目录，请检查文稿等文件夹的访问权限。 / Access to the chat working directory was denied. Check Files and Folders permissions."
         case "directory_missing": return "目标任务的工作目录已不存在。 / The chat working directory no longer exists."
         case "directory_unavailable": return "无法读取目标任务的工作目录。 / The chat working directory is unavailable."
@@ -117,6 +121,10 @@ struct ScheduledMessageRunner {
         item.result = "started"
         guard (try? store.write(item)) != nil else { return 2 }
         do {
+            try ScheduledMessageAttachmentStore(root: store.root).validate(item.attachmentItems, id: item.id)
+            guard !item.isUnsupportedNewTask else {
+                throw ScheduledMessageDeliveryError(code: "new_task_removed")
+            }
             let target = try resolveThread(item.threadID)
             let effort = try resolveEffort(item.model, item.effort, target.effort)
             let completed = try send(item, target, effort)
@@ -145,7 +153,7 @@ struct ScheduledMessageRunner {
         let outputHandle = try FileHandle(forWritingTo: output)
         defer { try? outputHandle.close() }
         let prompt = directory.appendingPathComponent("prompt.txt")
-        guard FileManager.default.createFile(atPath: prompt.path, contents: Data(item.message.utf8),
+        guard FileManager.default.createFile(atPath: prompt.path, contents: Data(item.deliveryText.utf8),
                                              attributes: [.posixPermissions: 0o600]) else {
             throw ScheduledMessageError.commandFailed
         }
@@ -157,7 +165,7 @@ struct ScheduledMessageRunner {
         process.arguments = ["exec", "--cd", workingDirectory.path, "--skip-git-repo-check",
                              "resume", "--all", "--json", "--model", item.model,
                              "--config", "model_reasoning_effort=\"\(effort)\"",
-                             item.threadID, "-"]
+                             ] + item.attachmentItems.filter { $0.kind == .image }.flatMap { ["--image", $0.path] } + [item.threadID, "-"]
         process.standardInput = input
         process.standardOutput = outputHandle
         let errorOutput = directory.appendingPathComponent("stderr.txt")
