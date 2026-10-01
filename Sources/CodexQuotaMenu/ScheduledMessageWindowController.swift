@@ -18,6 +18,11 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
     private let datePicker = NSDatePicker()
     private var timeAdjustmentButtons: [NSButton] = []
     private let messageView = ScheduledMessageTextView()
+    private var attachmentURLs: [URL] = []
+    private let attachmentPicker = NSPopUpButton()
+    private let fileButton = NSButton()
+    private let removeAttachmentButton = NSButton()
+    private let attachmentHint = NSTextField(wrappingLabelWithString: "")
     private let savedPicker = NSPopUpButton()
     private let feedback = NSTextField(wrappingLabelWithString: "")
     private let addButton = NSButton()
@@ -33,10 +38,10 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
 
     init(textProvider: @escaping () -> AppText) {
         self.textProvider = textProvider
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 650, height: 720),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 650, height: 750),
                               styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         super.init(window: window)
-        window.minSize = NSSize(width: 600, height: 680)
+        window.minSize = NSSize(width: 600, height: 720)
         window.center()
         buildView()
         updateLanguage()
@@ -69,6 +74,10 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
             button.setAccessibilityLabel(button.title)
         }
         messageLabel.stringValue = t.modelText("消息内容", "Message")
+        fileButton.title = t.modelText("添加文件…", "Add files…")
+        removeAttachmentButton.title = t.modelText("移除附件", "Remove attachment")
+        attachmentHint.stringValue = t.modelText("附件在安排时保存副本；最多20个，单个25 MB，共100 MB。", "Copies saved when scheduled; up to 20 files, 25 MB each, 100 MB total.")
+        updateAttachmentPicker()
         savedLabel.stringValue = t.modelText("已安排的消息", "Scheduled messages")
         taskField.placeholderString = t.modelText("任务 ID，也可从 codex://threads/ 链接粘贴", "Chat ID or codex://threads/ link")
         addButton.title = t.modelText("安排发送", "Schedule")
@@ -101,6 +110,8 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
                 let button = NSButton(title: "", target: self, action: #selector(adjustSendTime(_:)))
                 button.bezelStyle = .rounded
                 button.font = .systemFont(ofSize: 12)
+                button.widthAnchor.constraint(equalToConstant: 82).isActive = true
+                button.heightAnchor.constraint(equalToConstant: 24).isActive = true
                 button.tag = offset
                 timeAdjustmentButtons.append(button)
                 pair.addArrangedSubview(button)
@@ -111,22 +122,30 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         messageView.allowsUndo = true
         messageView.font = .systemFont(ofSize: 13)
         messageView.setAccessibilityLabel("Scheduled message text")
-        messageView.frame = NSRect(x: 0, y: 0, width: 580, height: 140)
+        let messageHeight = ceil(NSLayoutManager().defaultLineHeight(for: messageView.font!) * 5 + 10)
+        messageView.frame = NSRect(x: 0, y: 0, width: 580, height: messageHeight)
         messageView.isVerticallyResizable = true
         messageView.autoresizingMask = [.width]
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
         scroll.borderType = .bezelBorder
         scroll.documentView = messageView
-        scroll.heightAnchor.constraint(equalToConstant: 140).isActive = true
+        scroll.heightAnchor.constraint(equalToConstant: messageHeight).isActive = true
         addButton.target = self; addButton.action = #selector(schedule)
         removeButton.target = self; removeButton.action = #selector(remove)
         refreshButton.target = self; refreshButton.action = #selector(refresh)
+        fileButton.target = self; fileButton.action = #selector(addFiles)
+        removeAttachmentButton.target = self; removeAttachmentButton.action = #selector(removeAttachment)
+        attachmentPicker.setAccessibilityLabel("Scheduled message attachments")
+        attachmentHint.font = .systemFont(ofSize: 11)
+        attachmentHint.textColor = .secondaryLabelColor
+        let attachmentButtons = NSStackView(views: [fileButton, removeAttachmentButton])
+        attachmentButtons.orientation = .horizontal; attachmentButtons.spacing = 10
         let buttons = NSStackView(views: [refreshButton, NSView(), removeButton, addButton])
         buttons.orientation = .horizontal; buttons.spacing = 10
         let stack = NSStackView(views: [heading, taskLabel, taskPicker, taskField, modelLabel,
                                         modelPicker, effortLabel, effortPicker, dateLabel, timeRow, messageLabel, scroll,
-                                        savedLabel, savedPicker, feedback, buttons])
+                                        attachmentButtons, attachmentPicker, attachmentHint, savedLabel, savedPicker, feedback, buttons])
         stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 9
         stack.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(stack)
@@ -136,7 +155,7 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
             stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
             stack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -20)
         ])
-        for view in [taskPicker, taskField, modelPicker, effortPicker, scroll, savedPicker, feedback, buttons] {
+        for view in [taskPicker, taskField, modelPicker, effortPicker, scroll, attachmentPicker, attachmentHint, savedPicker, feedback, buttons] {
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
     }
@@ -164,9 +183,59 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
                 ? textProvider().modelText("发送时间不能超过未来一年。", "The send time must be within the next year.") : ""
     }
 
+    @objc private func addFiles() { chooseAttachments() }
+
+    private func chooseAttachments() {
+        guard !scheduling, let window else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = true
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let self else { return }
+            var urls = self.attachmentURLs
+            for url in panel.urls where !urls.contains(url) { urls.append(url) }
+            guard urls.count <= ScheduledMessageAttachmentStore.maximumCount else {
+                self.feedback.stringValue = ScheduledMessageDeliveryError(code: "attachment_limit").localizedDescription
+                return
+            }
+            self.attachmentURLs = urls
+            self.updateAttachmentPicker()
+        }
+    }
+
+    private func setAttachmentControlsEnabled(_ enabled: Bool) {
+        fileButton.isEnabled = enabled
+        attachmentPicker.isEnabled = enabled
+        removeAttachmentButton.isEnabled = enabled && !attachmentURLs.isEmpty
+    }
+
+    private func updateAttachmentPicker() {
+        attachmentPicker.removeAllItems()
+        if attachmentURLs.isEmpty {
+            attachmentPicker.addItem(withTitle: textProvider().modelText("未添加附件", "No attachments"))
+        } else {
+            for (index, url) in attachmentURLs.enumerated() {
+                let row = NSMenuItem(title: "\(index + 1). \(url.lastPathComponent)", action: nil, keyEquivalent: "")
+                row.toolTip = url.path
+                row.image = NSWorkspace.shared.icon(forFile: url.path)
+                row.image?.size = NSSize(width: 16, height: 16)
+                attachmentPicker.menu?.addItem(row)
+            }
+        }
+        setAttachmentControlsEnabled(!scheduling)
+    }
+
+    @objc private func removeAttachment() {
+        guard !scheduling, attachmentURLs.indices.contains(attachmentPicker.indexOfSelectedItem) else { return }
+        attachmentURLs.remove(at: attachmentPicker.indexOfSelectedItem)
+        updateAttachmentPicker()
+    }
+
     @objc private func selectTask() {
-        if let id = taskPicker.selectedItem?.representedObject as? String { taskField.stringValue = id }
-        else { taskField.stringValue = "" }
+        if let selected = taskPicker.selectedItem?.representedObject as? String {
+            taskField.stringValue = selected
+        }
     }
 
     func controlTextDidChange(_ notification: Notification) {
@@ -226,7 +295,7 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
                 case .success(let (tasks, models)):
                     self.taskRows = tasks; self.modelRows = models
                     Self.populateTaskMenu(self.taskPicker, tasks: tasks,
-                        placeholder: self.textProvider().modelText("选择最近任务…", "Choose a recent chat…"))
+                        placeholder: self.textProvider().modelText("选择目标任务…", "Choose a target chat…"))
                     self.selectTaskMenu(id: Self.canonicalTaskID(self.taskField.stringValue))
                     self.modelPicker.removeAllItems()
                     models.forEach { self.modelPicker.addItem(withTitle: $0.name == $0.id ? $0.id : "\($0.name) — \($0.id)") }
@@ -280,25 +349,39 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
             feedback.stringValue = ScheduledMessageError.invalidInput.localizedDescription; return
         }
         let title = taskRows.first(where: { $0.id == id })?.title ?? id
+        let selectedAttachments = attachmentURLs
+        let enteredMessage = messageView.string
+        let body = enteredMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !selectedAttachments.isEmpty
+            ? textProvider().modelText("请查看附件。", "Please review the attachments.") : enteredMessage
         let item = ScheduledMessage(fireDate: datePicker.dateValue, threadID: id, threadTitle: title,
-                                    model: modelRows[modelIndex].id, message: messageView.string, effort: effort)
+                                    model: modelRows[modelIndex].id, message: body, effort: effort)
         do { try item.validate() } catch { feedback.stringValue = error.localizedDescription; return }
         scheduling = true
+        setAttachmentControlsEnabled(false)
         addButton.isEnabled = false
         feedback.stringValue = textProvider().modelText("正在核对目标任务…", "Checking target chat…")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = Result { () throws -> Void in
                 _ = try ScheduledMessageRunner().resolveThread(id)
-                try ScheduledMessageScheduler().schedule(item)
+                let attachmentStore = ScheduledMessageAttachmentStore(root: ScheduledMessageStore().root)
+                var prepared = item
+                var scheduled = false
+                defer { if !scheduled { try? attachmentStore.remove(item.id) } }
+                prepared.attachments = try attachmentStore.stage(selectedAttachments, id: item.id)
+                try ScheduledMessageScheduler().schedule(prepared)
+                scheduled = true
             }
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 self.scheduling = false
+                self.setAttachmentControlsEnabled(true)
                 self.addButton.isEnabled = !self.loading
                 switch result {
                 case .success:
                     self.feedback.stringValue = self.textProvider().modelText("已安排一次发送。", "One-time delivery scheduled.")
-                    if self.messageView.string == item.message { self.messageView.string = "" }
+                    if self.messageView.string == enteredMessage { self.messageView.string = "" }
+                    self.attachmentURLs = []
+                    self.updateAttachmentPicker()
                     self.refreshSaved()
                 case .failure(let error): self.feedback.stringValue = error.localizedDescription
                 }
@@ -309,7 +392,8 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
     @objc private func showSavedDetails() {
         guard let id = savedPicker.selectedItem?.representedObject as? UUID,
               let item = savedRows.first(where: { $0.id == id }) else { return }
-        feedback.stringValue = "\(item.threadTitle)\n\(item.threadID) · \(item.model) / \(item.effort ?? "auto")\n\(item.result.map { ScheduledMessageDeliveryError(code: $0).localizedDescription } ?? item.state.rawValue)"
+        let attachmentSummary = item.attachmentItems.map(\.name).joined(separator: ", ")
+        feedback.stringValue = "\(item.threadTitle)\n\(item.threadID) · \(item.model) / \(item.effort ?? "auto")\n\(attachmentSummary)\n\(item.result.map { ScheduledMessageDeliveryError(code: $0).localizedDescription } ?? item.state.rawValue)"
     }
 
     @objc private func remove() {

@@ -108,7 +108,11 @@ final class ScheduledMessageTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let socket = root.appendingPathComponent("desktop.sock")
         let script = root.appendingPathComponent("server.py")
-        let entry = item()
+        var entry = item()
+        entry.attachments = [
+            .init(name: "notes.txt", path: root.appendingPathComponent("notes.txt").path, kind: .file, byteCount: 4, sha256: "fixture"),
+            .init(name: "photo.png", path: root.appendingPathComponent("photo.png").path, kind: .image, byteCount: 4, sha256: "fixture")
+        ]
         let source = """
         import socket,struct,json,pathlib
         root=pathlib.Path('\(root.path)')
@@ -145,7 +149,10 @@ final class ScheduledMessageTests: XCTestCase {
                 assert value['targetClientId']=='owner' and value['version']==2
                 request=value['params']['turnStart']['request']
                 assert request['threadId']=='\(entry.threadID)' and request['model']=='gpt-6-sol' and request['effort']=='high'
-                assert request['input'][0]['text']=='A specific message'
+                assert request['input'][0]['text'].endswith('## My request:\\nA specific message')
+                assert '## notes.txt: \(root.path)/notes.txt' in request['input'][0]['text']
+                assert request['input'][1]=={'type':'localImage','path':'\(root.path)/photo.png'}
+                assert len(request['input'])==2
                 started=True;result={'result':{'turn':{'id':'native-turn'}}};(root/'delivered').touch()
             else: raise AssertionError(method)
             send({'type':'response','requestId':value['requestId'],'resultType':'success',

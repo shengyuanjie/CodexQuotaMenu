@@ -113,7 +113,7 @@ final class ScheduledMessageDesktopClient {
     static func turnRequest(_ item: ScheduledMessage, effort: String, directory: URL) -> [String: Any] {
         ["threadId": item.threadID, "clientUserMessageId": item.id.uuidString.lowercased(),
          "model": item.model, "effort": effort, "cwd": directory.path,
-         "input": [["type": "text", "text": item.message, "text_elements": []] as [String: Any]]]
+         "input": item.deliveryInput]
     }
 
     func deliver(_ item: ScheduledMessage, owner: String, effort: String, directory: URL,
