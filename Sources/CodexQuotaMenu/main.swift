@@ -8,7 +8,8 @@ if CommandLine.arguments.contains("--check-default-model") {
         let state = try DefaultModelSettingsService().load()
         let output: [String: Any] = ["userModel": state.user.model, "userEffort": state.user.effort,
             "effectiveModel": state.effective.model, "effectiveEffort": state.effective.effort,
-            "managedOverride": state.hasManagedOverride, "availableModels": state.models.map(\.id)]
+            "userServiceTier": state.user.serviceTier, "effectiveServiceTier": state.effective.serviceTier,
+            "fastEnabled": state.effective.fastEnabled, "managedOverride": state.hasManagedOverride, "availableModels": state.models.map(\.id)]
         print(String(data: try JSONSerialization.data(withJSONObject: output, options: [.sortedKeys]), encoding: .utf8)!)
         exit(0)
     } catch { fputs("Default model check failed: \(error.localizedDescription)\n", stderr); exit(1) }

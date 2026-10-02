@@ -28,7 +28,7 @@ enum ManagedModelConfig {
         return String(line[range])
     }
 
-    static func values(in text: String) throws -> (model: String?, effort: String?) {
+    static func values(in text: String) throws -> (model: String?, effort: String?, serviceTier: String?) {
         let lines = text.components(separatedBy: "\n")
         let range = try tableRange(lines)
         var values: [String: String] = [:]
@@ -39,7 +39,7 @@ enum ManagedModelConfig {
             guard line.range(of: "^[A-Za-z_][A-Za-z0-9_]*\\s*=", options: .regularExpression) != nil else {
                 throw DefaultModelError.unsupportedSystemFile
             }
-            for key in ["model", "model_reasoning_effort"] {
+            for key in ["model", "model_reasoning_effort", "service_tier"] {
                 if line.range(of: "^" + key + "\\s*=", options: .regularExpression) != nil {
                     guard values[key] == nil, let value = scalar(line, key: key) else {
                         throw DefaultModelError.unsupportedSystemFile
@@ -48,16 +48,19 @@ enum ManagedModelConfig {
                 }
             }
         }
-        return (values["model"], values["model_reasoning_effort"])
+        return (values["model"], values["model_reasoning_effort"], values["service_tier"])
     }
 
     static func replacing(_ text: String, with selection: DefaultModelSelection) throws -> String {
         try selection.validate()
-        _ = try values(in: text)
+        let existing = try values(in: text)
         var lines = text.components(separatedBy: "\n")
         let range = try tableRange(lines)
         var missing: [String] = []
-        for (key, value) in [("model", selection.model), ("model_reasoning_effort", selection.effort)] {
+        var edits = [("model", selection.model), ("model_reasoning_effort", selection.effort)]
+        // Only update a system speed override when one already exists.
+        if existing.serviceTier != nil { edits.append(("service_tier", selection.serviceTier)) }
+        for (key, value) in edits {
             if let i = range.first(where: { scalar(lines[$0], key: key) != nil }) {
                 // Keep indentation and trailing comments, replacing only the string token.
                 let regex = try NSRegularExpression(pattern: "([\"'])[A-Za-z0-9._-]+[\"']")
@@ -79,7 +82,7 @@ enum ManagedModelConfig {
     static func authorizeAndWrite(_ original: String, _ selection: DefaultModelSelection) throws {
         try selection.validate()
         guard let executable = Bundle.main.executableURL else { throw DefaultModelError.administratorFailed }
-        let command = [executable.path, helperFlag, selection.model, selection.effort, digest(original)]
+        let command = [executable.path, helperFlag, selection.model, selection.effort, selection.serviceTier, digest(original)]
             .map(shellQuote).joined(separator: " ")
         let escaped = command.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
         // The OS owns the password dialog. No password is read, stored, or passed by the app.
@@ -101,9 +104,9 @@ enum ManagedModelConfig {
 
     /// Root-only, fixed destination; no caller-controlled path or arbitrary configuration contents.
     static func runHelper(arguments: [String]) -> Int32 {
-        guard geteuid() == 0, arguments.count == 5, arguments[1] == helperFlag else { return 1 }
+        guard geteuid() == 0, arguments.count == 6, arguments[1] == helperFlag else { return 1 }
         do {
-            let selection = DefaultModelSelection(model: arguments[2], effort: arguments[3])
+            let selection = DefaultModelSelection(model: arguments[2], effort: arguments[3], serviceTier: arguments[4])
             try selection.validate()
             let fm = FileManager.default
             let parent = try fm.attributesOfItem(atPath: "/etc/codex")
@@ -114,7 +117,7 @@ enum ManagedModelConfig {
                   attrs[.type] as? FileAttributeType == .typeRegular,
                   (attrs[.ownerAccountID] as? NSNumber)?.intValue == 0 else { return 1 }
             let original = try String(contentsOfFile: filePath, encoding: .utf8)
-            guard digest(original) == arguments[4] else { throw DefaultModelError.concurrentChange }
+            guard digest(original) == arguments[5] else { throw DefaultModelError.concurrentChange }
             let revised = try replacing(original, with: selection)
             if revised == original { return 0 }
             let backup = filePath + ".codexquotamenu-" + UUID().uuidString + ".bak"
