@@ -15,7 +15,7 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
     private let taskField = NSTextField()
     private let modelPicker = NSPopUpButton()
     private let effortPicker = NSPopUpButton()
-    private let datePicker = NSDatePicker()
+    private let dateField = NSTextField()
     private var timeAdjustmentButtons: [NSButton] = []
     private let messageView = ScheduledMessageTextView()
     private var attachmentURLs: [URL] = []
@@ -98,36 +98,52 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         modelPicker.addItem(withTitle: "…")
         modelPicker.target = self; modelPicker.action = #selector(modelChanged)
         effortPicker.setAccessibilityLabel("Scheduled message reasoning effort")
-        datePicker.datePickerStyle = .textFieldAndStepper
-        datePicker.datePickerElements = [.yearMonthDay, .hourMinute]
+        dateField.font = .systemFont(ofSize: 13)
+        dateField.placeholderString = "yyyy/M/d HH:mm"
+        dateField.setAccessibilityLabel("Scheduled message send time")
+        dateField.setContentCompressionResistancePriority(.required, for: .horizontal)
+        dateField.widthAnchor.constraint(equalToConstant: 200).isActive = true
+        dateField.heightAnchor.constraint(equalToConstant: 26).isActive = true
         resetSendTimeToNow()
-        let timeRow = NSStackView(views: [datePicker])
-        timeRow.orientation = .horizontal; timeRow.alignment = .centerY; timeRow.spacing = 12
+        let timeRow = NSStackView(views: [dateField])
+        timeRow.orientation = .horizontal; timeRow.alignment = .centerY; timeRow.spacing = 10
+        let timeButtons = NSStackView()
+        timeButtons.orientation = .horizontal; timeButtons.alignment = .top; timeButtons.spacing = 4
         for offsets in [[-1, 1], [-10, 10], [-60, 60], [-1440, 1440]] {
             let pair = NSStackView()
-            pair.orientation = .vertical; pair.alignment = .leading; pair.spacing = 3
+            pair.orientation = .vertical; pair.alignment = .leading; pair.spacing = 4
             for offset in offsets {
                 let button = NSButton(title: "", target: self, action: #selector(adjustSendTime(_:)))
                 button.bezelStyle = .rounded
-                button.font = .systemFont(ofSize: 12)
-                button.widthAnchor.constraint(equalToConstant: 82).isActive = true
-                button.heightAnchor.constraint(equalToConstant: 24).isActive = true
+                button.controlSize = .small
+                button.font = .systemFont(ofSize: 11)
+                button.widthAnchor.constraint(equalToConstant: 64).isActive = true
+                button.heightAnchor.constraint(equalToConstant: 22).isActive = true
                 button.tag = offset
                 timeAdjustmentButtons.append(button)
                 pair.addArrangedSubview(button)
             }
-            timeRow.addArrangedSubview(pair)
+            timeButtons.addArrangedSubview(pair)
         }
+        timeRow.addArrangedSubview(timeButtons)
         messageView.isRichText = false
         messageView.allowsUndo = true
         messageView.font = .systemFont(ofSize: 13)
         messageView.setAccessibilityLabel("Scheduled message text")
-        let messageHeight = ceil(NSLayoutManager().defaultLineHeight(for: messageView.font!) * 5 + 10)
+        messageView.textContainerInset = NSSize(width: 8, height: 6)
+        let messageHeight = ceil(NSLayoutManager().defaultLineHeight(for: messageView.font!) * 5
+                                 + messageView.textContainerInset.height * 2 + 2)
         messageView.frame = NSRect(x: 0, y: 0, width: 580, height: messageHeight)
+        messageView.minSize = NSSize(width: 0, height: messageHeight - 2)
+        messageView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         messageView.isVerticallyResizable = true
+        messageView.isHorizontallyResizable = false
         messageView.autoresizingMask = [.width]
+        messageView.textContainer?.containerSize = NSSize(width: 580, height: CGFloat.greatestFiniteMagnitude)
+        messageView.textContainer?.widthTracksTextView = false
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
+        scroll.hasHorizontalScroller = false
         scroll.borderType = .bezelBorder
         scroll.documentView = messageView
         scroll.heightAnchor.constraint(equalToConstant: messageHeight).isActive = true
@@ -155,28 +171,33 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
             stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
             stack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -20)
         ])
-        for view in [taskPicker, taskField, modelPicker, effortPicker, scroll, attachmentPicker, attachmentHint, savedPicker, feedback, buttons] {
+        for view in [taskPicker, taskField, modelPicker, effortPicker, timeRow, scroll, attachmentPicker, attachmentHint, savedPicker, feedback, buttons] {
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
     }
 
     private func resetSendTimeToNow() {
         let now = Date()
-        datePicker.minDate = now
-        datePicker.maxDate = now.addingTimeInterval(365 * 86_400)
-        datePicker.dateValue = now
+        dateField.stringValue = ScheduledMessageDateText.string(from: now)
+    }
+
+    private func enteredSendTime() -> Date? {
+        guard let date = ScheduledMessageDateText.date(from: dateField.stringValue) else {
+            feedback.stringValue = textProvider().modelText("请输入有效时间，例如 2026/10/2 15:08。", "Enter a valid date and time, for example 2026/10/2 15:08.")
+            return nil
+        }
+        return date
     }
 
     @objc private func adjustSendTime(_ sender: NSButton) {
+        guard let entered = enteredSendTime() else { return }
         let now = Date()
-        datePicker.minDate = now
-        datePicker.maxDate = now.addingTimeInterval(365 * 86_400)
         // Calendar days retain the local clock time across daylight-saving transitions.
         let isDay = abs(sender.tag) == 1440
         guard let adjusted = Calendar.current.date(byAdding: isDay ? .day : .minute,
-            value: isDay ? sender.tag / 1440 : sender.tag, to: datePicker.dateValue) else { return }
-        let latest = datePicker.maxDate ?? now.addingTimeInterval(365 * 86_400)
-        datePicker.dateValue = min(max(adjusted, now), latest)
+            value: isDay ? sender.tag / 1440 : sender.tag, to: entered) else { return }
+        let latest = now.addingTimeInterval(365 * 86_400)
+        dateField.stringValue = ScheduledMessageDateText.string(from: min(max(adjusted, now), latest))
         feedback.stringValue = adjusted < now
             ? textProvider().modelText("发送时间不能早于当前时间。", "The send time cannot be earlier than now.")
             : adjusted > latest
@@ -353,7 +374,8 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         let enteredMessage = messageView.string
         let body = enteredMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !selectedAttachments.isEmpty
             ? textProvider().modelText("请查看附件。", "Please review the attachments.") : enteredMessage
-        let item = ScheduledMessage(fireDate: datePicker.dateValue, threadID: id, threadTitle: title,
+        guard let fireDate = enteredSendTime() else { return }
+        let item = ScheduledMessage(fireDate: fireDate, threadID: id, threadTitle: title,
                                     model: modelRows[modelIndex].id, message: body, effort: effort)
         do { try item.validate() } catch { feedback.stringValue = error.localizedDescription; return }
         scheduling = true
@@ -409,6 +431,18 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
 
 // Accessory apps have no standard Edit menu to dispatch these key equivalents.
 private final class ScheduledMessageTextView: NSTextView {
+    override func setFrameSize(_ newSize: NSSize) {
+        var size = newSize
+        if let scroll = enclosingScrollView, scroll.contentSize.width > 0 {
+            size.width = scroll.contentSize.width
+        }
+        super.setFrameSize(size)
+        // Older AppKit can add the initial document width during autoresizing.
+        // Bind both the document and wrapping width to the visible clip view.
+        textContainer?.containerSize = NSSize(width: max(1, size.width - textContainerInset.width * 2),
+                                             height: CGFloat.greatestFiniteMagnitude)
+    }
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         guard modifiers == .command || modifiers == [.command, .shift],
@@ -428,5 +462,31 @@ private final class ScheduledMessageTextView: NSTextView {
             undoManager?.redo(); return true
         }
         return super.performKeyEquivalent(with: event)
+    }
+}
+
+// A fixed format avoids the padding inserted by NSDatePicker's segmented day field.
+enum ScheduledMessageDateText {
+    private static func formatter() -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy/M/d HH:mm"
+        formatter.isLenient = false
+        return formatter
+    }
+
+    static func string(from date: Date) -> String { formatter().string(from: date) }
+
+    static func date(from text: String) -> Date? {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard value.range(of: #"^\d{4}/\d{1,2}/\d{1,2} \d{2}:\d{2}$"#, options: .regularExpression) != nil else { return nil }
+        let parts = value.split(whereSeparator: { "/ :".contains($0) }).compactMap { Int($0) }
+        guard parts.count == 5 else { return nil }
+        let canonical = String(format: "%04d/%d/%d %02d:%02d", parts[0], parts[1], parts[2], parts[3], parts[4])
+        let format = formatter()
+        guard let date = format.date(from: value), format.string(from: date) == canonical else { return nil }
+        return date
     }
 }
