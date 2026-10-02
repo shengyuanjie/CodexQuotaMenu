@@ -5,16 +5,20 @@ struct CodexModelOption: Equatable {
     let name: String
     let efforts: [String]
     let defaultEffort: String
+    var supportsFast: Bool = true
 }
 
 struct DefaultModelSelection: Equatable {
     let model: String
     let effort: String
+    var serviceTier: String = "default"
+    var fastEnabled: Bool { ["fast", "priority"].contains(serviceTier) }
 
     func validate() throws {
         guard !model.isEmpty, model.count < 150,
               model.range(of: "^[A-Za-z0-9][A-Za-z0-9._-]*$", options: .regularExpression) != nil,
-              ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"].contains(effort) else {
+              ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"].contains(effort),
+              ["default", "fast", "priority"].contains(serviceTier) else {
             throw DefaultModelError.invalidSelection
         }
     }
@@ -26,10 +30,12 @@ struct DefaultModelSnapshot {
     let managedEffort: String?
     let profile: String?
     let models: [CodexModelOption]
+    var managedServiceTier: String? = nil
     var effective: DefaultModelSelection {
-        DefaultModelSelection(model: managedModel ?? user.model, effort: managedEffort ?? user.effort)
+        DefaultModelSelection(model: managedModel ?? user.model, effort: managedEffort ?? user.effort,
+                              serviceTier: managedServiceTier ?? user.serviceTier)
     }
-    var hasManagedOverride: Bool { managedModel != nil || managedEffort != nil }
+    var hasManagedOverride: Bool { managedModel != nil || managedEffort != nil || managedServiceTier != nil }
 }
 
 enum DefaultModelError: LocalizedError {
@@ -83,33 +89,48 @@ struct DefaultModelSettingsService {
                     .filter { (try? DefaultModelSelection(model: id, effort: $0).validate()) != nil }
                 guard !supported.isEmpty, !options.contains(where: { $0.id == id }) else { continue }
                 options.append(CodexModelOption(id: id, name: row["displayName"] as? String ?? id,
-                    efforts: supported, defaultEffort: row["defaultReasoningEffort"] as? String ?? supported[0]))
+                    efforts: supported, defaultEffort: row["defaultReasoningEffort"] as? String ?? supported[0],
+                    supportsFast: Self.supportsFast(row)))
             }
             cursor = result["nextCursor"] as? String
             if let cursor, !seenCursors.insert(cursor).inserted { throw DefaultModelError.invalidResponse }
         } while cursor != nil
         guard !options.isEmpty else { throw DefaultModelError.invalidResponse }
-        return DefaultModelSnapshot(user: .init(model: config["model"] as? String ?? "", effort: config["model_reasoning_effort"] as? String ?? ""),
+        return DefaultModelSnapshot(user: .init(model: config["model"] as? String ?? "", effort: config["model_reasoning_effort"] as? String ?? "",
+                serviceTier: config["service_tier"] as? String ?? "default"),
             managedModel: managed?["model"] as? String, managedEffort: managed?["modelReasoningEffort"] as? String,
-            profile: config["profile"] as? String, models: options)
+            profile: config["profile"] as? String, models: options, managedServiceTier: managed?["serviceTier"] as? String)
+    }
+
+    private static func supportsFast(_ row: [String: Any]) -> Bool {
+        if let tiers = row["serviceTiers"] as? [[String: Any]], !tiers.isEmpty {
+            return tiers.contains { ["fast", "priority"].contains($0["id"] as? String ?? "") }
+        }
+        if let tiers = row["additionalSpeedTiers"] as? [String] {
+            return tiers.contains { ["fast", "priority"].contains($0) }
+        }
+        // Older backends do not advertise speed tiers. Saving is still verified by readback.
+        return true
     }
 
     func save(_ selection: DefaultModelSelection) throws -> DefaultModelSnapshot {
         try selection.validate()
         let current = try load()
         guard current.profile == nil else { throw DefaultModelError.activeProfile }
-        guard current.models.contains(where: { $0.id == selection.model && $0.efforts.contains(selection.effort) }) else {
+        guard current.models.contains(where: { $0.id == selection.model && $0.efforts.contains(selection.effort) && (!selection.fastEnabled || $0.supportsFast) }) else {
             throw DefaultModelError.invalidSelection
         }
         if current.hasManagedOverride {
             guard let source = try? readSystemFile(),
                   let local = try? ManagedModelConfig.values(in: source),
-                  local.model == current.managedModel, local.effort == current.managedEffort else {
+                  local.model == current.managedModel, local.effort == current.managedEffort,
+                  local.serviceTier == current.managedServiceTier else {
                 throw DefaultModelError.managedElsewhere
             }
             // Validate the exact edit before asking macOS for administrator authentication.
             _ = try ManagedModelConfig.replacing(source, with: selection)
-            if local.model != selection.model || local.effort != selection.effort {
+            if local.model != selection.model || local.effort != selection.effort ||
+                (local.serviceTier != nil && local.serviceTier != selection.serviceTier) {
                 try writeSystemFile(source, selection)
             }
         }
@@ -117,7 +138,8 @@ struct DefaultModelSettingsService {
             _ = try makeClient().modelRequest("config/batchWrite", params: [
                 "edits": [
                     ["keyPath": "model", "value": selection.model, "mergeStrategy": "upsert"],
-                    ["keyPath": "model_reasoning_effort", "value": selection.effort, "mergeStrategy": "upsert"]
+                    ["keyPath": "model_reasoning_effort", "value": selection.effort, "mergeStrategy": "upsert"],
+                    ["keyPath": "service_tier", "value": selection.serviceTier, "mergeStrategy": "upsert"]
                 ], "reloadUserConfig": true
             ])
             // A fresh backend also reloads system requirements, not just the user config.

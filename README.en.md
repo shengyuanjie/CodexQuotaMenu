@@ -81,9 +81,11 @@ The app queries local usage and tasks every five seconds and refreshes public fo
 
 Choose **Default Model…** in the menu bar to load the local Codex model catalog and supported reasoning efforts. **Save and Verify** updates user settings through `config/batchWrite`, then checks defaults using a fresh backend without generating a model response.
 
-When `/etc/codex/requirements.toml` overrides user defaults through `[models.new_thread]`, macOS may request administrator authentication. Only the two model fields are edited; other settings are preserved and a unique, mode-600 backup is saved alongside the file. The app never receives or stores the password. Unrecognized policy sources, active profiles, and unsupported TOML layouts are refused. A failed save may be partial; refresh to inspect actual values.
+When `/etc/codex/requirements.toml` overrides user defaults through `[models.new_thread]`, macOS may request administrator authentication. Only the model fields and any existing speed override are edited; other settings are preserved and a unique, mode-600 backup is saved alongside the file. The app never receives or stores the password. Unrecognized policy sources, active profiles, and unsupported TOML layouts are refused. A failed save may be partial; refresh to inspect actual values.
 
-These defaults affect future local Codex chats, not existing chats or activation schedules. Restart Codex after running tasks finish if its desktop UI retains old defaults. Use `--check-default-model` for a read-only backend check or `--model-settings` to open the window on launch.
+The “Enable 1.5× speed (Fast)” checkbox saves `service_tier = "fast"` when enabled and `"default"` when disabled, updates an existing managed speed override, and verifies the result. Models without Fast support disable the checkbox. Actual speed depends on the model and service conditions and may consume more usage.
+
+These defaults affect future local Codex chats, not existing chats or activation schedules. After saving and verification succeed, a dialog offers “Restart Codex Now” or “Restart Manually Later”. Immediate restart requests a normal quit and relaunches after Codex exits; running tasks may be interrupted. A refused or timed-out quit is reported without force-quitting, and saved settings remain intact. Use `--check-default-model` for a read-only backend check or `--model-settings` to open the window on launch.
 
 ### Scheduled message to an existing chat
 

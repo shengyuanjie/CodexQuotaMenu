@@ -19,6 +19,8 @@ final class DefaultModelWindowController: NSWindowController {
     private let effortLabel = NSTextField(labelWithString: "")
     private let modelPicker = NSPopUpButton(frame: .zero, pullsDown: false)
     private let effortPicker = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let fastToggle = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let speedNote = NSTextField(wrappingLabelWithString: "")
     private let note = NSTextField(wrappingLabelWithString: "")
     private let feedback = NSTextField(wrappingLabelWithString: "")
     private let refreshButton = NSButton(title: "", target: nil, action: nil)
@@ -28,10 +30,10 @@ final class DefaultModelWindowController: NSWindowController {
     init(service: DefaultModelSettingsService = .init(), textProvider: @escaping () -> AppText) {
         self.service = service
         self.textProvider = textProvider
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 560),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 620),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         super.init(window: window)
-        window.minSize = NSSize(width: 560, height: 560)
+        window.minSize = NSSize(width: 560, height: 620)
         window.center()
         buildView()
         updateLanguage()
@@ -52,9 +54,11 @@ final class DefaultModelWindowController: NSWindowController {
         heading.stringValue = t.modelText("新会话默认模型", "Defaults for new chats")
         modelLabel.stringValue = t.modelText("模型", "Model")
         effortLabel.stringValue = t.modelText("推理强度", "Reasoning effort")
+        fastToggle.title = t.modelText("开启 1.5 倍速度（Fast）", "Enable 1.5× speed (Fast)")
+        speedNote.stringValue = t.modelText("实际提速取决于模型和服务状态，可能增加用量消耗；不支持 Fast 的模型会禁用此选项。", "Actual speed depends on the model and service conditions and may consume more usage. This option is disabled for models without Fast support.")
         refreshButton.title = t.modelText("刷新", "Refresh")
         saveButton.title = t.modelText("保存并核验", "Save and Verify")
-        note.stringValue = t.modelText("用于以后创建的本机 Codex 会话。已打开的会话和定时激活设置不变。保存后如桌面端仍显示旧默认值，请在任务结束后重启 Codex。", "Applies to future local Codex chats. Existing chats and activation schedules stay unchanged. If the desktop app still shows old defaults, restart Codex after running tasks finish.")
+        note.stringValue = t.modelText("用于以后创建的本机 Codex 会话。已打开的会话和定时激活设置不变。保存并核验成功后，可选择现在重启 Codex 或稍后手动重启。", "Applies to future local Codex chats. Existing chats and activation schedules stay unchanged. After saving and verification, choose to restart Codex now or manually later.")
         renderSnapshot()
     }
 
@@ -63,9 +67,11 @@ final class DefaultModelWindowController: NSWindowController {
         heading.font = .systemFont(ofSize: 19, weight: .semibold)
         currentLabel.font = .systemFont(ofSize: 13, weight: .medium)
         sourceLabel.textColor = .secondaryLabelColor
+        speedNote.textColor = .secondaryLabelColor
+        speedNote.font = .systemFont(ofSize: 12)
         note.textColor = .secondaryLabelColor
         note.font = .systemFont(ofSize: 12)
-        for label in [currentLabel, sourceLabel, note, feedback] {
+        for label in [currentLabel, sourceLabel, speedNote, note, feedback] {
             label.maximumNumberOfLines = 0
             label.setContentCompressionResistancePriority(.required, for: .vertical)
         }
@@ -88,7 +94,7 @@ final class DefaultModelWindowController: NSWindowController {
         let buttons = NSStackView(views: [spinner, NSView(), refreshButton, saveButton])
         buttons.orientation = .horizontal
         buttons.spacing = 10
-        let stack = NSStackView(views: [heading, currentLabel, sourceLabel, grid, note, feedback, NSView(), buttons])
+        let stack = NSStackView(views: [heading, currentLabel, sourceLabel, grid, fastToggle, speedNote, note, feedback, NSView(), buttons])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 16
@@ -100,7 +106,7 @@ final class DefaultModelWindowController: NSWindowController {
             stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 24),
             stack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -22)
         ])
-        for view in [currentLabel, sourceLabel, note, feedback, buttons] {
+        for view in [currentLabel, sourceLabel, speedNote, note, feedback, buttons] {
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
     }
@@ -113,7 +119,9 @@ final class DefaultModelWindowController: NSWindowController {
             return
         }
         let selection = snapshot.effective
-        currentLabel.stringValue = t.modelText("后端新会话默认：", "Backend defaults: ") + "\(selection.model) · \(selection.effort)"
+        currentLabel.stringValue = t.modelText("后端新会话默认：", "Backend defaults: ") + "\(selection.model) · \(selection.effort) · " + (selection.fastEnabled
+            ? t.modelText("1.5 倍速度：开启", "1.5× speed: On")
+            : t.modelText("1.5 倍速度：关闭", "1.5× speed: Off"))
         sourceLabel.stringValue = snapshot.hasManagedOverride
             ? t.modelText("检测到系统/托管覆盖。修改本机系统默认值时，macOS 将请求管理员验证。", "Managed defaults are active. Updating local system defaults may require macOS administrator authentication.")
             : t.modelText("使用当前用户的 Codex 默认配置。", "Using your Codex user configuration.")
@@ -129,6 +137,7 @@ final class DefaultModelWindowController: NSWindowController {
         if let index = value.models.firstIndex(where: { $0.id == value.effective.model }) {
             modelPicker.selectItem(at: index)
         } else { modelPicker.select(nil) }
+        fastToggle.state = value.effective.fastEnabled ? .on : .off
         populateEfforts(preferred: value.effective.effort)
         renderSnapshot()
     }
@@ -140,6 +149,8 @@ final class DefaultModelWindowController: NSWindowController {
         effortPicker.addItems(withTitles: model.efforts)
         let effort = preferred.flatMap { model.efforts.contains($0) ? $0 : nil } ?? model.defaultEffort
         effortPicker.selectItem(withTitle: effort)
+        fastToggle.isEnabled = !busy && model.supportsFast
+        if !model.supportsFast { fastToggle.state = .off }
     }
 
     @objc private func modelChanged() { populateEfforts(preferred: effortPicker.titleOfSelectedItem) }
@@ -148,6 +159,7 @@ final class DefaultModelWindowController: NSWindowController {
         busy = value
         modelPicker.isEnabled = !value && snapshot != nil
         effortPicker.isEnabled = !value && snapshot != nil
+        fastToggle.isEnabled = !value && (snapshot?.models.first { $0.id == modelPicker.selectedItem?.representedObject as? String }?.supportsFast ?? false)
         refreshButton.isEnabled = !value
         saveButton.isEnabled = !value && snapshot != nil
         window?.standardWindowButton(.closeButton)?.isEnabled = !value
@@ -162,8 +174,48 @@ final class DefaultModelWindowController: NSWindowController {
     @objc private func save() {
         guard !busy, let model = modelPicker.selectedItem?.representedObject as? String,
               let effort = effortPicker.titleOfSelectedItem else { return }
-        let selection = DefaultModelSelection(model: model, effort: effort)
+        let selection = DefaultModelSelection(model: model, effort: effort, serviceTier: fastToggle.state == .on ? "fast" : "default")
         perform(saving: true) { try self.service.save(selection) }
+    }
+
+    static func restartPrompt(text: AppText) -> NSAlert {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = text.modelText("已保存并核验，是否现在重启 Codex？", "Saved and verified. Restart Codex now?")
+        alert.informativeText = text.modelText("重启 Codex 后，新默认设置才能在桌面端生效。现在重启可能中断正在运行的任务，请先保存工作。也可以稍后手动重启；设置已保存。", "Restart Codex to apply the new defaults in the desktop app. Restarting now may interrupt running tasks; save your work first. You can also restart manually later; your settings are already saved.")
+        alert.addButton(withTitle: text.modelText("现在重启 Codex", "Restart Codex Now"))
+        alert.addButton(withTitle: text.modelText("稍后手动重启", "Restart Manually Later"))
+        alert.buttons[0].keyEquivalent = ""
+        alert.buttons[1].keyEquivalent = "\r"
+        return alert
+    }
+
+    private func offerRestart() {
+        guard let window else { return }
+        Self.restartPrompt(text: textProvider()).beginSheetModal(for: window) { [weak self] response in
+            guard let self else { return }
+            if response == .alertFirstButtonReturn {
+                self.restartCodex()
+            } else {
+                self.feedback.stringValue = self.textProvider().modelText("设置已保存并核验；请稍后手动重启 Codex 使其生效。", "Settings saved and verified. Restart Codex manually later to apply them.")
+            }
+        }
+    }
+
+    private func restartCodex() {
+        setBusy(true)
+        feedback.stringValue = textProvider().modelText("设置已保存，正在重启 Codex…", "Settings saved. Restarting Codex…")
+        Task { @MainActor in
+            do {
+                try await CodexDesktopRestarter().restart()
+                feedback.textColor = .secondaryLabelColor
+                feedback.stringValue = textProvider().modelText("设置已保存并核验，Codex 已重新启动。", "Settings saved and verified. Codex has relaunched.")
+            } catch {
+                feedback.textColor = .systemRed
+                feedback.stringValue = textProvider().modelText("设置已保存并核验，但自动重启未完成。\n", "Settings saved and verified, but automatic restart did not finish.\n") + error.localizedDescription
+            }
+            setBusy(false)
+        }
     }
 
     private func perform(saving: Bool, operation: @escaping () throws -> DefaultModelSnapshot) {
@@ -187,6 +239,7 @@ final class DefaultModelWindowController: NSWindowController {
                     self.feedback.stringValue = error.localizedDescription
                 }
                 self.setBusy(false)
+                if saving, case .success = result { self.offerRestart() }
             }
         }
     }
