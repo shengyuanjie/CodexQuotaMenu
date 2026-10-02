@@ -140,11 +140,25 @@ assert.equal(
 )
 assert.equal(
   formatInlineSummary(81, "2026-08-13T08:40:00Z", 62, "2026-08-15T05:00:00Z", true, fixedNow),
-  "冲冲冲～使劲蹬啊～"
+  "晌81·3时 周62～冲"
 )
 assert.equal(
   formatInlineSummary(null, null, null, null, false, fixedNow),
   "晌--·--  周--·--"
+)
+
+assert.equal(
+  formatInlineSummary(100, "2026-08-13T05:22:30Z", 100, "2026-08-14T03:30:00Z", true, fixedNow),
+  "晌满·22分 周满～冲"
+)
+assert.equal(
+  formatInlineSummary(null, null, 0, null, true, fixedNow),
+  "晌--·-- 周0～冲"
+)
+
+assert.equal(
+  formatInlineSummary(99, "2026-08-13T05:59:59Z", 99, "2026-08-15T05:00:00Z", true, fixedNow),
+  "晌99·59分 周99～冲"
 )
 
 const resetCompletedPayload = validatePayload({
@@ -311,6 +325,12 @@ const inlineWidget = buildMessageWidget("Codex 周余量 85%", "7天后恢复 ·
 assert.equal(renderedTexts.length, 1)
 assert.equal(renderedTexts[0].value, "晌81·3时  周62·2天")
 assert.equal(inlineWidget.refreshAfterDate instanceof Date, true)
+renderedTexts.length = 0
+buildMessageWidget("Codex 周余量 62%", "↻48h 82%", false,
+  formatInlineSummary(81, "2026-08-13T08:40:00Z", 62, "2026-08-15T05:00:00Z", true, fixedNow))
+assert.equal(renderedTexts.length, 1)
+assert.equal(renderedTexts[0].value, "晌81·3时 周62～冲")
+assert.equal(renderedTexts[0].lineLimit, 1)
 ;(async () => {
   let attempts = 0
   let waits = 0

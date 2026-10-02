@@ -40,7 +40,7 @@ Codex  5h90% left4h  W62% left2d  ▶1
 | `W62% left2d` | Remaining percentage and reset countdown for the weekly window |
 | `▶1` | Number of tasks that are still active |
 
-The title never shows a forecast percentage: at 50% or higher while encouragement is active it becomes `Codex  Go go go~ Pedal harder~  ▶1`; otherwise it shows quota details. Open the menu for the `↻48h 82%` forecast, its source, recent task titles, errors, and update times. The **Phone Widget** submenu controls the read-only local feed and copies its address or access token.
+The title never shows a forecast percentage: at 50% or higher while encouragement is active it becomes `Codex  5h81% left3h  W62% Go go go  ▶1`, keeping short-window usage and its countdown while replacing the weekly countdown with “Go go go”; otherwise it shows quota details. Open the menu for the `↻48h 82%` forecast, its source, recent task titles, errors, and update times. The **Phone Widget** submenu controls the read-only local feed and copies its address or access token.
 
 Global bonus-reset probabilities are public community forecasts from `willcodexreset.com`. They express uncertainty and are neither an official schedule nor a guarantee. The displayed forecast timestamp is source field `data.updatedAt`, while local fetch time separately determines freshness.
 
