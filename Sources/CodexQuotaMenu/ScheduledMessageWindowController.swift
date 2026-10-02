@@ -140,7 +140,7 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         messageView.isHorizontallyResizable = false
         messageView.autoresizingMask = [.width]
         messageView.textContainer?.containerSize = NSSize(width: 580, height: CGFloat.greatestFiniteMagnitude)
-        messageView.textContainer?.widthTracksTextView = true
+        messageView.textContainer?.widthTracksTextView = false
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = false
@@ -431,6 +431,13 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
 
 // Accessory apps have no standard Edit menu to dispatch these key equivalents.
 private final class ScheduledMessageTextView: NSTextView {
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        // Keep wrapping within the editor on older AppKit versions as well.
+        textContainer?.containerSize = NSSize(width: max(1, newSize.width - textContainerInset.width * 2),
+                                             height: CGFloat.greatestFiniteMagnitude)
+    }
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         guard modifiers == .command || modifiers == [.command, .shift],
