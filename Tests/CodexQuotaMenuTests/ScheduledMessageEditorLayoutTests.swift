@@ -84,6 +84,7 @@ final class ScheduledMessageEditorLayoutTests: XCTestCase {
             let allGlyphs = layout.glyphRange(for: container)
             var lines = 0
             layout.enumerateLineFragments(forGlyphRange: allGlyphs) { _, _, _, _, _ in lines += 1 }
+            print("EDITOR_LAYOUT width=\(width) frame=\(text.frame) visible=\(visible) container=\(container.containerSize) used=\(layout.usedRect(for: container)) font=\(String(describing: text.font)) lines=\(lines)")
             XCTAssertGreaterThan(lines, 5)
             XCTAssertLessThanOrEqual(layout.usedRect(for: container).maxX,
                                      visible.width - text.textContainerInset.width * 2 + 1)
