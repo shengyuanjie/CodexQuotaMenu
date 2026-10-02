@@ -34,7 +34,7 @@ final class MenuPresentationTests: XCTestCase {
         )
     }
 
-    func testChineseTitleReplacesQuotaDetailsWhenCelebrationIsActive() {
+    func testChineseTitleReplacesWeeklyCountdownWhenCelebrationIsActive() {
         XCTAssertEqual(
             MenuPresentation.title(
                 shortRemainingPercent: 81,
@@ -46,11 +46,11 @@ final class MenuPresentationTests: XCTestCase {
                 runningCount: 2,
                 language: .simplifiedChinese
             ),
-            "Codex  冲冲冲～使劲蹬啊～  ▶2"
+            "Codex  晌81%余3时  周62%冲冲冲  ▶2"
         )
     }
 
-    func testFallbackReplacesQuotaDetailsAtFiftyPercentForecast() {
+    func testFallbackReplacesWeeklyCountdownAtFiftyPercentForecast() {
         XCTAssertEqual(
             MenuPresentation.title(
                 shortRemainingPercent: 81,
@@ -61,7 +61,7 @@ final class MenuPresentationTests: XCTestCase {
                 runningCount: 2,
                 language: .simplifiedChinese
             ),
-            "Codex  冲冲冲～使劲蹬啊～  ▶2"
+            "Codex  晌81%余3时  周62%冲冲冲  ▶2"
         )
     }
 
@@ -80,7 +80,7 @@ final class MenuPresentationTests: XCTestCase {
         )
     }
 
-    func testEnglishTitleReplacesQuotaDetailsWhenCelebrationIsActive() {
+    func testEnglishTitleReplacesWeeklyCountdownWhenCelebrationIsActive() {
         XCTAssertEqual(
             MenuPresentation.title(
                 shortRemainingPercent: 81,
@@ -92,7 +92,7 @@ final class MenuPresentationTests: XCTestCase {
                 runningCount: 2,
                 language: .english
             ),
-            "Codex  Go go go~ Pedal harder~  ▶2"
+            "Codex  5h81% left3h  W62% Go go go  ▶2"
         )
     }
 
@@ -125,6 +125,22 @@ final class MenuPresentationTests: XCTestCase {
                 language: .simplifiedChinese
             ),
             "Codex  晌--  周--"
+        )
+    }
+
+    func testHighForecastKeepsUnavailableAndZeroUsageVisible() {
+        XCTAssertEqual(
+            MenuPresentation.title(
+                shortRemainingPercent: nil,
+                shortResetText: nil,
+                weeklyRemainingPercent: 0,
+                weeklyResetText: "2天",
+                forecast: forecast(51),
+                resetCelebrationActive: true,
+                runningCount: nil,
+                language: .simplifiedChinese
+            ),
+            "Codex  晌--  周0%冲冲冲"
         )
     }
 

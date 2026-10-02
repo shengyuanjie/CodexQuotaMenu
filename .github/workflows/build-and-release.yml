@@ -27,6 +27,11 @@ jobs:
       - name: Run tests
         run: xcrun swift test
 
+      - name: Check Scriptable widget
+        run: |
+          node --check mobile/CodexQuotaWidget.js
+          node mobile/CodexQuotaWidget.test.js
+
       - name: Build hardened ad-hoc app
         run: ./build-app.sh dist
 
@@ -73,6 +78,9 @@ jobs:
 
       - name: Require and verify both Mac architectures
         run: ./scripts/verify-release-assets.sh release-assets "${GITHUB_REF_NAME#v}"
+
+      - name: Include the versioned Scriptable widget
+        run: cp mobile/CodexQuotaWidget.js release-assets/CodexQuotaWidget.js
 
       - name: Create GitHub Release
         env:

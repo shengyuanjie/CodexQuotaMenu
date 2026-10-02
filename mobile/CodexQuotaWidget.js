@@ -488,12 +488,12 @@ function formatInlineSummary(
   resetCelebrationActive,
   now
 ) {
-  if (resetCelebrationActive) {
-    return "冲冲冲～使劲蹬啊～"
-  }
   const shortQuota = formatCompactInlineQuota(shortPercent)
   const shortRemaining = formatCompactInlineRemaining(shortResetsAt, now)
   const weeklyQuota = formatCompactInlineQuota(weeklyPercent)
+  if (resetCelebrationActive) {
+    return `晌${shortQuota}·${shortRemaining} 周${weeklyQuota}～冲`
+  }
   const weeklyRemaining = formatCompactInlineRemaining(weeklyResetsAt, now)
   return `晌${shortQuota}·${shortRemaining}  周${weeklyQuota}·${weeklyRemaining}`
 }
