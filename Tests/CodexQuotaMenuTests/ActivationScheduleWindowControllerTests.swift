@@ -4,6 +4,38 @@ import XCTest
 
 @MainActor
 final class ActivationScheduleWindowControllerTests: XCTestCase {
+    func testActivationContentStaysAtTopWhenWindowIsResized() throws {
+        _ = NSApplication.shared
+        let (model, suite) = makeModel()
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+        model.load()
+        for hour in [4, 9, 14, 19] {
+            try model.add(time: ActivationTime(hour: hour, minute: 30))
+        }
+        for language in [DisplayLanguage.simplifiedChinese, .english] {
+            let text = AppText(language: language)
+            let controller = ActivationScheduleWindowController(model: model, textProvider: { text })
+            let window = try XCTUnwrap(controller.window)
+            let content = try XCTUnwrap(window.contentView)
+            let heading = try XCTUnwrap(findTextField(in: content) { $0.stringValue == text.activationScheduleHeading })
+            let scroll = try XCTUnwrap(enclosingScrollView(of: heading))
+            let document = try XCTUnwrap(scroll.documentView)
+            for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+                window.appearance = NSAppearance(named: appearance)
+                for size in [NSSize(width: 420, height: 320), NSSize(width: 520, height: 420), NSSize(width: 700, height: 650)] {
+                    window.setContentSize(size)
+                    content.layoutSubtreeIfNeeded()
+                    scroll.tile()
+                    document.layoutSubtreeIfNeeded()
+                    let headingRect = heading.convert(heading.bounds, to: document)
+                    XCTAssertEqual(document.visibleRect.minY, 0, accuracy: 1)
+                    XCTAssertEqual(headingRect.minY, 4, accuracy: 1)
+                    XCTAssertTrue(document.visibleRect.contains(headingRect))
+                }
+            }
+        }
+    }
+
     func testActivationScheduleMenuItemUsesLocalizedTitleAndSettingsShortcut() {
         let item = AppDelegate.activationScheduleMenuItem(
             text: AppText(language: .english),
