@@ -1,6 +1,22 @@
 import Foundation
 
 enum ActivationRunner {
+    static func commandArguments(policy: ActivationLaunchAgentPolicy, time: ActivationTime,
+                                 snapshot: DefaultModelSnapshot) throws -> [String] {
+        let selection = snapshot.effective
+        try selection.validate()
+        guard snapshot.models.contains(where: {
+            $0.id == selection.model && $0.efforts.contains(selection.effort)
+                && (!selection.fastEnabled || $0.supportsFast)
+        }) else { throw DefaultModelError.invalidSelection }
+        var arguments = Array(policy.agent(for: time).programArguments.dropFirst())
+        // Keep activation isolated from user hooks/tools while adopting current model defaults.
+        arguments.insert(contentsOf: ["--json", "--model", selection.model,
+            "-c", "model_reasoning_effort=\"\(selection.effort)\"",
+            "-c", "service_tier=\"\(selection.serviceTier)\""], at: 1)
+        return arguments
+    }
+
     static func commandError(_ result: CodexCommandResult) -> String? {
         if result.timedOut { return "timeout" }
         let events = result.standardOutput.split(separator: "\n").compactMap {
@@ -50,7 +66,8 @@ enum ActivationRunner {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let policy = ActivationLaunchAgentPolicy(codexURL: configuredExecutable, homeDirectory: home, runnerURL: nil)
         guard let time = policy.time(forLabel: label),
-              Array(arguments.dropFirst(2)) == policy.agent(for: time).programArguments else { return 64 }
+              (Array(arguments.dropFirst(2)) == policy.agent(for: time).programArguments ||
+               Array(arguments.dropFirst(2)) == policy.legacyProgramArguments(for: time)) else { return 64 }
         let started = Date()
         // Resolve at execution time, rather than trusting a path embedded by an older app.
         let locator = CodexExecutableLocator()
@@ -106,8 +123,16 @@ enum ActivationRunner {
             do { try persist() } catch { return 74 }
             return 0
         }
-        var commandArguments = Array(arguments.dropFirst(3))
-        commandArguments.insert("--json", at: 1)
+        let commandArguments: [String]
+        do {
+            let resolved = CodexExecutableLocator(candidatePaths: [executable.path], isExecutable: FileManager.default.isExecutableFile(atPath:))
+            let snapshot = try DefaultModelSettingsService(makeClient: { CodexClient(executableLocator: resolved) }).load()
+            commandArguments = try self.commandArguments(policy: policy, time: time, snapshot: snapshot)
+        } catch {
+            status = "default_model_unavailable"
+            try? persist()
+            return 78
+        }
         for index in 0..<2 {
             if index > 0 { Thread.sleep(forTimeInterval: 15) }
             let attemptStarted = Date()

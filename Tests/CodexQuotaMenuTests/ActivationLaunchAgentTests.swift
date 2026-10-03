@@ -25,8 +25,6 @@ final class ActivationLaunchAgentTests: XCTestCase {
             "--skip-git-repo-check",
             "--sandbox",
             "read-only",
-            "--model",
-            "gpt-5.6-luna",
             "--cd",
             home.path,
             ManagedAutomationPolicy.activationPrompt
