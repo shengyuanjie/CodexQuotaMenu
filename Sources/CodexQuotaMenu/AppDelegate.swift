@@ -63,6 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         MainActor.assumeIsolated {
             activationScheduleModel.load()
+            if CommandLine.arguments.contains("--activation-settings") { openActivationScheduleSettings() }
             if CommandLine.arguments.contains("--model-settings") { openDefaultModelSettings() }
             if CommandLine.arguments.contains("--scheduled-message-settings") { openScheduledMessageSettings() }
         }

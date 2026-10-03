@@ -19,6 +19,10 @@ private final class ActivationScheduleButton: NSButton {
     var representedObject: Any?
 }
 
+private final class ActivationScheduleDocumentView: NSView {
+    override var isFlipped: Bool { true }
+}
+
 @MainActor
 final class ActivationScheduleWindowController: NSWindowController, NSWindowDelegate {
     private let model: ActivationScheduleSettingsModel
@@ -230,7 +234,7 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
         contentStack.spacing = 12
         contentStack.translatesAutoresizingMaskIntoConstraints = false
 
-        let documentView = NSView()
+        let documentView = ActivationScheduleDocumentView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
         documentView.addSubview(contentStack)
 
@@ -239,6 +243,8 @@ final class ActivationScheduleWindowController: NSWindowController, NSWindowDele
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false
+        scrollView.contentView.drawsBackground = false
         scrollView.documentView = documentView
 
         let buttonBar = NSStackView(views: [addButton, NSView(), refreshButton, syncButton])
