@@ -61,8 +61,6 @@ struct ActivationLaunchAgentPolicy {
                 "--skip-git-repo-check",
                 "--sandbox",
                 "read-only",
-                "--model",
-                "gpt-5.6-luna",
                 "--cd",
                 homeDirectory.path,
                 ManagedAutomationPolicy.activationPrompt
@@ -71,6 +69,14 @@ struct ActivationLaunchAgentPolicy {
             standardOutPath: "/dev/null",
             standardErrorPath: "/dev/null"
         )
+    }
+
+    // Recognize the exact previous command only for migration and old runner invocations.
+    func legacyProgramArguments(for time: ActivationTime) -> [String] {
+        var arguments = agent(for: time).programArguments
+        let index = arguments.firstIndex(of: "--cd")!
+        arguments.insert(contentsOf: ["--model", "gpt-5.6-luna"], at: index)
+        return arguments
     }
 
     private static func isASCIIDigit(_ byte: UInt8) -> Bool {

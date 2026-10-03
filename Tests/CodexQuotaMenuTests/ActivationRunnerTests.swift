@@ -2,6 +2,52 @@ import XCTest
 @testable import CodexQuotaMenu
 
 final class ActivationRunnerTests: XCTestCase {
+    func testActivationResolvesCurrentDefaultsIncludingManagedOverrides() throws {
+        let policy = ActivationLaunchAgentPolicy(codexURL: URL(fileURLWithPath: "/opt/bin/codex"),
+            homeDirectory: URL(fileURLWithPath: "/Users/tester"), runnerURL: nil)
+        let time = try ActivationTime(hour: 6, minute: 30)
+        let models = [CodexModelOption(id: "future-model", name: "Future", efforts: ["low", "high"], defaultEffort: "low")]
+        var snapshot = DefaultModelSnapshot(user: .init(model: "future-model", effort: "low"),
+            managedModel: nil, managedEffort: nil, profile: nil, models: models)
+        var arguments = try ActivationRunner.commandArguments(policy: policy, time: time, snapshot: snapshot)
+        XCTAssertEqual(arguments[arguments.firstIndex(of: "--model")! + 1], "future-model")
+        XCTAssertTrue(arguments.contains("model_reasoning_effort=\"low\""))
+        XCTAssertFalse(arguments.contains("gpt-5.6-luna"))
+        snapshot = DefaultModelSnapshot(user: .init(model: "retired-model", effort: "low"),
+            managedModel: "future-model", managedEffort: "high", profile: nil, models: models, managedServiceTier: "fast")
+        arguments = try ActivationRunner.commandArguments(policy: policy, time: time, snapshot: snapshot)
+        XCTAssertTrue(arguments.contains("model_reasoning_effort=\"high\""))
+        XCTAssertTrue(arguments.contains("service_tier=\"fast\""))
+        XCTAssertTrue(arguments.contains("--ephemeral"))
+        XCTAssertTrue(arguments.contains("--ignore-user-config"))
+        XCTAssertTrue(arguments.contains("--ignore-rules"))
+        XCTAssertEqual(arguments.last, ManagedAutomationPolicy.activationPrompt)
+        let unavailable = DefaultModelSnapshot(user: .init(model: "retired-model", effort: "low"),
+            managedModel: nil, managedEffort: nil, profile: nil, models: models)
+        XCTAssertThrowsError(try ActivationRunner.commandArguments(policy: policy, time: time, snapshot: unavailable))
+    }
+
+    func testFixedModelPlistsAreRecognizedAsNeedingMigration() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let time = try ActivationTime(hour: 6, minute: 30)
+        let policy = ActivationLaunchAgentPolicy(codexURL: URL(fileURLWithPath: "/opt/bin/codex"),
+            homeDirectory: URL(fileURLWithPath: "/Users/tester"),
+            runnerURL: URL(fileURLWithPath: "/Applications/Test.app/Contents/MacOS/Test"))
+        for runner in [nil, policy.runnerURL] {
+            let old = ActivationLaunchAgentPolicy(codexURL: policy.codexURL, homeDirectory: policy.homeDirectory, runnerURL: runner)
+            var plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: old.agent(for: time).xmlData(), format: nil) as? [String: Any])
+            plist["ProgramArguments"] = old.legacyProgramArguments(for: time)
+            try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+                .write(to: old.fileURL(for: time, in: directory))
+            guard case let .available(agents) = ActivationLaunchAgentReader(policy: policy, directoryURL: directory).read() else {
+                return XCTFail("fixed-model agent rejected")
+            }
+            XCTAssertTrue(try XCTUnwrap(agents.first).requiresSynchronization)
+        }
+    }
+
     func testRunnerPolicyAcceptsLegacyAgentForMigration() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

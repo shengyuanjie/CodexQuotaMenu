@@ -123,10 +123,12 @@ struct ActivationLaunchAgentReader {
     private func acceptsArguments(_ actual: [String], expected: ActivationLaunchAgent, time: ActivationTime) -> Bool {
         if actual == expected.programArguments { return true }
         let direct = ActivationLaunchAgentPolicy(codexURL: policy.codexURL, homeDirectory: policy.homeDirectory, runnerURL: nil).agent(for: time).programArguments
-        if hasStableCommandPolicy(actual, expected: direct) { return true }
+        let legacy = ActivationLaunchAgentPolicy(codexURL: policy.codexURL, homeDirectory: policy.homeDirectory, runnerURL: nil).legacyProgramArguments(for: time)
+        if hasStableCommandPolicy(actual, expected: direct) || hasStableCommandPolicy(actual, expected: legacy) { return true }
         guard let runner = policy.runnerURL,
               Array(actual.prefix(3)) == [runner.path, "--activate", expected.label] else { return false }
-        return hasStableCommandPolicy(Array(actual.dropFirst(3)), expected: direct)
+        let command = Array(actual.dropFirst(3))
+        return hasStableCommandPolicy(command, expected: direct) || hasStableCommandPolicy(command, expected: legacy)
     }
 
     private func isAbsoluteCodexExecutablePath(_ path: String, expectedName: String) -> Bool {
