@@ -30,8 +30,11 @@ enum ResetCelebrationPolicy {
     static func evaluate(
         state: ResetCelebrationState,
         probability48h: Int?,
-        observation: ResetQuotaObservation?
+        observation: ResetQuotaObservation?,
+        newlyGrantedResetCredit: Bool = false
     ) -> ResetCelebrationDecision {
+        var state = state
+        if newlyGrantedResetCredit && state.wasHigh { state.dismissed = true }
         guard let probability48h else {
             return ResetCelebrationDecision(isActive: false, state: state)
         }

@@ -60,6 +60,12 @@ The title never shows a forecast percentage: at 50% or higher while encouragemen
 
 The app queries up to the 50 most recently updated Codex tasks. Each task category lists up to five titles in the menu; the menu bar count reflects all tasks recognized in that query.
 
+## Reset Cards
+
+The dropdown reads `rateLimitResetCredits` from the official `account/rateLimits/read` response and shows the available count and expiration dates. `availableCount` is authoritative; missing details are explicitly marked unavailable, and a missing summary is not treated as zero. The menu bar and iPhone widget do not display card counts. The app does not redeem cards.
+
+The first successful query establishes a baseline for the current app session. Later increases in the available count, or an unseen card granted after that baseline, dismiss the current high-probability encouragement cycle. Existing cards at launch do not count as new arrivals. A new card does not imply that quota has refilled or that the community forecast was correct. Read-only information uses the system secondary text color; actions keep the normal menu text color.
+
 ## Task States
 
 ### `▶` Active
@@ -88,7 +94,7 @@ Forecasts refresh independently every five minutes from `https://willcodexreset.
 
 The displayed update time is `data.updatedAt`, meaning when the community source updated its own forecast. The local fetch time is stored separately and determines freshness: data is marked cached after 15 minutes and hidden after two hours. The compact summary uses the v3 cache key `globalReset.willCodexResetForecast.v3`.
 
-When a low-probability cycle first reaches or exceeds 50%, the menu shows its encouragement message. It does not start another cycle while the probability stays high; after a completed reset it remains dismissed until the probability drops below 50% and crosses the threshold again.
+When a low-probability cycle first reaches or exceeds 50%, the menu shows its encouragement message. It does not start another cycle while the probability stays high; after a completed reset or newly received reset card it remains dismissed until the probability drops below 50% and crosses the threshold again.
 
 `willcodexreset.com` is an independent community service with no affiliation with or endorsement by OpenAI. Its forecast is not an official reset schedule or guarantee.
 
@@ -183,6 +189,7 @@ Plain HTTP is intended only for a trusted LAN or an existing encrypted Shadowroc
 The app processes:
 
 - usage percentages, reset times, and plan type;
+- reset-card counts, identifiers, grant times, and expiration dates, held only in process memory;
 - recent task identifiers, titles, timestamps, and runtime states;
 - local session-log paths returned by Codex;
 - up to the last 512 KB of relevant session logs;

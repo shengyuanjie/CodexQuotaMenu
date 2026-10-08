@@ -299,6 +299,30 @@ struct AppText {
             : "Plan: \(plan.uppercased())"
     }
 
+    func resetCreditDescriptions(_ summary: ResetCreditsSummary?) -> [String] {
+        let chinese = language == .simplifiedChinese
+        guard let summary else {
+            return [chinese ? "重置卡：暂时无法读取" : "Reset cards: unavailable"]
+        }
+        var lines = [chinese ? "重置卡：\(summary.availableCount) 张可用" : "Reset cards: \(summary.availableCount) available"]
+        guard summary.availableCount > 0 else { return lines }
+        lines.append(chinese ? "  使用后重置 5 小时及每周额度" : "  Resets 5-hour and weekly limits when used")
+        guard let credits = summary.credits else {
+            lines.append(chinese ? "  到期时间暂不可用" : "  Expiration details unavailable")
+            return lines
+        }
+        for (index, credit) in credits.sorted(by: {
+            ($0.expiresAt ?? .distantFuture) < ($1.expiresAt ?? .distantFuture)
+        }).enumerated() {
+            let expiry = credit.expiresAt.map(fullDate) ?? (chinese ? "无到期时间" : "No expiration")
+            lines.append(chinese ? "  第 \(index + 1) 张：\(expiry)\(credit.expiresAt == nil ? "" : " 到期")" : "  Card \(index + 1): \(expiry)")
+        }
+        if credits.count < summary.availableCount {
+            lines.append(chinese ? "  部分卡片的到期时间暂不可用" : "  Some expiration details unavailable")
+        }
+        return lines
+    }
+
     func updatedDescription(_ date: Date) -> String {
         if language == .simplifiedChinese {
             return "更新：\(updateTime(date)) · 实时连接 / 5 秒校准"

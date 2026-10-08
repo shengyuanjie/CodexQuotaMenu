@@ -27,6 +27,7 @@ Codex Usage Menu Bar is designed around local processing. The project operates n
 The app starts `codex app-server --stdio` through a Codex executable already installed on the user's Mac and reads:
 
 - Codex usage percentages, reset times, and plan type;
+- available reset-card counts, identifiers, grant times, and expiration dates, processed only in memory;
 - recent task identifiers, titles, update times, and runtime states;
 - local session-log paths returned by Codex;
 - up to the last 512 KB of each relevant session log, used only to identify structured lifecycle events such as task starts, user messages, and task completions, plus whether the log has been active recently.
@@ -56,7 +57,7 @@ The app stores locally:
 
 - macOS `UserDefaults`: interface language, the phone-feed toggle, the non-personal v3 public forecast summary cache, the two quota summaries and reset times used to detect completion of the current reset cycle, and each activation entry's hour, minute, enabled state, and stable local ID. The forecast summary contains only probability, source update time, and local fetch time, never `events`; this state remains local and forecast data is hidden after two hours;
 - macOS Keychain: the 32-byte random access token created when the phone feed is first enabled; while the feed is running, one copy remains only in app-process memory and disappears when the app exits;
-- process memory: the latest personal quota, task summary, and generated phone JSON snapshot.
+- process memory: the latest personal quota, reset-card summary and identifiers seen during this app session, task summary, and generated phone JSON snapshot. Reset-card details and identifiers are never written to preferences, logs, the forecast cache, or phone JSON, and are released on exit.
 
 The phone token is never placed in `UserDefaults`, URLs, logs, or responses. Phone JSON contains only quota, reset dates, running-task count, and forecast summaries. Forecast fields are `probability48h`, `updatedAt`, `isCached`, `source`, and an optionally omitted `calibrationState`; it contains no task title, file path, conversation content, or `events`.
 

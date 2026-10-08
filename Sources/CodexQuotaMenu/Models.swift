@@ -20,6 +20,7 @@ struct UsageSnapshot: Equatable {
     let windows: [RateLimitWindow]
     let plan: String?
     let fetchedAt: Date
+    var resetCredits: ResetCreditsSummary? = nil
 
     var headlineWindow: RateLimitWindow? {
         shortWindow
@@ -38,6 +39,38 @@ struct UsageSnapshot: Equatable {
         windows
             .filter { ($0.durationMinutes ?? 0) >= 10_000 }
             .max { ($0.durationMinutes ?? 0) < ($1.durationMinutes ?? 0) }
+    }
+}
+
+struct ResetCredit: Equatable {
+    let id: String
+    let grantedAt: Date
+    let expiresAt: Date?
+}
+
+struct ResetCreditsSummary: Equatable {
+    let availableCount: Int
+    let credits: [ResetCredit]?
+}
+
+// Session-local baseline: cards already present at launch are never new arrivals.
+struct ResetCreditArrivalTracker {
+    private var baselineDate: Date?
+    private var previousCount: Int?
+    private var seenIDs = Set<String>()
+
+    mutating func observe(_ summary: ResetCreditsSummary?, fetchedAt: Date) -> Bool {
+        guard let summary else { return false }
+        let rows = summary.credits ?? []
+        defer {
+            baselineDate = baselineDate ?? fetchedAt
+            previousCount = summary.availableCount
+            seenIDs.formUnion(rows.map(\.id))
+        }
+        guard let baselineDate, let previousCount else { return false }
+        return summary.availableCount > previousCount || rows.contains {
+            !seenIDs.contains($0.id) && $0.grantedAt > baselineDate
+        }
     }
 }
 
@@ -88,7 +121,20 @@ enum UsageParser {
         guard !windows.isEmpty else {
             throw UsageError.noUsageWindows
         }
-        return UsageSnapshot(windows: windows, plan: limits["planType"] as? String, fetchedAt: now)
+        var snapshot = UsageSnapshot(windows: windows, plan: limits["planType"] as? String, fetchedAt: now)
+        if let raw = result["rateLimitResetCredits"] as? [String: Any],
+           let count = raw["availableCount"] as? Int, count >= 0 {
+            let rows = (raw["credits"] as? [[String: Any]])?.compactMap { row -> ResetCredit? in
+                guard let id = row["id"] as? String, !id.isEmpty,
+                      row["resetType"] as? String == "codexRateLimits",
+                      row["status"] as? String == "available",
+                      let granted = row["grantedAt"] as? TimeInterval else { return nil }
+                return ResetCredit(id: id, grantedAt: Date(timeIntervalSince1970: granted),
+                    expiresAt: (row["expiresAt"] as? TimeInterval).map(Date.init(timeIntervalSince1970:)))
+            }
+            snapshot.resetCredits = ResetCreditsSummary(availableCount: count, credits: rows)
+        }
+        return snapshot
     }
 }
 

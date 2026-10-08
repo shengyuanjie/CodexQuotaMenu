@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var forecastTimer: Timer?
     private var isRefreshing = false
     private var lastSnapshot: UsageSnapshot?
+    private var resetCreditArrivalTracker = ResetCreditArrivalTracker()
     private var lastTaskSnapshot: TaskSnapshot?
     private var lastForecastSnapshot = ForecastDisplaySnapshot.unavailable
     private var localRefreshError: Error?
@@ -79,15 +80,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let result = Result { (try self.client.fetchUsage(), try self.client.fetchTasks()) }
             DispatchQueue.main.async {
                 self.isRefreshing = false
+                var newResetCredit = false
                 switch result {
                 case .success(let (usage, tasks)):
+                    newResetCredit = self.resetCreditArrivalTracker.observe(usage.resetCredits, fetchedAt: usage.fetchedAt)
                     self.lastSnapshot = usage
                     self.lastTaskSnapshot = tasks
                     self.localRefreshError = nil
                 case .failure(let error):
                     self.localRefreshError = error
                 }
-                self.renderCurrentState()
+                self.renderCurrentState(newlyGrantedResetCredit: newResetCredit)
             }
         }
     }
@@ -118,14 +121,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func renderCurrentState() {
+    private func renderCurrentState(newlyGrantedResetCredit: Bool = false) {
         let now = Date()
         let shortWindow = lastSnapshot?.shortWindow
         let weeklyWindow = lastSnapshot?.weeklyWindow
         let celebration = ResetCelebrationPolicy.evaluate(
             state: resetCelebrationState,
             probability48h: lastForecastSnapshot.probability48h,
-            observation: resetQuotaObservation(shortWindow: shortWindow, weeklyWindow: weeklyWindow)
+            observation: resetQuotaObservation(shortWindow: shortWindow, weeklyWindow: weeklyWindow),
+            newlyGrantedResetCredit: newlyGrantedResetCredit
         )
         if celebration.state != resetCelebrationState {
             resetCelebrationState = celebration.state
@@ -152,6 +156,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let reset = window.resetsAt {
                     menu.addItem(disabledItem(text.resetDescription(date: reset)))
                 }
+            }
+            menu.addItem(.separator())
+            for line in text.resetCreditDescriptions(snapshot.resetCredits) {
+                menu.addItem(disabledItem(line))
             }
             if let plan = snapshot.plan {
                 menu.addItem(.separator())
@@ -308,6 +316,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func disabledItem(_ title: String) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         item.isEnabled = false
+        // AppKit still dims attributed titles for disabled menu items. A custom
+        // label keeps status information readable without making it an action.
+        let label = NSTextField(labelWithString: title)
+        label.font = .menuFont(ofSize: 0)
+        label.textColor = .secondaryLabelColor
+        label.lineBreakMode = .byClipping
+        label.maximumNumberOfLines = 1
+        label.sizeToFit()
+        let height = max(22, ceil(label.frame.height) + 4)
+        let row = NSView(frame: NSRect(x: 0, y: 0, width: ceil(label.frame.width) + 28, height: height))
+        label.frame.origin = NSPoint(x: 14, y: (height - label.frame.height) / 2)
+        label.autoresizingMask = [.width]
+        row.addSubview(label)
+        item.view = row
         return item
     }
 
