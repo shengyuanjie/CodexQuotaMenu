@@ -1,5 +1,26 @@
 import AppKit
 
+// A launchd-only smoke check: no CLI, model request, files, or GUI are opened.
+if Array(CommandLine.arguments.dropFirst()) == [ActivationLaunchRegistration.probeFlag] {
+    exit(0)
+}
+if Array(CommandLine.arguments.dropFirst()) == ["--repair-activation-registration"] {
+    do {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let policy = ActivationLaunchAgentPolicy(
+            codexURL: try CodexExecutableLocator().findExecutable(), homeDirectory: home
+        )
+        try ActivationLaunchRegistration().refresh(
+            policy: policy, directory: home.appendingPathComponent("Library/LaunchAgents")
+        )
+        print("Activation registration checked; changed registrations passed background launch verification")
+        exit(0)
+    } catch {
+        fputs("Activation registration verification failed: \(error)\n", stderr)
+        exit(1)
+    }
+}
+
 if CommandLine.arguments.dropFirst().first == ManagedModelConfig.helperFlag {
     exit(ManagedModelConfig.runHelper(arguments: CommandLine.arguments))
 }

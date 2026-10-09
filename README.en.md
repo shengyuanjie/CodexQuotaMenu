@@ -59,6 +59,8 @@ The app no longer classifies tasks as waiting for user action and does not analy
 3. Extract the ZIP and move `Codex用量.app` to Applications.
 4. This project does not currently have an Apple Developer certificate. The app is ad-hoc signed with Hardened Runtime enabled, but it is not notarized. On first launch, you may need to right-click the app in Finder and select **Open**.
 
+Finder updates remain supported. After replacing the app, open the new version once to let it maintain existing background jobs; no command line is required.
+
 Do not download builds from unofficial mirror sites. Public release archives are built from version tags by this repository's GitHub Actions workflow.
 
 ## How to Use
@@ -71,7 +73,7 @@ Do not download builds from unofficial mirror sites. Public release archives are
 6. For an iPhone lock-screen display, follow the [Scriptable setup guide](mobile/README.md) and enable the **Phone Widget** read-only feed. Existing Scriptable users must manually replace their imported `CodexQuotaWidget.js` with this version.
 7. Choose **Quit**, or press `Q` while the menu is open, to stop all queries and the phone feed.
 
-Managed LaunchAgent labels and filenames exactly match `com.local.codexquotamenu.activation.HHMM` under `~/Library/LaunchAgents/`. Prefix-sharing files are not owned and remain untouched. With an empty time list, **Apply to Codex** removes only the app's own LaunchAgents. Local status checks are read-only; managed scheduling changes only when the user chooses **Apply to Codex**. The app's headless runner keeps activation silent. The latest summary per time and a separate diagnostic record for each run is stored in `~/Library/Logs/CodexQuotaMenu/Activation/`, containing timestamps, exit codes, error categories, usage percentages and before/after window deadlines only. Raw command output is captured in a restricted temporary directory and removed afterwards. Each run resolves the CLI again and checks structured turn completion, stable deadlines across two queries and nonzero quota usage. Unverified or transient failures are retried once after 15 seconds; authentication and quota errors are not retried immediately. If the existing window expires within ten minutes, the runner waits until five seconds after expiry; otherwise it records that the existing window remains active. **Synced** means only that configuration and loaded state agree. After sleep, macOS may coalesce a missed calendar trigger into one catch-up run.
+Managed LaunchAgent labels and filenames exactly match `com.local.codexquotamenu.activation.HHMM` under `~/Library/LaunchAgents/`. Prefix-sharing files are not owned and remain untouched. With an empty time list, **Apply to Codex** removes only the app's own LaunchAgents. Changes to activation times take effect only when the user chooses **Apply to Codex**. After an app update, startup checks re-register existing jobs while preserving their installed times. The app's headless runner keeps activation silent. The latest summary per time and a separate diagnostic record for each run is stored in `~/Library/Logs/CodexQuotaMenu/Activation/`, containing timestamps, exit codes, error categories, usage percentages and before/after window deadlines only. Raw command output is captured in a restricted temporary directory and removed afterwards. Each run resolves the CLI again and checks structured turn completion, stable deadlines across two queries and nonzero quota usage. Unverified or transient failures are retried once after 15 seconds; authentication and quota errors are not retried immediately. If the existing window expires within ten minutes, the runner waits until five seconds after expiry; otherwise it records that the existing window remains active. **Synced** means only that configuration and loaded state agree. After sleep, macOS may coalesce a missed calendar trigger into one catch-up run.
 
 To start the app at login, open **System Settings → General → Login Items**, click **+**, and select `Codex用量.app` from Applications.
 
@@ -137,6 +139,8 @@ Install Xcode Command Line Tools, then run:
 The script creates a release build for the current Mac architecture, strips debug symbols and build-machine user paths, includes the app icon, enables Hardened Runtime, applies an ad-hoc signature, and verifies the bundle signature.
 
 If Codex is installed in a nonstandard location, advanced users may set `CODEX_CLI_PATH` in the app's launch environment.
+
+After a local build, `python3 scripts/install-local-app.py dist/Codex用量.app` installs the app with a backup, signature and file checks, background launch verification, and rollback on failure. The app also detects executable changes on normal startup, including rebuilds with an unchanged version number. Its temporary launch check sends no model request. Unapplied activation settings and running activations are preserved.
 
 ## Support the Project
 

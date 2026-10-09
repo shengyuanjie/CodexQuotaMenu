@@ -129,6 +129,10 @@ final class ActivationScheduleSettingsModel {
                 codexURL: try CodexExecutableLocator().findExecutable(),
                 homeDirectory: homeDirectory
             )
+            try ActivationLaunchRegistration().refresh(
+                policy: policy,
+                directory: homeDirectory.appendingPathComponent("Library/LaunchAgents")
+            )
             return ActivationSchedulerSnapshot.read(
                 readResult: ActivationLaunchAgentReader(policy: policy).read(),
                 controller: LaunchctlController()
@@ -136,7 +140,7 @@ final class ActivationScheduleSettingsModel {
         } catch let error as LegacyAutomationMigrationError {
             return .unavailable(error.localizedDescription)
         } catch {
-            return .unavailable("LaunchAgent scheduler state is unavailable")
+            return .unavailable("后台激活任务注册或启动核验失败，请稍后刷新或重新应用。Background activation registration or launch verification failed.")
         }
     }
 }
