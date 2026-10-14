@@ -211,6 +211,31 @@ final class UsageParserTests: XCTestCase {
         XCTAssertNil(TaskParser.stateFromLog(path: url.path, now: now))
     }
 
+    func testInterruptedTurnWithLateToolOutputIsNotRunning() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let log = """
+        {"type":"event_msg","payload":{"type":"task_started"}}
+        {"type":"event_msg","payload":{"type":"turn_aborted","reason":"interrupted"}}
+        {"type":"response_item","payload":{"type":"custom_tool_call_output"}}
+        """
+        try Data(log.utf8).write(to: url)
+        XCTAssertNil(TaskParser.stateFromLog(path: url.path, now: Date()))
+    }
+
+    func testNewTurnAfterInterruptionIsRunning() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let log = """
+        {"type":"event_msg","payload":{"type":"task_started"}}
+        {"type":"event_msg","payload":{"type":"turn_aborted","reason":"interrupted"}}
+        {"type":"event_msg","payload":{"type":"user_message"}}
+        {"type":"event_msg","payload":{"type":"task_started"}}
+        """
+        try Data(log.utf8).write(to: url)
+        XCTAssertEqual(TaskParser.stateFromLog(path: url.path, now: Date()), .running)
+    }
+
     func testTaskCompleteAfterTaskStartedRemainsCompleted() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jsonl")
         defer { try? FileManager.default.removeItem(at: url) }
