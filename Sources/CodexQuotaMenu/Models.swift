@@ -197,6 +197,7 @@ enum TaskParser {
         let text = String(decoding: data, as: UTF8.self)
 
         let signals = logSignals(from: text)
+        if signals.wasInterrupted { return nil }
         if let lifecycleState = signals.lifecycleState {
             if lifecycleState == .running,
                now.timeIntervalSince(modifiedAt) > 1_800 {
@@ -219,6 +220,7 @@ private extension TaskParser {
     struct LogSignals {
         var lifecycleState: TaskState?
         var hasActivity = false
+        var wasInterrupted = false
     }
 
     static func logSignals(from text: String) -> LogSignals {
@@ -236,8 +238,14 @@ private extension TaskParser {
             switch eventType {
             case "user_message", "task_started":
                 signals.lifecycleState = .running
+                signals.wasInterrupted = false
             case "task_complete":
                 signals.lifecycleState = .completed
+                signals.wasInterrupted = false
+            case "turn_aborted":
+                // 中断结束当前回合；后续工具输出也不能将它恢复成运行中。
+                signals.lifecycleState = nil
+                signals.wasInterrupted = true
             default:
                 break
             }
