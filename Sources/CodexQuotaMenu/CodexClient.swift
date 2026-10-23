@@ -9,6 +9,8 @@ final class CodexClient {
     private var output: Pipe?
     private var outputBuffer = Data()
     private var nextRequestID = 2
+    private var awaitingTurn = false
+    private var completedTurn: (threadID: String, turnID: String, status: String)?
 
     init(executableLocator: CodexExecutableLocating = CodexExecutableLocator()) {
         self.executableLocator = executableLocator
@@ -71,6 +73,37 @@ final class CodexClient {
             stop()
             throw error
         }
+    }
+
+    // Native app-server turns retain their interactive source and remain visible in desktop lists.
+    func completeScheduledTurn(_ item: ScheduledMessage, directory: URL, effort: String,
+                               timeout: TimeInterval = 3_600) throws -> Bool {
+        awaitingTurn = true
+        completedTurn = nil
+        defer { awaitingTurn = false; completedTurn = nil }
+        let response = try modelRequest("turn/start", params:
+            ScheduledMessageDesktopClient.turnRequest(item, effort: effort, directory: directory))
+        guard let turn = response["turn"] as? [String: Any], let turnID = turn["id"] as? String else {
+            throw ScheduledMessageDeliveryError(code: "desktop_delivery_unverified")
+        }
+        if completedTurn?.threadID != item.threadID || completedTurn?.turnID != turnID {
+            guard let output else { throw UsageError.usageConnectionUnavailable }
+            _ = try waitForResponse(id: -1, from: output.fileHandleForReading, buffer: &outputBuffer,
+                deadlineOverride: Date().addingTimeInterval(timeout), untilTurn: (item.threadID, turnID))
+        }
+        guard completedTurn?.threadID == item.threadID, completedTurn?.turnID == turnID,
+              completedTurn?.status == "completed" else {
+            throw ScheduledMessageDeliveryError(code: "turn_failed")
+        }
+        return true
+    }
+
+    static func scheduledTurnCompletion(_ event: [String: Any]) -> (threadID: String, turnID: String, status: String)? {
+        guard event["method"] as? String == "turn/completed",
+              let params = event["params"] as? [String: Any], let threadID = params["threadId"] as? String,
+              let turn = params["turn"] as? [String: Any], let turnID = turn["id"] as? String,
+              let status = turn["status"] as? String else { return nil }
+        return (threadID, turnID, status)
     }
 
     private func fetchFromPersistentSession() throws -> UsageSnapshot {
@@ -142,15 +175,29 @@ final class CodexClient {
         try handle.write(contentsOf: data)
     }
 
-    private func waitForResponse(id: Int, from handle: FileHandle, buffer: inout Data) throws -> Data {
-        let deadline = Date().addingTimeInterval(timeout)
+    private func waitForResponse(id: Int, from handle: FileHandle, buffer: inout Data,
+                                 deadlineOverride: Date? = nil,
+                                 untilTurn: (String, String)? = nil) throws -> Data {
+        let deadline = deadlineOverride ?? Date().addingTimeInterval(timeout)
         while Date() < deadline {
             while let newline = buffer.firstIndex(of: 0x0A) {
                 let line = buffer[..<newline]
                 buffer.removeSubrange(...newline)
                 guard !line.isEmpty,
-                      let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
-                      object["id"] as? Int == id else { continue }
+                      let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else { continue }
+                if awaitingTurn {
+                    // Unattended delivery must fail closed when a tool needs user input or approval.
+                    if object["method"] != nil, object["id"] != nil {
+                        throw ScheduledMessageDeliveryError(code: "approval_required")
+                    }
+                    if let completion = Self.scheduledTurnCompletion(object) {
+                        completedTurn = completion
+                        if let untilTurn, completion.threadID == untilTurn.0, completion.turnID == untilTurn.1 {
+                            return Data(line)
+                        }
+                    }
+                }
+                guard object["id"] as? Int == id else { continue }
                 if let error = object["error"] as? [String: Any] {
                     throw UsageError.serverError(error["message"] as? String)
                 }
@@ -174,6 +221,7 @@ final class CodexClient {
                 throw UsageError.readFailed(String(cString: strerror(errno)))
             }
             buffer.append(contentsOf: bytes.prefix(count))
+            guard buffer.count <= 20_000_000 else { throw ScheduledMessageDeliveryError(code: "cli_output_limit") }
         }
         throw UsageError.timedOut
     }

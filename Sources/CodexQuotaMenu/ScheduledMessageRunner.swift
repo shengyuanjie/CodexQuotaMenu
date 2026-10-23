@@ -3,8 +3,14 @@ import Darwin
 
 struct ScheduledMessageDeliveryError: LocalizedError {
     let code: String
+    // Set only for a CLI writer-lock rejection before any JSON execution output.
+    var retryableWriterConflict: Bool = false
     var errorDescription: String? {
         switch code {
+        case "thread_writer_conflict": return "目标对话存在写入冲突，未能核验发送完成。请检查目标任务后再重新安排。 / A writer conflict prevented verified completion. Check the chat before scheduling again."
+        case "turn_completed_sidebar_unregistered": return "消息已发送并完成，但未登记到 Codex 普通聊天侧栏。请点“打开任务”查看，不要重发。 / Delivery completed, but the chat is not registered in the Codex Chats sidebar. Use Open chat; do not resend."
+        case "desktop_visibility_unverified": return "对话可能已创建或消息已发送，但无法核验 Codex 任务列表可见性。请检查任务 ID，不要直接重发。 / The chat may exist or delivery may have completed, but desktop visibility could not be verified. Check the chat ID before resending."
+        case "new_chat_creation_unverified": return "新对话创建未通过核验，消息未发送。请检查任务 ID。 / New chat creation could not be verified. The message was not sent. Check the chat ID."
         case "new_task_removed": return "新建任务功能已移除，此消息未发送。请选择已有任务重新安排。 / New chat creation was removed. This message was not sent. Schedule it for an existing chat."
         case "attachment_limit": return "最多 20 个附件，单个不超过 25 MB，总计不超过 100 MB。 / Up to 20 attachments, 25 MB each, 100 MB total."
         case "attachment_invalid", "attachment_image_invalid": return "附件无效或照片格式无法读取，请选择普通文件或有效照片。 / Invalid file or unreadable image."
@@ -28,6 +34,7 @@ struct ScheduledMessageRunner {
     let store: ScheduledMessageStore
     let scheduler: ScheduledMessageScheduler
     var now: () -> Date = Date.init
+    var sidebarRegistration: (String) -> Bool = { ScheduledMessageSidebar.isRegistered($0) }
     var resolveThread: (String) throws -> ScheduledMessageTarget = { id in
         try resolveTarget(id: id, readDesktop: { id in
             let desktop = ScheduledMessageDesktopClient()
@@ -87,18 +94,83 @@ struct ScheduledMessageRunner {
         return option.efforts.contains(option.defaultEffort) ? option.defaultEffort : fallback
     }
     var send: (ScheduledMessage, ScheduledMessageTarget, String) throws -> Bool = { item, target, effort in
-        let desktop = ScheduledMessageDesktopClient()
-        if try desktop.connect(), let owner = try desktop.owner(threadID: item.threadID) {
-            return try desktop.deliver(item, owner: owner, effort: effort, directory: target.directory)
+        try deliverExisting(readDesktop: { timeout in
+            let desktop = ScheduledMessageDesktopClient()
+            guard try desktop.connect(), let owner = try desktop.owner(threadID: item.threadID) else { return nil }
+            return try desktop.deliver(item, owner: owner, effort: effort, directory: target.directory, timeout: timeout)
+        }, sendCLI: { timeout in
+            try checkWorkingDirectory(target.directory)
+            return try runCodex(item, directory: target.directory, effort: effort, timeout: timeout)
+        })
+    }
+
+    // A missing desktop owner can be transient while Codex resumes a chat. Only an
+    // explicit pre-submission CLI lock rejection permits another delivery attempt.
+    // Desktop failures and ambiguous CLI outcomes always propagate without retry.
+    static func deliverExisting(timeout: TimeInterval = 3_600, recoveryWindow: TimeInterval = 60,
+                                now: () -> Date = Date.init,
+                                sleep: (TimeInterval) -> Void = Thread.sleep(forTimeInterval:),
+                                readDesktop: (TimeInterval) throws -> Bool?,
+                                sendCLI: (TimeInterval) throws -> Bool) throws -> Bool {
+        let deadline = now().addingTimeInterval(timeout)
+        var recoveryDeadline: Date?
+        var nextCLI = now()
+        while now() < deadline {
+            if let recoveryDeadline, now() >= recoveryDeadline { break }
+            if let completed = try readDesktop(max(0, deadline.timeIntervalSince(now()))) { return completed }
+            if now() >= deadline { break }
+            if let recoveryDeadline, now() >= recoveryDeadline { break }
+            if now() >= nextCLI {
+                do { return try sendCLI(deadline.timeIntervalSince(now())) }
+                catch let error as ScheduledMessageDeliveryError
+                    where error.code == "thread_writer_conflict" && error.retryableWriterConflict {
+                    if recoveryDeadline == nil { recoveryDeadline = min(deadline, now().addingTimeInterval(recoveryWindow)) }
+                    nextCLI = now().addingTimeInterval(15)
+                }
+            }
+            let end = min(deadline, recoveryDeadline ?? deadline)
+            let delay = min(2, end.timeIntervalSince(now()))
+            if delay > 0 { sleep(delay) }
         }
-        // Ownership can change after preflight, so recheck permissions before CLI fallback.
-        try checkWorkingDirectory(target.directory)
-        return try runCodex(item, directory: target.directory, effort: effort)
+        throw ScheduledMessageDeliveryError(code: "thread_writer_conflict")
     }
 
     var sendNew: (ScheduledMessage, ScheduledMessageTarget, String, (String) throws -> Void) throws -> Bool = { item, target, effort, created in
         try checkWorkingDirectory(target.directory)
-        return try runCodex(item, directory: target.directory, effort: effort, onThreadStarted: created)
+        let client = CodexClient()
+        var prepared = item
+        prepared.threadID = try createVisibleChat(item, directory: target.directory,
+            request: client.modelRequest, onCreated: created)
+        let completed = try client.completeScheduledTurn(prepared, directory: target.directory, effort: effort)
+        try verifyVisibleChat(prepared.threadID, directory: target.directory, request: client.modelRequest)
+        return completed
+    }
+
+    static func createVisibleChat(_ item: ScheduledMessage, directory: URL,
+                                  request: (String, [String: Any]) throws -> [String: Any],
+                                  onCreated: (String) throws -> Void) throws -> String {
+        let response = try request("thread/start", ["cwd": directory.path, "model": item.model,
+            "ephemeral": false, "threadSource": "user"])
+        guard let thread = response["thread"] as? [String: Any],
+              let id = thread["id"] as? String, UUID(uuidString: id) != nil else {
+            throw ScheduledMessageDeliveryError(code: "new_chat_creation_unverified")
+        }
+        // Save the at-most-once boundary even if subsequent registration checks fail.
+        try onCreated(id)
+        guard thread["source"] as? String == "vscode" else {
+            throw ScheduledMessageDeliveryError(code: "desktop_visibility_unverified")
+        }
+        return id
+    }
+
+    static func verifyVisibleChat(_ id: String, directory: URL,
+                                  request: (String, [String: Any]) throws -> [String: Any]) throws {
+        // An omitted source filter uses the same interactive sources as the desktop sidebar.
+        let response = try request("thread/list", ["cwd": directory.path, "limit": 100,
+            "sortKey": "updated_at", "sortDirection": "desc", "modelProviders": [], "useStateDbOnly": true])
+        guard let threads = response["data"] as? [[String: Any]], threads.contains(where: { $0["id"] as? String == id }) else {
+            throw ScheduledMessageDeliveryError(code: "desktop_visibility_unverified")
+        }
     }
 
     init(store: ScheduledMessageStore = .init(), scheduler: ScheduledMessageScheduler? = nil) {
@@ -157,7 +229,9 @@ struct ScheduledMessageRunner {
                 completed = try send(item, target, effort)
             }
             item.state = completed ? .sent : .failed
-            item.result = completed ? "turn_completed" : "turn_unverified"
+            item.result = completed
+                ? (item.isNewTask && !sidebarRegistration(item.threadID) ? "turn_completed_sidebar_unregistered" : "turn_completed")
+                : "turn_unverified"
         } catch {
             item.state = .failed
             item.result = (error as? ScheduledMessageDeliveryError)?.code
@@ -169,8 +243,8 @@ struct ScheduledMessageRunner {
     }
 
     static func runCodex(_ item: ScheduledMessage, directory workingDirectory: URL, effort: String,
-                         executable: URL? = nil, timeout: TimeInterval = 3_600,
-                         onThreadStarted: (String) throws -> Void = { _ in }) throws -> Bool {
+                         executable: URL? = nil, timeout: TimeInterval = 3_600) throws -> Bool {
+        guard UUID(uuidString: item.threadID) != nil else { throw ScheduledMessageError.invalidInput }
         let cli = try executable ?? CodexExecutableLocator().findExecutable()
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CQMMessage-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false,
@@ -192,10 +266,10 @@ struct ScheduledMessageRunner {
         process.executableURL = cli
         process.currentDirectoryURL = workingDirectory
         var arguments = ["exec", "--cd", workingDirectory.path, "--skip-git-repo-check"]
-        if !item.isNewTask { arguments += ["resume", "--all"] }
+        arguments += ["resume", "--all"]
         arguments += ["--json", "--model", item.model, "--config", "model_reasoning_effort=\"\(effort)\""]
         arguments += item.attachmentItems.filter { $0.kind == .image }.flatMap { ["--image", $0.path] }
-        arguments += item.isNewTask ? ["-"] : [item.threadID, "-"]
+        arguments += [item.threadID, "-"]
         process.arguments = arguments
         process.standardInput = input
         process.standardOutput = outputHandle
@@ -205,26 +279,6 @@ struct ScheduledMessageRunner {
         let errorHandle = try FileHandle(forWritingTo: errorOutput)
         defer { try? errorHandle.close() }
         process.standardError = errorHandle
-        let eventReader = try FileHandle(forReadingFrom: output)
-        defer { try? eventReader.close() }
-        var eventBuffer = Data()
-        var createdThreadID: String?
-        func captureCreatedThread() throws {
-            guard item.isNewTask else { return }
-            eventBuffer.append(try eventReader.read(upToCount: 20_000_001) ?? Data())
-            guard eventBuffer.count <= 20_000_000 else { throw ScheduledMessageDeliveryError(code: "cli_output_limit") }
-            while let newline = eventBuffer.firstIndex(of: 0x0A) {
-                let line = Data(eventBuffer[..<newline])
-                eventBuffer.removeSubrange(...newline)
-                guard let event = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
-                      event["type"] as? String == "thread.started" else { continue }
-                guard let id = event["thread_id"] as? String, UUID(uuidString: id) != nil,
-                      createdThreadID == nil || createdThreadID == id else {
-                    throw ScheduledMessageDeliveryError(code: "thread_id_mismatch")
-                }
-                if createdThreadID == nil { try onThreadStarted(id); createdThreadID = id }
-            }
-        }
         try process.run()
         defer { if process.isRunning { process.terminate() } }
         let deadline = Date().addingTimeInterval(timeout)
@@ -232,10 +286,8 @@ struct ScheduledMessageRunner {
             let size = (try? FileManager.default.attributesOfItem(atPath: output.path)[.size] as? NSNumber)?.intValue ?? 0
             let errorSize = (try? FileManager.default.attributesOfItem(atPath: errorOutput.path)[.size] as? NSNumber)?.intValue ?? 0
             if size > 20_000_000 || errorSize > 2_000_000 { break }
-            try captureCreatedThread()
             Thread.sleep(forTimeInterval: 0.5)
         }
-        try captureCreatedThread()
         if process.isRunning {
             process.terminate()
             let stopDeadline = Date().addingTimeInterval(3)
@@ -245,7 +297,13 @@ struct ScheduledMessageRunner {
         }
         guard process.terminationStatus == 0 else {
             let raw = (try? String(contentsOf: errorOutput)) ?? ""
-            throw ScheduledMessageDeliveryError(code: classifyFailure(raw, exitCode: process.terminationStatus))
+            let code = classifyFailure(raw, exitCode: process.terminationStatus)
+            // Never retry if the process emitted any execution events (or unreadable
+            // output), even when stderr also mentions a writer conflict.
+            let events = try? Data(contentsOf: output)
+            throw ScheduledMessageDeliveryError(code: code,
+                retryableWriterConflict: code == "thread_writer_conflict"
+                    && raw.lowercased().contains("already has an active writer") && events?.isEmpty == true)
         }
         let data = try Data(contentsOf: output)
         guard data.count <= 20_000_000 else { throw ScheduledMessageDeliveryError(code: "cli_output_limit") }
@@ -260,8 +318,7 @@ struct ScheduledMessageRunner {
             }
             if type == "thread.started" {
                 guard let startedID = event["thread_id"] as? String, UUID(uuidString: startedID) != nil,
-                      item.isNewTask || startedID == item.threadID else { throw ScheduledMessageDeliveryError(code: "thread_id_mismatch") }
-                if item.isNewTask, createdThreadID != startedID { throw ScheduledMessageDeliveryError(code: "thread_id_mismatch") }
+                      startedID == item.threadID else { throw ScheduledMessageDeliveryError(code: "thread_id_mismatch") }
                 matchedThread = true
             }
             if type == "turn.completed" { completed = true }
