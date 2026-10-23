@@ -5,6 +5,8 @@ struct ScheduledMessageDeliveryError: LocalizedError {
     let code: String
     var errorDescription: String? {
         switch code {
+        case "desktop_visibility_unverified": return "对话可能已创建或消息已发送，但无法核验 Codex 任务列表可见性。请检查任务 ID，不要直接重发。 / The chat may exist or delivery may have completed, but desktop visibility could not be verified. Check the chat ID before resending."
+        case "new_chat_creation_unverified": return "新对话创建未通过核验，消息未发送。请检查任务 ID。 / New chat creation could not be verified. The message was not sent. Check the chat ID."
         case "new_task_removed": return "新建任务功能已移除，此消息未发送。请选择已有任务重新安排。 / New chat creation was removed. This message was not sent. Schedule it for an existing chat."
         case "attachment_limit": return "最多 20 个附件，单个不超过 25 MB，总计不超过 100 MB。 / Up to 20 attachments, 25 MB each, 100 MB total."
         case "attachment_invalid", "attachment_image_invalid": return "附件无效或照片格式无法读取，请选择普通文件或有效照片。 / Invalid file or unreadable image."
@@ -98,7 +100,40 @@ struct ScheduledMessageRunner {
 
     var sendNew: (ScheduledMessage, ScheduledMessageTarget, String, (String) throws -> Void) throws -> Bool = { item, target, effort, created in
         try checkWorkingDirectory(target.directory)
-        return try runCodex(item, directory: target.directory, effort: effort, onThreadStarted: created)
+        let client = CodexClient()
+        var prepared = item
+        prepared.threadID = try createVisibleChat(item, directory: target.directory,
+            request: client.modelRequest, onCreated: created)
+        let completed = try client.completeScheduledTurn(prepared, directory: target.directory, effort: effort)
+        try verifyVisibleChat(prepared.threadID, directory: target.directory, request: client.modelRequest)
+        return completed
+    }
+
+    static func createVisibleChat(_ item: ScheduledMessage, directory: URL,
+                                  request: (String, [String: Any]) throws -> [String: Any],
+                                  onCreated: (String) throws -> Void) throws -> String {
+        let response = try request("thread/start", ["cwd": directory.path, "model": item.model,
+            "ephemeral": false, "threadSource": "user"])
+        guard let thread = response["thread"] as? [String: Any],
+              let id = thread["id"] as? String, UUID(uuidString: id) != nil else {
+            throw ScheduledMessageDeliveryError(code: "new_chat_creation_unverified")
+        }
+        // Save the at-most-once boundary even if subsequent registration checks fail.
+        try onCreated(id)
+        guard thread["source"] as? String == "vscode" else {
+            throw ScheduledMessageDeliveryError(code: "desktop_visibility_unverified")
+        }
+        return id
+    }
+
+    static func verifyVisibleChat(_ id: String, directory: URL,
+                                  request: (String, [String: Any]) throws -> [String: Any]) throws {
+        // An omitted source filter uses the same interactive sources as the desktop sidebar.
+        let response = try request("thread/list", ["cwd": directory.path, "limit": 100,
+            "sortKey": "updated_at", "sortDirection": "desc", "modelProviders": [], "useStateDbOnly": true])
+        guard let threads = response["data"] as? [[String: Any]], threads.contains(where: { $0["id"] as? String == id }) else {
+            throw ScheduledMessageDeliveryError(code: "desktop_visibility_unverified")
+        }
     }
 
     init(store: ScheduledMessageStore = .init(), scheduler: ScheduledMessageScheduler? = nil) {
@@ -169,8 +204,8 @@ struct ScheduledMessageRunner {
     }
 
     static func runCodex(_ item: ScheduledMessage, directory workingDirectory: URL, effort: String,
-                         executable: URL? = nil, timeout: TimeInterval = 3_600,
-                         onThreadStarted: (String) throws -> Void = { _ in }) throws -> Bool {
+                         executable: URL? = nil, timeout: TimeInterval = 3_600) throws -> Bool {
+        guard UUID(uuidString: item.threadID) != nil else { throw ScheduledMessageError.invalidInput }
         let cli = try executable ?? CodexExecutableLocator().findExecutable()
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CQMMessage-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false,
@@ -192,10 +227,10 @@ struct ScheduledMessageRunner {
         process.executableURL = cli
         process.currentDirectoryURL = workingDirectory
         var arguments = ["exec", "--cd", workingDirectory.path, "--skip-git-repo-check"]
-        if !item.isNewTask { arguments += ["resume", "--all"] }
+        arguments += ["resume", "--all"]
         arguments += ["--json", "--model", item.model, "--config", "model_reasoning_effort=\"\(effort)\""]
         arguments += item.attachmentItems.filter { $0.kind == .image }.flatMap { ["--image", $0.path] }
-        arguments += item.isNewTask ? ["-"] : [item.threadID, "-"]
+        arguments += [item.threadID, "-"]
         process.arguments = arguments
         process.standardInput = input
         process.standardOutput = outputHandle
@@ -205,26 +240,6 @@ struct ScheduledMessageRunner {
         let errorHandle = try FileHandle(forWritingTo: errorOutput)
         defer { try? errorHandle.close() }
         process.standardError = errorHandle
-        let eventReader = try FileHandle(forReadingFrom: output)
-        defer { try? eventReader.close() }
-        var eventBuffer = Data()
-        var createdThreadID: String?
-        func captureCreatedThread() throws {
-            guard item.isNewTask else { return }
-            eventBuffer.append(try eventReader.read(upToCount: 20_000_001) ?? Data())
-            guard eventBuffer.count <= 20_000_000 else { throw ScheduledMessageDeliveryError(code: "cli_output_limit") }
-            while let newline = eventBuffer.firstIndex(of: 0x0A) {
-                let line = Data(eventBuffer[..<newline])
-                eventBuffer.removeSubrange(...newline)
-                guard let event = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
-                      event["type"] as? String == "thread.started" else { continue }
-                guard let id = event["thread_id"] as? String, UUID(uuidString: id) != nil,
-                      createdThreadID == nil || createdThreadID == id else {
-                    throw ScheduledMessageDeliveryError(code: "thread_id_mismatch")
-                }
-                if createdThreadID == nil { try onThreadStarted(id); createdThreadID = id }
-            }
-        }
         try process.run()
         defer { if process.isRunning { process.terminate() } }
         let deadline = Date().addingTimeInterval(timeout)
@@ -232,10 +247,8 @@ struct ScheduledMessageRunner {
             let size = (try? FileManager.default.attributesOfItem(atPath: output.path)[.size] as? NSNumber)?.intValue ?? 0
             let errorSize = (try? FileManager.default.attributesOfItem(atPath: errorOutput.path)[.size] as? NSNumber)?.intValue ?? 0
             if size > 20_000_000 || errorSize > 2_000_000 { break }
-            try captureCreatedThread()
             Thread.sleep(forTimeInterval: 0.5)
         }
-        try captureCreatedThread()
         if process.isRunning {
             process.terminate()
             let stopDeadline = Date().addingTimeInterval(3)
@@ -260,8 +273,7 @@ struct ScheduledMessageRunner {
             }
             if type == "thread.started" {
                 guard let startedID = event["thread_id"] as? String, UUID(uuidString: startedID) != nil,
-                      item.isNewTask || startedID == item.threadID else { throw ScheduledMessageDeliveryError(code: "thread_id_mismatch") }
-                if item.isNewTask, createdThreadID != startedID { throw ScheduledMessageDeliveryError(code: "thread_id_mismatch") }
+                      startedID == item.threadID else { throw ScheduledMessageDeliveryError(code: "thread_id_mismatch") }
                 matchedThread = true
             }
             if type == "turn.completed" { completed = true }

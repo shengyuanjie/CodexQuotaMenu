@@ -37,13 +37,13 @@ final class ScheduledMessageNewChatTests: XCTestCase {
         XCTAssertEqual(calls, 1)
     }
 
-    func testNewChatCLIUsesFreshExecAndCapturesIDOnFailure() throws {
+    func testNewChatCLIResumesTheRegisteredChat() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let fake = root.appendingPathComponent("fake-codex")
         let id = UUID().uuidString.lowercased()
-        let item = ScheduledMessage(fireDate: Date().addingTimeInterval(3600), threadID: "",
+        let item = ScheduledMessage(fireDate: Date().addingTimeInterval(3600), threadID: id,
             threadTitle: "New", model: "test-model", message: "hello", newTaskDirectory: root.path)
         for exitCode in [0, 1] {
             let script = """
@@ -55,17 +55,61 @@ final class ScheduledMessageNewChatTests: XCTestCase {
             """
             try script.write(to: fake, atomically: true, encoding: .utf8)
             try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: fake.path)
-            var captured: [String] = []
             let result = Result { try ScheduledMessageRunner.runCodex(item, directory: root, effort: "high",
-                executable: fake, timeout: 5, onThreadStarted: { captured.append($0) }) }
+                executable: fake, timeout: 5) }
             if exitCode == 0 { XCTAssertTrue(try result.get()) }
             else { XCTAssertThrowsError(try result.get()) }
-            XCTAssertEqual(captured, [id])
             let args = try String(contentsOf: root.appendingPathComponent("args")).split(separator: "\n").map(String.init)
-            XCTAssertEqual(args, ["exec", "--cd", root.path, "--skip-git-repo-check", "--json", "--model",
-                item.model, "--config", "model_reasoning_effort=\"high\"", "-"])
+            XCTAssertEqual(args, ["exec", "--cd", root.path, "--skip-git-repo-check", "resume", "--all", "--json", "--model",
+                item.model, "--config", "model_reasoning_effort=\"high\"", id, "-"])
             XCTAssertEqual(try String(contentsOf: root.appendingPathComponent("prompt")), "hello")
         }
+    }
+
+    func testNativeCreationSavesIDBeforeDeliveryAndChecksVisibility() throws {
+        let id = UUID().uuidString.lowercased()
+        let root = URL(fileURLWithPath: "/tmp")
+        let item = ScheduledMessage(fireDate: Date().addingTimeInterval(3600), threadID: "",
+            threadTitle: "New", model: "test-model", message: "hello", newTaskDirectory: root.path)
+        var savedID: String?
+        var methods: [String] = []
+        let request: (String, [String: Any]) throws -> [String: Any] = { method, params in
+            methods.append(method)
+            switch method {
+            case "thread/start":
+                XCTAssertEqual(params["ephemeral"] as? Bool, false)
+                XCTAssertEqual(params["threadSource"] as? String, "user")
+                return ["thread": ["id": id, "source": "vscode"]]
+            case "thread/list":
+                XCTAssertNil(params["sourceKinds"])
+                return ["data": [["id": id]]]
+            default: XCTFail(method); return [:]
+            }
+        }
+        XCTAssertEqual(try ScheduledMessageRunner.createVisibleChat(item, directory: root,
+            request: request, onCreated: { savedID = $0 }), id)
+        try ScheduledMessageRunner.verifyVisibleChat(id, directory: root, request: request)
+        XCTAssertEqual(methods, ["thread/start", "thread/list"])
+        XCTAssertThrowsError(try ScheduledMessageRunner.verifyVisibleChat(id, directory: root,
+            request: { _, _ in ["data": []] })) {
+            XCTAssertEqual(($0 as? ScheduledMessageDeliveryError)?.code, "desktop_visibility_unverified")
+        }
+    }
+
+    func testExecSourceIsRejectedWithoutLosingCreatedID() throws {
+        let id = UUID().uuidString.lowercased()
+        let root = URL(fileURLWithPath: "/tmp")
+        let item = ScheduledMessage(fireDate: Date().addingTimeInterval(3600), threadID: "",
+            threadTitle: "New", model: "test-model", message: "hello", newTaskDirectory: root.path)
+        var savedID: String?
+        XCTAssertThrowsError(try ScheduledMessageRunner.createVisibleChat(item, directory: root,
+            request: { method, _ in
+                XCTAssertEqual(method, "thread/start")
+                return ["thread": ["id": id, "source": "exec"]]
+            }, onCreated: { savedID = $0 })) {
+            XCTAssertEqual(($0 as? ScheduledMessageDeliveryError)?.code, "desktop_visibility_unverified")
+        }
+        XCTAssertEqual(savedID, id)
     }
 
     func testDefaultWorkspaceUsesDesktopLayoutAndAvoidsExistingChats() throws {
