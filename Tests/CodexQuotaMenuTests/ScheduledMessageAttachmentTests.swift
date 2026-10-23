@@ -96,6 +96,7 @@ final class ScheduledMessageAttachmentTests: XCTestCase {
         try recordStore.write(item)
         let scheduler = ScheduledMessageScheduler(store: recordStore, agentsDirectory: root, controller: AttachmentLaunchctl())
         var runner = ScheduledMessageRunner(store: recordStore, scheduler: scheduler)
+        runner.telegramEnabled = { false }
         runner.now = { item.fireDate }
         runner.resolveThread = { _ in XCTFail("Must validate before contacting Codex"); return .init(directory: root, effort: nil) }
         runner.send = { _, _, _ in XCTFail("Must never send invalid attachments"); return true }

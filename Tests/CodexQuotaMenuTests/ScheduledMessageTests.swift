@@ -41,6 +41,7 @@ final class ScheduledMessageTests: XCTestCase {
         try store.write(message)
         let scheduler = ScheduledMessageScheduler(store: store, agentsDirectory: root, controller: RecordingMessageLaunchctl())
         var runner = ScheduledMessageRunner(store: store, scheduler: scheduler)
+        runner.telegramEnabled = { false }
         runner.now = { message.fireDate }
         runner.resolveThread = { _ in .init(directory: root, effort: "low") }
         runner.resolveEffort = { model, requested, inherited in
@@ -302,6 +303,7 @@ final class ScheduledMessageTests: XCTestCase {
         let entry = item()
         let scheduler = ScheduledMessageScheduler(store: store, agentsDirectory: root, controller: RecordingMessageLaunchctl())
         var runner = ScheduledMessageRunner(store: store, scheduler: scheduler)
+        runner.telegramEnabled = { false }
         runner.now = { entry.fireDate }
         runner.resolveThread = { _ in throw ScheduledMessageError.missingTask }
         runner.send = { _, _, _ in XCTFail("must not send"); return false }
@@ -324,6 +326,7 @@ final class ScheduledMessageTests: XCTestCase {
                                                    executable: URL(fileURLWithPath: "/tmp/CodexQuotaMenu"),
                                                    controller: RecordingMessageLaunchctl())
         var runner = ScheduledMessageRunner(store: store, scheduler: scheduler)
+        runner.telegramEnabled = { false }
         runner.now = { entry.fireDate }
         runner.resolveThread = { XCTAssertEqual($0, entry.threadID); return .init(directory: root, effort: "medium") }
         runner.resolveEffort = { _, _, _ in "medium" }
@@ -350,6 +353,7 @@ final class ScheduledMessageTests: XCTestCase {
         try store.write(entry)
         let scheduler = ScheduledMessageScheduler(store: store, agentsDirectory: root, controller: RecordingMessageLaunchctl())
         var runner = ScheduledMessageRunner(store: store, scheduler: scheduler)
+        runner.telegramEnabled = { false }
         runner.now = { entry.fireDate.addingTimeInterval(-1) }
         runner.send = { _, _, _ in XCTFail("should not send early"); return false }
         XCTAssertEqual(runner.run(id: entry.id), 0)
@@ -374,10 +378,12 @@ final class ScheduledMessageTests: XCTestCase {
         try store.write(entry)
         let scheduler = ScheduledMessageScheduler(store: store, agentsDirectory: root, controller: RecordingMessageLaunchctl())
         var runner = ScheduledMessageRunner(store: store, scheduler: scheduler)
+        runner.telegramEnabled = { false }
         runner.now = { entry.fireDate }
         runner.resolveThread = { _ in .init(directory: root, effort: nil) }
         runner.resolveEffort = { _, _, _ in "medium" }
         var other = ScheduledMessageRunner(store: store, scheduler: scheduler)
+        other.telegramEnabled = { false }
         other.now = { entry.fireDate }
         other.send = { _, _, _ in XCTFail("duplicate delivery"); return false }
         runner.send = { _, _, _ in
@@ -425,6 +431,7 @@ final class ScheduledMessageTests: XCTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: fake.path)
         let scheduler = ScheduledMessageScheduler(store: store, agentsDirectory: root, controller: RecordingMessageLaunchctl())
         var runner = ScheduledMessageRunner(store: store, scheduler: scheduler)
+        runner.telegramEnabled = { false }
         runner.now = { entry.fireDate }
         runner.resolveThread = { _ in .init(directory: root, effort: "medium") }
         runner.resolveEffort = { _, _, _ in "medium" }

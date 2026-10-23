@@ -34,6 +34,11 @@ struct ScheduledMessageRunner {
     let store: ScheduledMessageStore
     let scheduler: ScheduledMessageScheduler
     var now: () -> Date = Date.init
+    var telegramEnabled: () -> Bool = { ScheduledTelegramPreferences().load().enabled }
+    var notifyTelegram: (ScheduledMessage) throws -> Void = { item in
+        try ScheduledTelegramClient().send(item, settings: ScheduledTelegramPreferences().load(),
+            token: ScheduledTelegramKeychain().load())
+    }
     var sidebarRegistration: (String) -> Bool = { ScheduledMessageSidebar.isRegistered($0) }
     var resolveThread: (String) throws -> ScheduledMessageTarget = { id in
         try resolveTarget(id: id, readDesktop: { id in
@@ -238,6 +243,19 @@ struct ScheduledMessageRunner {
                 ?? (error is ScheduledMessageError ? "target_unavailable" : "delivery_failed")
         }
         guard (try? store.write(item)) != nil else { return 2 }
+        // Persist business completion before attempting the separate notification.
+        // A restart never re-enters this path for a sent record, even if notification
+        // acceptance was ambiguous or the process stopped before its final write.
+        if item.isNewTask && item.state == .sent && item.result == "turn_completed_sidebar_unregistered" && telegramEnabled() {
+            item.telegramNotification = .sending
+            if (try? store.write(item)) != nil {
+                do {
+                    try notifyTelegram(item)
+                    item.telegramNotification = .sent
+                } catch { item.telegramNotification = .failed }
+                try? store.write(item)
+            }
+        }
         scheduler.retire(id)
         return item.state == .sent ? 0 : 1
     }

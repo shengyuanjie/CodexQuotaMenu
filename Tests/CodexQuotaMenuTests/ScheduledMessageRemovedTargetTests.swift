@@ -21,6 +21,7 @@ final class ScheduledMessageRemovedTargetTests: XCTestCase {
             try store.write(legacy)
             XCTAssertEqual(try store.all().first(where: { $0.id == legacy.id })?.threadID, threadID.lowercased())
             var runner = ScheduledMessageRunner(store: store, scheduler: scheduler)
+            runner.telegramEnabled = { false }
             runner.now = { legacy.fireDate }
             runner.resolveThread = { _ in XCTFail("Removed targets must not resolve a chat"); throw ScheduledMessageError.missingTask }
             runner.send = { _, _, _ in XCTFail("Removed targets must never send"); return true }

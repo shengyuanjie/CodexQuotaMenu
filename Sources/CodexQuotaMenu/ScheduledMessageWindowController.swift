@@ -33,6 +33,8 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
     private let removeButton = NSButton()
     private let openTaskButton = NSButton()
     private let refreshButton = NSButton()
+    private let telegramButton = NSButton()
+    private var telegramWindow: ScheduledTelegramWindowController?
     private let heading = NSTextField(labelWithString: "")
     private let taskLabel = NSTextField(labelWithString: "")
     private let modelLabel = NSTextField(labelWithString: "")
@@ -93,6 +95,7 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         removeButton.title = t.modelText("取消所选", "Remove selected")
         openTaskButton.title = t.modelText("打开任务", "Open chat")
         refreshButton.title = t.modelText("刷新", "Refresh")
+        telegramButton.title = t.modelText("Telegram 通知…", "Telegram…")
         updateTargetControls()
     }
 
@@ -172,7 +175,8 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         attachmentButtons.orientation = .horizontal; attachmentButtons.spacing = 10
         openTaskButton.target = self; openTaskButton.action = #selector(openSavedTask)
         openTaskButton.isEnabled = false
-        let buttons = NSStackView(views: [refreshButton, openTaskButton, NSView(), removeButton, addButton])
+        telegramButton.target = self; telegramButton.action = #selector(openTelegramSettings)
+        let buttons = NSStackView(views: [refreshButton, openTaskButton, telegramButton, NSView(), removeButton, addButton])
         buttons.orientation = .horizontal; buttons.spacing = 10
         let stack = NSStackView(views: [heading, taskLabel, taskPicker, taskField, directoryButton, modelLabel,
                                         modelPicker, effortLabel, effortPicker, dateLabel, timeRow, messageLabel, scroll,
@@ -476,6 +480,12 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
             .flatMap { ScheduledMessageSidebar.chatURL($0.threadID) } != nil
     }
 
+    @objc private func openTelegramSettings() {
+        if telegramWindow == nil { telegramWindow = ScheduledTelegramWindowController() }
+        telegramWindow?.showWindow(nil)
+        telegramWindow?.window?.makeKeyAndOrderFront(nil)
+    }
+
     @objc private func openSavedTask() {
         guard let id = savedPicker.selectedItem?.representedObject as? UUID,
               let item = savedRows.first(where: { $0.id == id }),
@@ -491,7 +501,8 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
               let item = savedRows.first(where: { $0.id == id }) else { return }
         let attachmentSummary = item.attachmentItems.map(\.name).joined(separator: ", ")
         let result = ScheduledMessageSidebar.needsRegistration(item) ? "turn_completed_sidebar_unregistered" : item.result
-        feedback.stringValue = "\(item.threadTitle)\n\(item.threadID) · \(item.model) / \(item.effort ?? "auto")\n\(attachmentSummary)\n\(result.map { ScheduledMessageDeliveryError(code: $0).localizedDescription } ?? item.state.rawValue)"
+        let notification = item.telegramNotification.map { "\n" + $0.title } ?? ""
+        feedback.stringValue = "\(item.threadTitle)\n\(item.threadID) · \(item.model) / \(item.effort ?? "auto")\n\(attachmentSummary)\n\(result.map { ScheduledMessageDeliveryError(code: $0).localizedDescription } ?? item.state.rawValue)\(notification)"
     }
 
     @objc private func remove() {
@@ -525,7 +536,7 @@ private final class ScheduledMessageTextView: NSTextView {
 }
 
 // NSTextField edits through a shared field editor, which also needs Edit-menu shortcuts.
-private final class ScheduledMessageWindow: NSWindow {
+final class ScheduledMessageWindow: NSWindow {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if let editor = firstResponder as? NSTextView, editor.isFieldEditor,
            editor.handleEditingShortcut(event) { return true }
