@@ -3,8 +3,11 @@ import Darwin
 
 struct ScheduledMessageDeliveryError: LocalizedError {
     let code: String
+    // Set only for a CLI writer-lock rejection before any JSON execution output.
+    var retryableWriterConflict: Bool = false
     var errorDescription: String? {
         switch code {
+        case "thread_writer_conflict": return "目标对话存在写入冲突，未能核验发送完成。请检查目标任务后再重新安排。 / A writer conflict prevented verified completion. Check the chat before scheduling again."
         case "turn_completed_sidebar_unregistered": return "消息已发送并完成，但未登记到 Codex 普通聊天侧栏。请点“打开任务”查看，不要重发。 / Delivery completed, but the chat is not registered in the Codex Chats sidebar. Use Open chat; do not resend."
         case "desktop_visibility_unverified": return "对话可能已创建或消息已发送，但无法核验 Codex 任务列表可见性。请检查任务 ID，不要直接重发。 / The chat may exist or delivery may have completed, but desktop visibility could not be verified. Check the chat ID before resending."
         case "new_chat_creation_unverified": return "新对话创建未通过核验，消息未发送。请检查任务 ID。 / New chat creation could not be verified. The message was not sent. Check the chat ID."
@@ -91,13 +94,45 @@ struct ScheduledMessageRunner {
         return option.efforts.contains(option.defaultEffort) ? option.defaultEffort : fallback
     }
     var send: (ScheduledMessage, ScheduledMessageTarget, String) throws -> Bool = { item, target, effort in
-        let desktop = ScheduledMessageDesktopClient()
-        if try desktop.connect(), let owner = try desktop.owner(threadID: item.threadID) {
-            return try desktop.deliver(item, owner: owner, effort: effort, directory: target.directory)
+        try deliverExisting(readDesktop: { timeout in
+            let desktop = ScheduledMessageDesktopClient()
+            guard try desktop.connect(), let owner = try desktop.owner(threadID: item.threadID) else { return nil }
+            return try desktop.deliver(item, owner: owner, effort: effort, directory: target.directory, timeout: timeout)
+        }, sendCLI: { timeout in
+            try checkWorkingDirectory(target.directory)
+            return try runCodex(item, directory: target.directory, effort: effort, timeout: timeout)
+        })
+    }
+
+    // A missing desktop owner can be transient while Codex resumes a chat. Only an
+    // explicit pre-submission CLI lock rejection permits another delivery attempt.
+    // Desktop failures and ambiguous CLI outcomes always propagate without retry.
+    static func deliverExisting(timeout: TimeInterval = 3_600, recoveryWindow: TimeInterval = 60,
+                                now: () -> Date = Date.init,
+                                sleep: (TimeInterval) -> Void = Thread.sleep(forTimeInterval:),
+                                readDesktop: (TimeInterval) throws -> Bool?,
+                                sendCLI: (TimeInterval) throws -> Bool) throws -> Bool {
+        let deadline = now().addingTimeInterval(timeout)
+        var recoveryDeadline: Date?
+        var nextCLI = now()
+        while now() < deadline {
+            if let recoveryDeadline, now() >= recoveryDeadline { break }
+            if let completed = try readDesktop(max(0, deadline.timeIntervalSince(now()))) { return completed }
+            if now() >= deadline { break }
+            if let recoveryDeadline, now() >= recoveryDeadline { break }
+            if now() >= nextCLI {
+                do { return try sendCLI(deadline.timeIntervalSince(now())) }
+                catch let error as ScheduledMessageDeliveryError
+                    where error.code == "thread_writer_conflict" && error.retryableWriterConflict {
+                    if recoveryDeadline == nil { recoveryDeadline = min(deadline, now().addingTimeInterval(recoveryWindow)) }
+                    nextCLI = now().addingTimeInterval(15)
+                }
+            }
+            let end = min(deadline, recoveryDeadline ?? deadline)
+            let delay = min(2, end.timeIntervalSince(now()))
+            if delay > 0 { sleep(delay) }
         }
-        // Ownership can change after preflight, so recheck permissions before CLI fallback.
-        try checkWorkingDirectory(target.directory)
-        return try runCodex(item, directory: target.directory, effort: effort)
+        throw ScheduledMessageDeliveryError(code: "thread_writer_conflict")
     }
 
     var sendNew: (ScheduledMessage, ScheduledMessageTarget, String, (String) throws -> Void) throws -> Bool = { item, target, effort, created in
@@ -262,7 +297,13 @@ struct ScheduledMessageRunner {
         }
         guard process.terminationStatus == 0 else {
             let raw = (try? String(contentsOf: errorOutput)) ?? ""
-            throw ScheduledMessageDeliveryError(code: classifyFailure(raw, exitCode: process.terminationStatus))
+            let code = classifyFailure(raw, exitCode: process.terminationStatus)
+            // Never retry if the process emitted any execution events (or unreadable
+            // output), even when stderr also mentions a writer conflict.
+            let events = try? Data(contentsOf: output)
+            throw ScheduledMessageDeliveryError(code: code,
+                retryableWriterConflict: code == "thread_writer_conflict"
+                    && raw.lowercased().contains("already has an active writer") && events?.isEmpty == true)
         }
         let data = try Data(contentsOf: output)
         guard data.count <= 20_000_000 else { throw ScheduledMessageDeliveryError(code: "cli_output_limit") }
