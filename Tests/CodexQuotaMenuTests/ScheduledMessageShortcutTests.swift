@@ -40,6 +40,28 @@ final class ScheduledMessageShortcutTests: XCTestCase {
         XCTAssertTrue(try key("a", code: 0))
         XCTAssertEqual(delegate.editor.selectedRange(), NSRange(location: 0, length: link.utf16.count))
     }
+    func testTelegramSettingsSupportsCommandPaste() throws {
+        _ = NSApplication.shared
+        let controller = ScheduledTelegramWindowController()
+        let window = try XCTUnwrap(controller.window)
+        let clipboard = NSPasteboard.withUniqueName()
+        defer { window.close(); clipboard.releaseGlobally() }
+        let delegate = ShortcutWindowDelegate(clipboard: clipboard)
+        window.delegate = delegate
+        func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap { descendants($0) } }
+        let fields = descendants(try XCTUnwrap(window.contentView)).compactMap { $0 as? NSTextField }
+        let field = try XCTUnwrap(fields.first { $0.accessibilityLabel() == "Telegram Chat ID" })
+        window.makeKeyAndOrderFront(nil)
+        XCTAssertTrue(window.makeFirstResponder(field))
+        field.selectText(nil)
+        clipboard.setString("123456", forType: .string)
+        let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
+            timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: "v",
+            charactersIgnoringModifiers: "v", isARepeat: false, keyCode: 9))
+        XCTAssertTrue(window.performKeyEquivalent(with: event))
+        XCTAssertEqual(field.stringValue, "123456")
+    }
+
 }
 
 @MainActor

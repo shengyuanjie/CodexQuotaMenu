@@ -38,6 +38,7 @@ struct ScheduledMessage: Codable, Identifiable {
     var attachments: [ScheduledMessageAttachment]?
     var state: ScheduledMessageState
     var result: String?
+    var telegramNotification: ScheduledTelegramNotification?
 
     init(id: UUID = UUID(), fireDate: Date, threadID: String, threadTitle: String, model: String,
          message: String, effort: String? = nil, newTaskDirectory: String? = nil, usesDefaultNewTaskDirectory: Bool = false, attachments: [ScheduledMessageAttachment]? = nil, state: ScheduledMessageState = .pending, result: String? = nil) {

@@ -25,6 +25,7 @@ final class ScheduledMessageSidebarTests: XCTestCase {
         try store.write(item)
         let scheduler = ScheduledMessageScheduler(store: store, agentsDirectory: root, controller: SidebarLaunchctl())
         var runner = ScheduledMessageRunner(store: store, scheduler: scheduler)
+        runner.telegramEnabled = { false }
         runner.now = { item.fireDate }
         runner.resolveEffort = { _, _, _ in "low" }
         runner.sidebarRegistration = { _ in false }

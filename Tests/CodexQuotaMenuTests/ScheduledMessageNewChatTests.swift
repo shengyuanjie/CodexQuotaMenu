@@ -14,6 +14,7 @@ final class ScheduledMessageNewChatTests: XCTestCase {
         XCTAssertTrue(try store.read(item.id).isNewTask)
         let scheduler = ScheduledMessageScheduler(store: store, agentsDirectory: root, controller: NewChatLaunchctl())
         var runner = ScheduledMessageRunner(store: store, scheduler: scheduler)
+        runner.telegramEnabled = { false }
         runner.now = { item.fireDate }
         runner.resolveThread = { _ in XCTFail("A new chat has no existing target"); throw ScheduledMessageError.missingTask }
         runner.resolveEffort = { _, requested, _ in try XCTUnwrap(requested) }

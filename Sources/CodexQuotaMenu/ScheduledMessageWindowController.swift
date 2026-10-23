@@ -2,8 +2,8 @@ import AppKit
 
 @MainActor
 final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDelegate {
-    private let store = ScheduledMessageStore()
-    private let scheduler = ScheduledMessageScheduler()
+    private let store: ScheduledMessageStore
+    private let scheduler: ScheduledMessageScheduler
     private let textProvider: () -> AppText
     private var loading = false
     private var scheduling = false
@@ -33,6 +33,8 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
     private let removeButton = NSButton()
     private let openTaskButton = NSButton()
     private let refreshButton = NSButton()
+    private let telegramButton = NSButton()
+    private var telegramWindow: ScheduledTelegramWindowController?
     private let heading = NSTextField(labelWithString: "")
     private let taskLabel = NSTextField(labelWithString: "")
     private let modelLabel = NSTextField(labelWithString: "")
@@ -41,7 +43,10 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
     private let messageLabel = NSTextField(labelWithString: "")
     private let savedLabel = NSTextField(labelWithString: "")
 
-    init(textProvider: @escaping () -> AppText) {
+    init(textProvider: @escaping () -> AppText, store: ScheduledMessageStore = .init(),
+         scheduler: ScheduledMessageScheduler? = nil) {
+        self.store = store
+        self.scheduler = scheduler ?? ScheduledMessageScheduler(store: store)
         self.textProvider = textProvider
         let window = ScheduledMessageWindow(contentRect: NSRect(x: 0, y: 0, width: 650, height: 750),
                               styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
@@ -93,6 +98,7 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         removeButton.title = t.modelText("取消所选", "Remove selected")
         openTaskButton.title = t.modelText("打开任务", "Open chat")
         refreshButton.title = t.modelText("刷新", "Refresh")
+        telegramButton.title = t.modelText("Telegram 通知…", "Telegram…")
         updateTargetControls()
     }
 
@@ -108,6 +114,8 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         taskField.setAccessibilityLabel("Target Codex chat ID")
         taskField.delegate = self
         savedPicker.target = self; savedPicker.action = #selector(showSavedDetails)
+        savedPicker.setAccessibilityLabel("Scheduled message records")
+        feedback.setAccessibilityLabel("Scheduled message feedback")
         modelPicker.addItem(withTitle: "…")
         modelPicker.target = self; modelPicker.action = #selector(modelChanged)
         effortPicker.setAccessibilityLabel("Scheduled message reasoning effort")
@@ -172,7 +180,8 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         attachmentButtons.orientation = .horizontal; attachmentButtons.spacing = 10
         openTaskButton.target = self; openTaskButton.action = #selector(openSavedTask)
         openTaskButton.isEnabled = false
-        let buttons = NSStackView(views: [refreshButton, openTaskButton, NSView(), removeButton, addButton])
+        telegramButton.target = self; telegramButton.action = #selector(openTelegramSettings)
+        let buttons = NSStackView(views: [refreshButton, openTaskButton, telegramButton, NSView(), removeButton, addButton])
         buttons.orientation = .horizontal; buttons.spacing = 10
         let stack = NSStackView(views: [heading, taskLabel, taskPicker, taskField, directoryButton, modelLabel,
                                         modelPicker, effortLabel, effortPicker, dateLabel, timeRow, messageLabel, scroll,
@@ -387,7 +396,8 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         if model.efforts.contains(selected) { effortPicker.selectItem(withTitle: selected) }
     }
 
-    private func refreshSaved() {
+    func refreshSaved(preferredID: UUID? = nil) {
+        let selectedID = preferredID ?? savedPicker.selectedItem?.representedObject as? UUID
         do {
             savedRows = try store.all()
             savedPicker.removeAllItems()
@@ -399,6 +409,9 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
                 row.representedObject = item.id
                 row.toolTip = "\(item.threadTitle)\n\(item.threadID)\n\(item.model) / \(item.effort ?? "auto")\n\(item.result ?? "pending")"
                 savedPicker.menu?.addItem(row)
+            }
+            if let selectedID, let index = savedRows.firstIndex(where: { $0.id == selectedID }) {
+                savedPicker.selectItem(at: index)
             }
             removeButton.isEnabled = !savedRows.isEmpty
             updateOpenTaskButton()
@@ -422,6 +435,7 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         }
         let title = isNew ? textProvider().modelText("新任务对话", "New chat") : taskRows.first(where: { $0.id == id })?.title ?? id
         let selectedAttachments = attachmentURLs
+        let store = self.store, scheduler = self.scheduler
         let enteredMessage = messageView.string
         let body = enteredMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !selectedAttachments.isEmpty
             ? textProvider().modelText("请查看附件。", "Please review the attachments.") : enteredMessage
@@ -435,22 +449,36 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         addButton.isEnabled = false
         feedback.stringValue = textProvider().modelText("正在核对目标任务…", "Checking target chat…")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let result = Result { () throws -> Void in
-                if isNew {
-                    var existing = directory
-                    while usesDefaultDirectory && !FileManager.default.fileExists(atPath: existing.path) && existing.path != "/" {
-                        existing.deleteLastPathComponent()
+            let result = Result {
+                try ScheduledTelegramPreparation().saveThenPrepare(isNewTask: isNew, save: {
+                    if isNew {
+                        var existing = directory
+                        while usesDefaultDirectory && !FileManager.default.fileExists(atPath: existing.path) && existing.path != "/" {
+                            existing.deleteLastPathComponent()
+                        }
+                        try ScheduledMessageRunner.checkWorkingDirectory(existing)
                     }
-                    try ScheduledMessageRunner.checkWorkingDirectory(existing)
-                }
-                else { _ = try ScheduledMessageRunner().resolveThread(id) }
-                let attachmentStore = ScheduledMessageAttachmentStore(root: ScheduledMessageStore().root)
-                var prepared = item
-                var scheduled = false
-                defer { if !scheduled { try? attachmentStore.remove(item.id) } }
-                prepared.attachments = try attachmentStore.stage(selectedAttachments, id: item.id)
-                try ScheduledMessageScheduler().schedule(prepared)
-                scheduled = true
+                    else { _ = try ScheduledMessageRunner().resolveThread(id) }
+                    let attachmentStore = ScheduledMessageAttachmentStore(root: store.root)
+                    var prepared = item
+                    var scheduled = false
+                    defer { if !scheduled { try? attachmentStore.remove(item.id) } }
+                    prepared.attachments = try attachmentStore.stage(selectedAttachments, id: item.id)
+                    try scheduler.schedule(prepared)
+                    scheduled = true
+                }, onSaved: {
+                    // Show the saved plan before any system authorization prompt.
+                    DispatchQueue.main.sync { [weak self] in
+                        guard let self else { return }
+                        self.feedback.stringValue = isNew && ScheduledTelegramPreferences().load().enabled
+                            ? self.textProvider().modelText("已安排一次发送。正在准备 Telegram 通知授权；取消授权也不影响计划。", "Delivery scheduled. Preparing Telegram authorization; cancellation will not affect the plan.")
+                            : self.textProvider().modelText("已安排一次发送。", "One-time delivery scheduled.")
+                        if self.messageView.string == enteredMessage { self.messageView.string = "" }
+                        self.attachmentURLs = []
+                        self.updateAttachmentPicker()
+                        self.refreshSaved(preferredID: item.id)
+                    }
+                })
             }
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
@@ -458,12 +486,10 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
                 self.setAttachmentControlsEnabled(true)
                 self.addButton.isEnabled = !self.loading
                 switch result {
-                case .success:
-                    self.feedback.stringValue = self.textProvider().modelText("已安排一次发送。", "One-time delivery scheduled.")
-                    if self.messageView.string == enteredMessage { self.messageView.string = "" }
-                    self.attachmentURLs = []
-                    self.updateAttachmentPicker()
-                    self.refreshSaved()
+                case .success(let notificationReady):
+                    self.feedback.stringValue = notificationReady
+                        ? self.textProvider().modelText("已安排一次发送。", "One-time delivery scheduled.")
+                        : self.textProvider().modelText("已安排一次发送，任务会按时执行。Telegram 授权或后台读取未通过，通知可能无法发送；可稍后在 Telegram 设置中处理，无需重新安排任务。", "Delivery scheduled and will run on time. Telegram authorization or background access was not confirmed, so notification may fail. Fix it later in Telegram settings; do not schedule the task again.")
                 case .failure(let error): self.feedback.stringValue = error.localizedDescription
                 }
             }
@@ -474,6 +500,12 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         let id = savedPicker.selectedItem?.representedObject as? UUID
         openTaskButton.isEnabled = savedRows.first(where: { $0.id == id })
             .flatMap { ScheduledMessageSidebar.chatURL($0.threadID) } != nil
+    }
+
+    @objc private func openTelegramSettings() {
+        if telegramWindow == nil { telegramWindow = ScheduledTelegramWindowController(textProvider: textProvider) }
+        telegramWindow?.showWindow(nil)
+        telegramWindow?.window?.makeKeyAndOrderFront(nil)
     }
 
     @objc private func openSavedTask() {
@@ -491,7 +523,15 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
               let item = savedRows.first(where: { $0.id == id }) else { return }
         let attachmentSummary = item.attachmentItems.map(\.name).joined(separator: ", ")
         let result = ScheduledMessageSidebar.needsRegistration(item) ? "turn_completed_sidebar_unregistered" : item.result
-        feedback.stringValue = "\(item.threadTitle)\n\(item.threadID) · \(item.model) / \(item.effort ?? "auto")\n\(attachmentSummary)\n\(result.map { ScheduledMessageDeliveryError(code: $0).localizedDescription } ?? item.state.rawValue)"
+        let state: String
+        switch item.state {
+        case .pending: state = textProvider().modelText("已安排，等待发送", "Scheduled; waiting to send")
+        case .sending: state = textProvider().modelText("正在发送", "Sending")
+        case .sent: state = textProvider().modelText("已发送", "Sent")
+        case .failed: state = textProvider().modelText("发送失败", "Failed")
+        }
+        let notification = item.telegramNotification.map { "\n" + $0.title } ?? ""
+        feedback.stringValue = "\(item.threadTitle)\n\(item.threadID) · \(item.model) / \(item.effort ?? "auto")\n\(attachmentSummary)\n\(result.map { ScheduledMessageDeliveryError(code: $0).localizedDescription } ?? state)\(notification)"
     }
 
     @objc private func remove() {
@@ -499,8 +539,14 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
               let index = savedRows.firstIndex(where: { $0.id == id }) else { return }
         do {
             try scheduler.cancel(savedRows[index])
-            feedback.stringValue = textProvider().modelText("已移除。", "Removed.")
             refreshSaved()
+            if savedRows.isEmpty {
+                feedback.stringValue = textProvider().modelText("所选记录已移除，当前没有定时消息。", "Selected record removed. No scheduled messages remain.")
+            } else {
+                // The selected row now refers to a remaining record, not the deleted
+                // one. Its actual state must replace the previous deletion message.
+                showSavedDetails()
+            }
         } catch { feedback.stringValue = error.localizedDescription }
     }
 }
@@ -525,7 +571,7 @@ private final class ScheduledMessageTextView: NSTextView {
 }
 
 // NSTextField edits through a shared field editor, which also needs Edit-menu shortcuts.
-private final class ScheduledMessageWindow: NSWindow {
+final class ScheduledMessageWindow: NSWindow {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if let editor = firstResponder as? NSTextView, editor.isFieldEditor,
            editor.handleEditingShortcut(event) { return true }
