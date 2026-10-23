@@ -24,23 +24,28 @@ enum ScheduledMessageState: String, Codable {
 struct ScheduledMessage: Codable, Identifiable {
     let id: UUID
     let fireDate: Date
-    let threadID: String
+    var threadID: String
     let threadTitle: String
     let model: String
     let effort: String?
     let message: String
-    // Decode old preview records so they remain visible and removable, but never deliver them.
+    // Legacy previews remain disabled; only explicitly scheduled v2 targets may create chats.
     let targetKind: String?
     var isUnsupportedNewTask: Bool { targetKind == "newChat" }
+    var newTaskDirectory: String?
+    let usesDefaultNewTaskDirectory: Bool?
+    var isNewTask: Bool { targetKind == "newChatV2" }
     var attachments: [ScheduledMessageAttachment]?
     var state: ScheduledMessageState
     var result: String?
 
     init(id: UUID = UUID(), fireDate: Date, threadID: String, threadTitle: String, model: String,
-         message: String, effort: String? = nil, attachments: [ScheduledMessageAttachment]? = nil, state: ScheduledMessageState = .pending, result: String? = nil) {
+         message: String, effort: String? = nil, newTaskDirectory: String? = nil, usesDefaultNewTaskDirectory: Bool = false, attachments: [ScheduledMessageAttachment]? = nil, state: ScheduledMessageState = .pending, result: String? = nil) {
         self.id = id
         self.attachments = attachments
-        self.targetKind = nil
+        self.targetKind = newTaskDirectory == nil ? nil : "newChatV2"
+        self.newTaskDirectory = newTaskDirectory
+        self.usesDefaultNewTaskDirectory = usesDefaultNewTaskDirectory ? true : nil
         self.fireDate = Calendar.current.dateInterval(of: .minute, for: fireDate)?.start ?? fireDate
         self.threadID = UUID(uuidString: threadID)?.uuidString.lowercased() ?? threadID
         self.threadTitle = threadTitle
@@ -48,7 +53,7 @@ struct ScheduledMessage: Codable, Identifiable {
     }
 
     func validate(now: Date = Date()) throws {
-        guard !isUnsupportedNewTask, UUID(uuidString: threadID) != nil, (!message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachmentItems.isEmpty),
+        guard !isUnsupportedNewTask, (isNewTask ? (threadID.isEmpty && newTaskDirectory?.hasPrefix("/") == true) : UUID(uuidString: threadID) != nil), (!message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachmentItems.isEmpty),
               message.utf8.count <= 64_000,
               effort == nil || ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"].contains(effort!),
               model.range(of: "^[A-Za-z0-9][A-Za-z0-9._-]*$", options: .regularExpression) != nil else {
@@ -79,7 +84,7 @@ struct ScheduledMessageStore {
 
     func read(_ id: UUID) throws -> ScheduledMessage {
         let item = try JSONDecoder().decode(ScheduledMessage.self, from: Data(contentsOf: url(for: id)))
-        guard item.id == id, (UUID(uuidString: item.threadID) != nil || (item.isUnsupportedNewTask && item.threadID.isEmpty)) else { throw ScheduledMessageError.invalidStoredData }
+        guard item.id == id, (UUID(uuidString: item.threadID) != nil || ((item.isUnsupportedNewTask || item.isNewTask) && item.threadID.isEmpty)) else { throw ScheduledMessageError.invalidStoredData }
         return item
     }
 

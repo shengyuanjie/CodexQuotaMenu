@@ -96,6 +96,11 @@ struct ScheduledMessageRunner {
         return try runCodex(item, directory: target.directory, effort: effort)
     }
 
+    var sendNew: (ScheduledMessage, ScheduledMessageTarget, String, (String) throws -> Void) throws -> Bool = { item, target, effort, created in
+        try checkWorkingDirectory(target.directory)
+        return try runCodex(item, directory: target.directory, effort: effort, onThreadStarted: created)
+    }
+
     init(store: ScheduledMessageStore = .init(), scheduler: ScheduledMessageScheduler? = nil) {
         self.store = store
         self.scheduler = scheduler ?? ScheduledMessageScheduler(store: store)
@@ -125,9 +130,32 @@ struct ScheduledMessageRunner {
             guard !item.isUnsupportedNewTask else {
                 throw ScheduledMessageDeliveryError(code: "new_task_removed")
             }
-            let target = try resolveThread(item.threadID)
+            let target: ScheduledMessageTarget
+            if item.isNewTask {
+                guard item.threadID.isEmpty, let path = item.newTaskDirectory, path.hasPrefix("/") else {
+                    throw ScheduledMessageError.invalidStoredData
+                }
+                let root = URL(fileURLWithPath: path)
+                let directory = try item.usesDefaultNewTaskDirectory == true
+                    ? ScheduledMessageWorkspace.create(root: root, message: item.message, date: now()) : root
+                try Self.checkWorkingDirectory(directory)
+                item.newTaskDirectory = directory.path
+                try store.write(item)
+                target = ScheduledMessageTarget(directory: directory, effort: nil)
+            } else {
+                target = try resolveThread(item.threadID)
+            }
             let effort = try resolveEffort(item.model, item.effort, target.effort)
-            let completed = try send(item, target, effort)
+            let completed: Bool
+            if item.isNewTask {
+                completed = try sendNew(item, target, effort) { threadID in
+                    guard UUID(uuidString: threadID) != nil else { throw ScheduledMessageError.invalidStoredData }
+                    item.threadID = threadID.lowercased()
+                    try store.write(item)
+                }
+            } else {
+                completed = try send(item, target, effort)
+            }
             item.state = completed ? .sent : .failed
             item.result = completed ? "turn_completed" : "turn_unverified"
         } catch {
@@ -141,7 +169,8 @@ struct ScheduledMessageRunner {
     }
 
     static func runCodex(_ item: ScheduledMessage, directory workingDirectory: URL, effort: String,
-                         executable: URL? = nil, timeout: TimeInterval = 3_600) throws -> Bool {
+                         executable: URL? = nil, timeout: TimeInterval = 3_600,
+                         onThreadStarted: (String) throws -> Void = { _ in }) throws -> Bool {
         let cli = try executable ?? CodexExecutableLocator().findExecutable()
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CQMMessage-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false,
@@ -162,10 +191,12 @@ struct ScheduledMessageRunner {
         let process = Process()
         process.executableURL = cli
         process.currentDirectoryURL = workingDirectory
-        process.arguments = ["exec", "--cd", workingDirectory.path, "--skip-git-repo-check",
-                             "resume", "--all", "--json", "--model", item.model,
-                             "--config", "model_reasoning_effort=\"\(effort)\"",
-                             ] + item.attachmentItems.filter { $0.kind == .image }.flatMap { ["--image", $0.path] } + [item.threadID, "-"]
+        var arguments = ["exec", "--cd", workingDirectory.path, "--skip-git-repo-check"]
+        if !item.isNewTask { arguments += ["resume", "--all"] }
+        arguments += ["--json", "--model", item.model, "--config", "model_reasoning_effort=\"\(effort)\""]
+        arguments += item.attachmentItems.filter { $0.kind == .image }.flatMap { ["--image", $0.path] }
+        arguments += item.isNewTask ? ["-"] : [item.threadID, "-"]
+        process.arguments = arguments
         process.standardInput = input
         process.standardOutput = outputHandle
         let errorOutput = directory.appendingPathComponent("stderr.txt")
@@ -174,14 +205,37 @@ struct ScheduledMessageRunner {
         let errorHandle = try FileHandle(forWritingTo: errorOutput)
         defer { try? errorHandle.close() }
         process.standardError = errorHandle
+        let eventReader = try FileHandle(forReadingFrom: output)
+        defer { try? eventReader.close() }
+        var eventBuffer = Data()
+        var createdThreadID: String?
+        func captureCreatedThread() throws {
+            guard item.isNewTask else { return }
+            eventBuffer.append(try eventReader.read(upToCount: 20_000_001) ?? Data())
+            guard eventBuffer.count <= 20_000_000 else { throw ScheduledMessageDeliveryError(code: "cli_output_limit") }
+            while let newline = eventBuffer.firstIndex(of: 0x0A) {
+                let line = Data(eventBuffer[..<newline])
+                eventBuffer.removeSubrange(...newline)
+                guard let event = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
+                      event["type"] as? String == "thread.started" else { continue }
+                guard let id = event["thread_id"] as? String, UUID(uuidString: id) != nil,
+                      createdThreadID == nil || createdThreadID == id else {
+                    throw ScheduledMessageDeliveryError(code: "thread_id_mismatch")
+                }
+                if createdThreadID == nil { try onThreadStarted(id); createdThreadID = id }
+            }
+        }
         try process.run()
+        defer { if process.isRunning { process.terminate() } }
         let deadline = Date().addingTimeInterval(timeout)
         while process.isRunning && Date() < deadline {
             let size = (try? FileManager.default.attributesOfItem(atPath: output.path)[.size] as? NSNumber)?.intValue ?? 0
             let errorSize = (try? FileManager.default.attributesOfItem(atPath: errorOutput.path)[.size] as? NSNumber)?.intValue ?? 0
             if size > 20_000_000 || errorSize > 2_000_000 { break }
+            try captureCreatedThread()
             Thread.sleep(forTimeInterval: 0.5)
         }
+        try captureCreatedThread()
         if process.isRunning {
             process.terminate()
             let stopDeadline = Date().addingTimeInterval(3)
@@ -205,7 +259,9 @@ struct ScheduledMessageRunner {
                 throw ScheduledMessageDeliveryError(code: classifyFailure(raw, exitCode: 0))
             }
             if type == "thread.started" {
-                guard event["thread_id"] as? String == item.threadID else { throw ScheduledMessageDeliveryError(code: "thread_id_mismatch") }
+                guard let startedID = event["thread_id"] as? String, UUID(uuidString: startedID) != nil,
+                      item.isNewTask || startedID == item.threadID else { throw ScheduledMessageDeliveryError(code: "thread_id_mismatch") }
+                if item.isNewTask, createdThreadID != startedID { throw ScheduledMessageDeliveryError(code: "thread_id_mismatch") }
                 matchedThread = true
             }
             if type == "turn.completed" { completed = true }

@@ -12,6 +12,10 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
     private var savedRows: [ScheduledMessage] = []
 
     private let taskPicker = NSPopUpButton()
+    static let newTaskSelection = "newChatV2"
+    private let directoryButton = NSButton()
+    private var newTaskDirectory = ScheduledMessageWorkspace.defaultRoot()
+    private var usesDefaultNewTaskDirectory = true
     private let taskField = NSTextField()
     private let modelPicker = NSPopUpButton()
     private let effortPicker = NSPopUpButton()
@@ -38,7 +42,7 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
 
     init(textProvider: @escaping () -> AppText) {
         self.textProvider = textProvider
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 650, height: 750),
+        let window = ScheduledMessageWindow(contentRect: NSRect(x: 0, y: 0, width: 650, height: 750),
                               styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         super.init(window: window)
         window.minSize = NSSize(width: 600, height: 720)
@@ -79,10 +83,15 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         attachmentHint.stringValue = t.modelText("附件在安排时保存副本；最多20个，单个25 MB，共100 MB。", "Copies saved when scheduled; up to 20 files, 25 MB each, 100 MB total.")
         updateAttachmentPicker()
         savedLabel.stringValue = t.modelText("已安排的消息", "Scheduled messages")
+        directoryButton.title = t.modelText("工作目录…", "Working directory…")
+        if let item = taskPicker.itemArray.first(where: { $0.representedObject as? String == Self.newTaskSelection }) {
+            item.title = t.modelText("新任务对话", "New chat")
+        }
         taskField.placeholderString = t.modelText("任务 ID，也可从 codex://threads/ 链接粘贴", "Chat ID or codex://threads/ link")
         addButton.title = t.modelText("安排发送", "Schedule")
         removeButton.title = t.modelText("取消所选", "Remove selected")
         refreshButton.title = t.modelText("刷新", "Refresh")
+        updateTargetControls()
     }
 
     private func buildView() {
@@ -91,7 +100,9 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         feedback.textColor = .secondaryLabelColor
         feedback.maximumNumberOfLines = 0
         taskPicker.target = self; taskPicker.action = #selector(selectTask)
-        taskPicker.addItem(withTitle: "…")
+        Self.populateTaskMenu(taskPicker, tasks: [], placeholder: "…")
+        directoryButton.target = self; directoryButton.action = #selector(chooseDirectory)
+        directoryButton.isHidden = true
         taskField.setAccessibilityLabel("Target Codex chat ID")
         taskField.delegate = self
         savedPicker.target = self; savedPicker.action = #selector(showSavedDetails)
@@ -159,7 +170,7 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         attachmentButtons.orientation = .horizontal; attachmentButtons.spacing = 10
         let buttons = NSStackView(views: [refreshButton, NSView(), removeButton, addButton])
         buttons.orientation = .horizontal; buttons.spacing = 10
-        let stack = NSStackView(views: [heading, taskLabel, taskPicker, taskField, modelLabel,
+        let stack = NSStackView(views: [heading, taskLabel, taskPicker, taskField, directoryButton, modelLabel,
                                         modelPicker, effortLabel, effortPicker, dateLabel, timeRow, messageLabel, scroll,
                                         attachmentButtons, attachmentPicker, attachmentHint, savedLabel, savedPicker, feedback, buttons])
         stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 9
@@ -253,10 +264,34 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         updateAttachmentPicker()
     }
 
+    @objc private func chooseDirectory() {
+        guard let window else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false
+        panel.directoryURL = newTaskDirectory
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let self, let url = panel.url else { return }
+            self.newTaskDirectory = url
+            self.usesDefaultNewTaskDirectory = false
+            self.updateTargetControls()
+        }
+    }
+
+    private func updateTargetControls() {
+        let isNew = taskPicker.selectedItem?.representedObject as? String == Self.newTaskSelection
+        taskField.isHidden = isNew
+        directoryButton.isHidden = !isNew
+        directoryButton.title = textProvider().modelText("工作目录：", "Working directory: ") + newTaskDirectory.path
+        directoryButton.toolTip = usesDefaultNewTaskDirectory
+            ? textProvider().modelText("发送时按 Codex 默认规则创建日期和对话目录。", "Creates dated chat folders using the Codex default layout when sent.")
+            : newTaskDirectory.path
+    }
+
     @objc private func selectTask() {
         if let selected = taskPicker.selectedItem?.representedObject as? String {
-            taskField.stringValue = selected
+            taskField.stringValue = selected == Self.newTaskSelection ? "" : selected
         }
+        updateTargetControls()
     }
 
     func controlTextDidChange(_ notification: Notification) {
@@ -270,9 +305,12 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         return UUID(uuidString: raw)?.uuidString.lowercased() ?? raw
     }
 
-    static func populateTaskMenu(_ picker: NSPopUpButton, tasks: [(id: String, title: String)], placeholder: String) {
+    static func populateTaskMenu(_ picker: NSPopUpButton, tasks: [(id: String, title: String)], placeholder: String, newTaskTitle: String = "新任务对话") {
         picker.removeAllItems()
         picker.menu?.addItem(NSMenuItem(title: placeholder, action: nil, keyEquivalent: ""))
+        let newTask = NSMenuItem(title: newTaskTitle, action: nil, keyEquivalent: "")
+        newTask.representedObject = newTaskSelection
+        picker.menu?.addItem(newTask)
         var seen = Set<String>()
         for task in tasks where seen.insert(task.id).inserted {
             let item = NSMenuItem(title: "\(task.title.prefix(70)) · \(task.id.suffix(8))", action: nil, keyEquivalent: "")
@@ -285,6 +323,7 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
     private func selectTaskMenu(id: String) {
         let index = taskPicker.itemArray.firstIndex { ($0.representedObject as? String) == id } ?? 0
         taskPicker.selectItem(at: index)
+        updateTargetControls()
     }
 
     @objc private func refresh() { refreshSaved(); refreshOptions() }
@@ -294,6 +333,7 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         let selectedModel = modelRows.indices.contains(modelPicker.indexOfSelectedItem)
             ? modelRows[modelPicker.indexOfSelectedItem].id : nil
         let selectedEffort = effortPicker.titleOfSelectedItem
+        let targetSelection = taskPicker.selectedItem?.representedObject as? String
         loading = true
         addButton.isEnabled = false
         feedback.stringValue = textProvider().modelText("正在读取任务与模型…", "Loading chats and models…")
@@ -316,8 +356,9 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
                 case .success(let (tasks, models)):
                     self.taskRows = tasks; self.modelRows = models
                     Self.populateTaskMenu(self.taskPicker, tasks: tasks,
-                        placeholder: self.textProvider().modelText("选择目标任务…", "Choose a target chat…"))
-                    self.selectTaskMenu(id: Self.canonicalTaskID(self.taskField.stringValue))
+                        placeholder: self.textProvider().modelText("选择目标任务…", "Choose a target chat…"),
+                        newTaskTitle: self.textProvider().modelText("新任务对话", "New chat"))
+                    self.selectTaskMenu(id: targetSelection == Self.newTaskSelection ? Self.newTaskSelection : Self.canonicalTaskID(self.taskField.stringValue))
                     self.modelPicker.removeAllItems()
                     models.forEach { self.modelPicker.addItem(withTitle: $0.name == $0.id ? $0.id : "\($0.name) — \($0.id)") }
                     if let selectedModel, let index = models.firstIndex(where: { $0.id == selectedModel }) {
@@ -359,8 +400,11 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
 
     @objc private func schedule() {
         guard !loading, !scheduling else { return }
-        let id = Self.canonicalTaskID(taskField.stringValue)
-        if let selectedID = taskPicker.selectedItem?.representedObject as? String, selectedID != id {
+        let isNew = taskPicker.selectedItem?.representedObject as? String == Self.newTaskSelection
+        let directory = newTaskDirectory
+        let usesDefaultDirectory = usesDefaultNewTaskDirectory
+        let id = isNew ? "" : Self.canonicalTaskID(taskField.stringValue)
+        if !isNew, let selectedID = taskPicker.selectedItem?.representedObject as? String, selectedID != id {
             feedback.stringValue = textProvider().modelText("目标任务与任务 ID 不一致，请重新选择。", "Selected chat and chat ID do not match. Select the chat again.")
             return
         }
@@ -369,14 +413,15 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         guard let effort = effortPicker.titleOfSelectedItem, modelRows[modelIndex].efforts.contains(effort) else {
             feedback.stringValue = ScheduledMessageError.invalidInput.localizedDescription; return
         }
-        let title = taskRows.first(where: { $0.id == id })?.title ?? id
+        let title = isNew ? textProvider().modelText("新任务对话", "New chat") : taskRows.first(where: { $0.id == id })?.title ?? id
         let selectedAttachments = attachmentURLs
         let enteredMessage = messageView.string
         let body = enteredMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !selectedAttachments.isEmpty
             ? textProvider().modelText("请查看附件。", "Please review the attachments.") : enteredMessage
         guard let fireDate = enteredSendTime() else { return }
         let item = ScheduledMessage(fireDate: fireDate, threadID: id, threadTitle: title,
-                                    model: modelRows[modelIndex].id, message: body, effort: effort)
+                                    model: modelRows[modelIndex].id, message: body, effort: effort, newTaskDirectory: isNew ? directory.path : nil,
+                                    usesDefaultNewTaskDirectory: isNew && usesDefaultDirectory)
         do { try item.validate() } catch { feedback.stringValue = error.localizedDescription; return }
         scheduling = true
         setAttachmentControlsEnabled(false)
@@ -384,7 +429,14 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         feedback.stringValue = textProvider().modelText("正在核对目标任务…", "Checking target chat…")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = Result { () throws -> Void in
-                _ = try ScheduledMessageRunner().resolveThread(id)
+                if isNew {
+                    var existing = directory
+                    while usesDefaultDirectory && !FileManager.default.fileExists(atPath: existing.path) && existing.path != "/" {
+                        existing.deleteLastPathComponent()
+                    }
+                    try ScheduledMessageRunner.checkWorkingDirectory(existing)
+                }
+                else { _ = try ScheduledMessageRunner().resolveThread(id) }
                 let attachmentStore = ScheduledMessageAttachmentStore(root: ScheduledMessageStore().root)
                 var prepared = item
                 var scheduled = false
@@ -444,10 +496,25 @@ private final class ScheduledMessageTextView: NSTextView {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        handleEditingShortcut(event) || super.performKeyEquivalent(with: event)
+    }
+}
+
+// NSTextField edits through a shared field editor, which also needs Edit-menu shortcuts.
+private final class ScheduledMessageWindow: NSWindow {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if let editor = firstResponder as? NSTextView, editor.isFieldEditor,
+           editor.handleEditingShortcut(event) { return true }
+        return super.performKeyEquivalent(with: event)
+    }
+}
+
+private extension NSTextView {
+    func handleEditingShortcut(_ event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         guard modifiers == .command || modifiers == [.command, .shift],
               let key = event.charactersIgnoringModifiers?.lowercased() else {
-            return super.performKeyEquivalent(with: event)
+            return false
         }
         if modifiers == .command {
             switch key {
@@ -461,7 +528,7 @@ private final class ScheduledMessageTextView: NSTextView {
         } else if key == "z", undoManager?.canRedo == true {
             undoManager?.redo(); return true
         }
-        return super.performKeyEquivalent(with: event)
+        return false
     }
 }
 
