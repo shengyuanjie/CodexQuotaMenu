@@ -43,3 +43,11 @@ The app makes public GET requests only to `https://willcodexreset.com/api/reset-
 - Every app archive is published with a matching SHA-256 file.
 - Release auditing rejects binaries containing build-machine user paths or common credential patterns.
 - Automated tests use fixed fixtures and do not access a real Keychain or third-party forecast endpoint.
+
+## Telegram notification privacy
+
+- Notifications are off by default. Bot tokens stay in the local macOS Keychain. Chat ID, toggle and proxy remain local preferences and are not packaged.
+- Only the configured recipient receives the chat ID, model/effort and open link. Titles, prompts, attachments, output and local paths are excluded. Telegram necessarily receives bot authentication and routing information for delivery.
+- Requests use a fixed HTTPS Bot API endpoint, reject redirects and replace raw network/API errors with fixed messages. The app has no token log or export.
+- Plans are saved before optional notification authorization. Cancellation never rolls back the plan. Background credential failures do not prompt or resend tasks/notifications.
+- Before release, inspect outgoing history, the complete ZIP envelope and Telegram token syntax. Local configuration, Keychain data, investigations and output must not enter public source or assets.
