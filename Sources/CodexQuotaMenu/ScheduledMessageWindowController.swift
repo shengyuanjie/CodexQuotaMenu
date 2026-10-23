@@ -481,7 +481,7 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
     }
 
     @objc private func openTelegramSettings() {
-        if telegramWindow == nil { telegramWindow = ScheduledTelegramWindowController() }
+        if telegramWindow == nil { telegramWindow = ScheduledTelegramWindowController(textProvider: textProvider) }
         telegramWindow?.showWindow(nil)
         telegramWindow?.window?.makeKeyAndOrderFront(nil)
     }
