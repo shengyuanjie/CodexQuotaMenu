@@ -6,6 +6,7 @@ struct ScheduledTelegramError: LocalizedError {
     let code: String
     var errorDescription: String? {
         switch code {
+        case "background_credentials": return "后台 Telegram 凭据检查未通过，尚未安排发送。请在 Telegram 设置中重新保存 Token，并在系统授权窗口中允许此应用后再试。"
         case "credentials": return "无法读取 Telegram Token，请在通知设置中重新保存或完成钥匙串授权。"
         case "configuration": return "请填写有效的 Bot Token、数字 Chat ID 和代理地址。"
         case "binding": return "未找到唯一的近期绑定消息。请在新机器人的私聊中发送当前绑定码，然后再次读取。"
@@ -58,12 +59,17 @@ struct ScheduledTelegramKeychain {
             let context = LAContext(); context.interactionNotAllowed = true
             q[kSecUseAuthenticationContext as String] = context
         }
-        var value: CFTypeRef?
-        guard SecItemCopyMatching(q as CFDictionary, &value) == errSecSuccess,
-              let data = value as? Data, let token = String(data: data, encoding: .utf8),
-              ScheduledTelegramClient.validToken(token) else { throw ScheduledTelegramError(code: "credentials") }
-        return token
+        let read = { () throws -> String in
+            var value: CFTypeRef?
+            guard SecItemCopyMatching(q as CFDictionary, &value) == errSecSuccess,
+                  let data = value as? Data, let token = String(data: data, encoding: .utf8),
+                  ScheduledTelegramClient.validToken(token) else { throw ScheduledTelegramError(code: "credentials") }
+            return token
+        }
+        if foreground { return try read() }
+        return try ScheduledTelegramBackgroundAccess.read(read)
     }
+
     func save(_ token: String) throws {
         guard ScheduledTelegramClient.validToken(token) else { throw ScheduledTelegramError(code: "configuration") }
         let data = Data(token.utf8)

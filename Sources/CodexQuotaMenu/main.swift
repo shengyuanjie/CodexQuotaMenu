@@ -39,6 +39,12 @@ if CommandLine.arguments.contains("--check-default-model") {
 if CommandLine.arguments.contains("--activate") {
     exit(ActivationRunner.run(arguments: Array(CommandLine.arguments.dropFirst())))
 }
+// Read-only check in the same signed executable as the future scheduled process.
+// No token output, notification, model request or keychain permission changes.
+if Array(CommandLine.arguments.dropFirst()) == [ScheduledTelegramPreparation.probeFlag] {
+    do { _ = try ScheduledTelegramKeychain().load(); exit(0) }
+    catch { exit(1) }
+}
 if CommandLine.arguments.dropFirst().first == "--send-scheduled-message" {
     guard CommandLine.arguments.count == 3, let id = UUID(uuidString: CommandLine.arguments[2]) else { exit(2) }
     exit(ScheduledMessageRunner().run(id: id))

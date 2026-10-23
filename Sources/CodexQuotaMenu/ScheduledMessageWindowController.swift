@@ -437,7 +437,9 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         scheduling = true
         setAttachmentControlsEnabled(false)
         addButton.isEnabled = false
-        feedback.stringValue = textProvider().modelText("正在核对目标任务…", "Checking target chat…")
+        feedback.stringValue = isNew && ScheduledTelegramPreferences().load().enabled
+            ? textProvider().modelText("正在核对目标并准备 Telegram 凭据；如有钥匙串授权窗口，请完成授权。", "Checking target and preparing Telegram credentials; complete any Keychain authorization prompt.")
+            : textProvider().modelText("正在核对目标任务…", "Checking target chat…")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = Result { () throws -> Void in
                 if isNew {
@@ -448,6 +450,7 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
                     try ScheduledMessageRunner.checkWorkingDirectory(existing)
                 }
                 else { _ = try ScheduledMessageRunner().resolveThread(id) }
+                try ScheduledTelegramPreparation().prepare(isNewTask: isNew)
                 let attachmentStore = ScheduledMessageAttachmentStore(root: ScheduledMessageStore().root)
                 var prepared = item
                 var scheduled = false
