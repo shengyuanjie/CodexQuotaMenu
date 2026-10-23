@@ -202,19 +202,20 @@ final class ScheduledMessageTests: XCTestCase {
             let ids = ["019f898f-3d2d-7a03-ab69-7a2f89882f96", "01a0ce6c-f37f-7411-b5bd-f58b309aef1a"]
             ScheduledMessageWindowController.populateTaskMenu(picker,
                 tasks: ids.map { (id: $0, title: "Same title") }, placeholder: "Choose")
-            XCTAssertEqual(picker.numberOfItems, 3)
+            XCTAssertEqual(picker.numberOfItems, 4)
+            XCTAssertEqual(picker.item(at: 1)?.representedObject as? String, ScheduledMessageWindowController.newTaskSelection)
             for (index, id) in ids.enumerated() {
-                picker.selectItem(at: index + 1)
+                picker.selectItem(at: index + 2)
                 XCTAssertEqual(picker.selectedItem?.representedObject as? String, id)
             }
             ScheduledMessageWindowController.populateTaskMenu(picker,
                 tasks: ids.map { (id: $0, title: String(repeating: "x", count: 80)) }, placeholder: "Choose")
-            XCTAssertEqual(picker.numberOfItems, 3)
+            XCTAssertEqual(picker.numberOfItems, 4)
             ScheduledMessageWindowController.populateTaskMenu(picker,
                 tasks: [(id: ids[0], title: "One"), (id: ids[0], title: "Duplicate"), (id: ids[1], title: "One")], placeholder: "Choose")
-            XCTAssertEqual(picker.numberOfItems, 3)
-            XCTAssertEqual(picker.item(at: 1)?.representedObject as? String, ids[0])
-            XCTAssertEqual(picker.item(at: 2)?.representedObject as? String, ids[1])
+            XCTAssertEqual(picker.numberOfItems, 4)
+            XCTAssertEqual(picker.item(at: 2)?.representedObject as? String, ids[0])
+            XCTAssertEqual(picker.item(at: 3)?.representedObject as? String, ids[1])
             XCTAssertEqual(ScheduledMessageWindowController.canonicalTaskID("codex://threads/\(ids[1])?view=review"), ids[1])
         }
     }
