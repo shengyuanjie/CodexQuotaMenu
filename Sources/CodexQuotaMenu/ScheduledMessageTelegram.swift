@@ -6,7 +6,7 @@ struct ScheduledTelegramError: LocalizedError {
     let code: String
     var errorDescription: String? {
         switch code {
-        case "background_credentials": return "后台 Telegram 凭据检查未通过，尚未安排发送。请在 Telegram 设置中重新保存 Token，并在系统授权窗口中允许此应用后再试。"
+        case "background_credentials": return "Telegram 后台凭据检查未通过，通知可能无法发送。已保存的定时计划不受影响；可在 Telegram 设置中重新保存 Token 并处理授权。"
         case "credentials": return "无法读取 Telegram Token，请在通知设置中重新保存或完成钥匙串授权。"
         case "configuration": return "请填写有效的 Bot Token、数字 Chat ID 和代理地址。"
         case "binding": return "未找到唯一的近期绑定消息。请在新机器人的私聊中发送当前绑定码，然后再次读取。"

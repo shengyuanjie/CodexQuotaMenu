@@ -437,27 +437,38 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         scheduling = true
         setAttachmentControlsEnabled(false)
         addButton.isEnabled = false
-        feedback.stringValue = isNew && ScheduledTelegramPreferences().load().enabled
-            ? textProvider().modelText("正在核对目标并准备 Telegram 凭据；如有钥匙串授权窗口，请完成授权。", "Checking target and preparing Telegram credentials; complete any Keychain authorization prompt.")
-            : textProvider().modelText("正在核对目标任务…", "Checking target chat…")
+        feedback.stringValue = textProvider().modelText("正在核对目标任务…", "Checking target chat…")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let result = Result { () throws -> Void in
-                if isNew {
-                    var existing = directory
-                    while usesDefaultDirectory && !FileManager.default.fileExists(atPath: existing.path) && existing.path != "/" {
-                        existing.deleteLastPathComponent()
+            let result = Result {
+                try ScheduledTelegramPreparation().saveThenPrepare(isNewTask: isNew, save: {
+                    if isNew {
+                        var existing = directory
+                        while usesDefaultDirectory && !FileManager.default.fileExists(atPath: existing.path) && existing.path != "/" {
+                            existing.deleteLastPathComponent()
+                        }
+                        try ScheduledMessageRunner.checkWorkingDirectory(existing)
                     }
-                    try ScheduledMessageRunner.checkWorkingDirectory(existing)
-                }
-                else { _ = try ScheduledMessageRunner().resolveThread(id) }
-                try ScheduledTelegramPreparation().prepare(isNewTask: isNew)
-                let attachmentStore = ScheduledMessageAttachmentStore(root: ScheduledMessageStore().root)
-                var prepared = item
-                var scheduled = false
-                defer { if !scheduled { try? attachmentStore.remove(item.id) } }
-                prepared.attachments = try attachmentStore.stage(selectedAttachments, id: item.id)
-                try ScheduledMessageScheduler().schedule(prepared)
-                scheduled = true
+                    else { _ = try ScheduledMessageRunner().resolveThread(id) }
+                    let attachmentStore = ScheduledMessageAttachmentStore(root: ScheduledMessageStore().root)
+                    var prepared = item
+                    var scheduled = false
+                    defer { if !scheduled { try? attachmentStore.remove(item.id) } }
+                    prepared.attachments = try attachmentStore.stage(selectedAttachments, id: item.id)
+                    try ScheduledMessageScheduler().schedule(prepared)
+                    scheduled = true
+                }, onSaved: {
+                    // Show the saved plan before any system authorization prompt.
+                    DispatchQueue.main.sync { [weak self] in
+                        guard let self else { return }
+                        self.feedback.stringValue = isNew && ScheduledTelegramPreferences().load().enabled
+                            ? self.textProvider().modelText("已安排一次发送。正在准备 Telegram 通知授权；取消授权也不影响计划。", "Delivery scheduled. Preparing Telegram authorization; cancellation will not affect the plan.")
+                            : self.textProvider().modelText("已安排一次发送。", "One-time delivery scheduled.")
+                        if self.messageView.string == enteredMessage { self.messageView.string = "" }
+                        self.attachmentURLs = []
+                        self.updateAttachmentPicker()
+                        self.refreshSaved()
+                    }
+                })
             }
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
@@ -465,12 +476,10 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
                 self.setAttachmentControlsEnabled(true)
                 self.addButton.isEnabled = !self.loading
                 switch result {
-                case .success:
-                    self.feedback.stringValue = self.textProvider().modelText("已安排一次发送。", "One-time delivery scheduled.")
-                    if self.messageView.string == enteredMessage { self.messageView.string = "" }
-                    self.attachmentURLs = []
-                    self.updateAttachmentPicker()
-                    self.refreshSaved()
+                case .success(let notificationReady):
+                    self.feedback.stringValue = notificationReady
+                        ? self.textProvider().modelText("已安排一次发送。", "One-time delivery scheduled.")
+                        : self.textProvider().modelText("已安排一次发送，任务会按时执行。Telegram 授权或后台读取未通过，通知可能无法发送；可稍后在 Telegram 设置中处理，无需重新安排任务。", "Delivery scheduled and will run on time. Telegram authorization or background access was not confirmed, so notification may fail. Fix it later in Telegram settings; do not schedule the task again.")
                 case .failure(let error): self.feedback.stringValue = error.localizedDescription
                 }
             }

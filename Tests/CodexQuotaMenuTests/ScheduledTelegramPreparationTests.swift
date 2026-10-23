@@ -14,12 +14,12 @@ final class ScheduledTelegramPreparationTests: XCTestCase {
         try preparation.prepare(isNewTask: true)
         XCTAssertTrue(steps.isEmpty)
         preparation.settings = { .init(enabled: true, chatID: "123") }
-        try preparation.prepare(isNewTask: true)
-        steps.append("schedule")
-        XCTAssertEqual(steps, ["authorize", "background", "schedule"])
+        XCTAssertTrue(try preparation.saveThenPrepare(isNewTask: true,
+            save: { steps.append("schedule") }, onSaved: { steps.append("show saved") }))
+        XCTAssertEqual(steps, ["schedule", "show saved", "authorize", "background"])
     }
 
-    func testCancellationAndInvalidConfigurationStopBeforeProbe() {
+    func testCancellationAndInvalidConfigurationSkipProbe() {
         var preparation = ScheduledTelegramPreparation()
         preparation.settings = { .init(enabled: true, chatID: "123") }
         preparation.authorize = { throw ScheduledTelegramError(code: "credentials") }
@@ -30,7 +30,7 @@ final class ScheduledTelegramPreparationTests: XCTestCase {
         XCTAssertThrowsError(try preparation.prepare(isNewTask: true))
     }
 
-    func testBackgroundRejectionStopsPreparationEvenAfterForegroundAuthorization() {
+    func testBackgroundRejectionIsDetectedAfterForegroundAuthorization() {
         var preparation = ScheduledTelegramPreparation()
         preparation.settings = { .init(enabled: true, chatID: "123") }
         preparation.authorize = {}
@@ -38,6 +38,44 @@ final class ScheduledTelegramPreparationTests: XCTestCase {
         XCTAssertThrowsError(try preparation.prepare(isNewTask: true)) { error in
             XCTAssertEqual((error as? ScheduledTelegramError)?.code, "background_credentials")
         }
+    }
+
+    func testAuthorizationFailureNeverRemovesSavedPlanOrLaunchAgent() throws {
+        for failure in ["cancel", "background", "configuration"] {
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: root) }
+            let store = ScheduledMessageStore(root: root.appendingPathComponent("records"))
+            let controller = PreparationLaunchctl()
+            let scheduler = ScheduledMessageScheduler(store: store, agentsDirectory: root.appendingPathComponent("agents"), controller: controller)
+            let item = ScheduledMessage(fireDate: Date().addingTimeInterval(3_600), threadID: "", threadTitle: "New",
+                model: "test", message: "test", newTaskDirectory: root.path)
+            var preparation = ScheduledTelegramPreparation()
+            preparation.settings = { .init(enabled: true, chatID: failure == "configuration" ? "invalid" : "123") }
+            var savedWasShown = false
+            preparation.authorize = {
+                XCTAssertTrue(savedWasShown)
+                XCTAssertEqual(try store.read(item.id).state, .pending)
+                XCTAssertFalse(controller.loaded.isEmpty)
+                if failure == "cancel" { throw ScheduledTelegramError(code: "credentials") }
+            }
+            preparation.verifyBackground = { throw ScheduledTelegramError(code: "background_credentials") }
+            XCTAssertFalse(try preparation.saveThenPrepare(isNewTask: true, save: {
+                try scheduler.schedule(item)
+            }, onSaved: { savedWasShown = true }))
+            XCTAssertTrue(savedWasShown)
+            XCTAssertEqual(try store.read(item.id).state, .pending)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: scheduler.plistURL(item.id).path))
+            XCTAssertEqual(controller.loaded.count, 1)
+            XCTAssertEqual(controller.bootouts, 0)
+        }
+    }
+
+    func testFailedScheduleNeverStartsAuthorizationOrReportsSaved() {
+        var preparation = ScheduledTelegramPreparation()
+        preparation.settings = { XCTFail("authorization must not run"); return .init() }
+        XCTAssertThrowsError(try preparation.saveThenPrepare(isNewTask: true,
+            save: { throw ScheduledMessageError.commandFailed },
+            onSaved: { XCTFail("must not report success") }))
     }
 
     func testInteractionPolicyIsRestoredOnSuccessAndFailure() throws {
@@ -89,4 +127,13 @@ final class ScheduledTelegramPreparationTests: XCTestCase {
             XCTAssertEqual(try String(contentsOf: root.appendingPathComponent("args")), ScheduledTelegramPreparation.probeFlag)
         }
     }
+}
+
+private final class PreparationLaunchctl: LaunchctlControlling {
+    var loaded = Set<String>()
+    var bootouts = 0
+    func bootstrap(plistURL: URL) throws { loaded.insert(plistURL.deletingPathExtension().lastPathComponent) }
+    func isLoaded(label: String) throws -> Bool { loaded.contains(label) }
+    func loadedOwnedLabels() throws -> Set<String> { loaded }
+    func bootout(label: String) throws { bootouts += 1; loaded.remove(label) }
 }

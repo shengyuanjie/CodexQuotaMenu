@@ -43,8 +43,16 @@ struct ScheduledTelegramPreparation {
     var authorize: () throws -> Void = { _ = try ScheduledTelegramKeychain().load(foreground: true) }
     var verifyBackground: () throws -> Void = { try probe() }
 
-    // Only the user's Schedule action calls this, before attachments or LaunchAgents
-    // are written. Cancellation or a failed child check stops schedule creation.
+    // Save and expose the schedule first. Notification authorization is a separate
+    // post-save step: its failure must never roll back the record or LaunchAgent.
+    func saveThenPrepare(isNewTask: Bool, save: () throws -> Void, onSaved: () -> Void) throws -> Bool {
+        try save()
+        onSaved()
+        do { try prepare(isNewTask: isNewTask); return true }
+        catch { return false }
+    }
+
+    // Called by saveThenPrepare after the plan has been durably scheduled.
     func prepare(isNewTask: Bool) throws {
         guard isNewTask else { return }
         let configuration = settings()
