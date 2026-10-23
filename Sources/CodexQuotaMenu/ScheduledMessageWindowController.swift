@@ -31,6 +31,7 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
     private let feedback = NSTextField(wrappingLabelWithString: "")
     private let addButton = NSButton()
     private let removeButton = NSButton()
+    private let openTaskButton = NSButton()
     private let refreshButton = NSButton()
     private let heading = NSTextField(labelWithString: "")
     private let taskLabel = NSTextField(labelWithString: "")
@@ -90,6 +91,7 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         taskField.placeholderString = t.modelText("任务 ID，也可从 codex://threads/ 链接粘贴", "Chat ID or codex://threads/ link")
         addButton.title = t.modelText("安排发送", "Schedule")
         removeButton.title = t.modelText("取消所选", "Remove selected")
+        openTaskButton.title = t.modelText("打开任务", "Open chat")
         refreshButton.title = t.modelText("刷新", "Refresh")
         updateTargetControls()
     }
@@ -168,7 +170,9 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         attachmentHint.textColor = .secondaryLabelColor
         let attachmentButtons = NSStackView(views: [fileButton, removeAttachmentButton])
         attachmentButtons.orientation = .horizontal; attachmentButtons.spacing = 10
-        let buttons = NSStackView(views: [refreshButton, NSView(), removeButton, addButton])
+        openTaskButton.target = self; openTaskButton.action = #selector(openSavedTask)
+        openTaskButton.isEnabled = false
+        let buttons = NSStackView(views: [refreshButton, openTaskButton, NSView(), removeButton, addButton])
         buttons.orientation = .horizontal; buttons.spacing = 10
         let stack = NSStackView(views: [heading, taskLabel, taskPicker, taskField, directoryButton, modelLabel,
                                         modelPicker, effortLabel, effortPicker, dateLabel, timeRow, messageLabel, scroll,
@@ -389,12 +393,15 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
             savedPicker.removeAllItems()
             let format = DateFormatter(); format.dateStyle = .short; format.timeStyle = .short
             for item in savedRows {
-                let row = NSMenuItem(title: "\(format.string(from: item.fireDate)) · \(item.threadTitle.prefix(35)) · \(item.state.rawValue) · \(item.id.uuidString.suffix(6))", action: nil, keyEquivalent: "")
+                let status = ScheduledMessageSidebar.needsRegistration(item)
+                    ? textProvider().modelText("已发送，侧栏未登记", "Sent; not in Chats") : item.state.rawValue
+                let row = NSMenuItem(title: "\(format.string(from: item.fireDate)) · \(item.threadTitle.prefix(35)) · \(status) · \(item.id.uuidString.suffix(6))", action: nil, keyEquivalent: "")
                 row.representedObject = item.id
                 row.toolTip = "\(item.threadTitle)\n\(item.threadID)\n\(item.model) / \(item.effort ?? "auto")\n\(item.result ?? "pending")"
                 savedPicker.menu?.addItem(row)
             }
             removeButton.isEnabled = !savedRows.isEmpty
+            updateOpenTaskButton()
         } catch { feedback.stringValue = error.localizedDescription }
     }
 
@@ -463,11 +470,28 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         }
     }
 
+    private func updateOpenTaskButton() {
+        let id = savedPicker.selectedItem?.representedObject as? UUID
+        openTaskButton.isEnabled = savedRows.first(where: { $0.id == id })
+            .flatMap { ScheduledMessageSidebar.chatURL($0.threadID) } != nil
+    }
+
+    @objc private func openSavedTask() {
+        guard let id = savedPicker.selectedItem?.representedObject as? UUID,
+              let item = savedRows.first(where: { $0.id == id }),
+              let url = ScheduledMessageSidebar.chatURL(item.threadID) else { return }
+        if !NSWorkspace.shared.open(url) {
+            feedback.stringValue = textProvider().modelText("无法打开任务，请检查 Codex 是否已安装。", "Cannot open the chat. Check that Codex is installed.")
+        }
+    }
+
     @objc private func showSavedDetails() {
+        updateOpenTaskButton()
         guard let id = savedPicker.selectedItem?.representedObject as? UUID,
               let item = savedRows.first(where: { $0.id == id }) else { return }
         let attachmentSummary = item.attachmentItems.map(\.name).joined(separator: ", ")
-        feedback.stringValue = "\(item.threadTitle)\n\(item.threadID) · \(item.model) / \(item.effort ?? "auto")\n\(attachmentSummary)\n\(item.result.map { ScheduledMessageDeliveryError(code: $0).localizedDescription } ?? item.state.rawValue)"
+        let result = ScheduledMessageSidebar.needsRegistration(item) ? "turn_completed_sidebar_unregistered" : item.result
+        feedback.stringValue = "\(item.threadTitle)\n\(item.threadID) · \(item.model) / \(item.effort ?? "auto")\n\(attachmentSummary)\n\(result.map { ScheduledMessageDeliveryError(code: $0).localizedDescription } ?? item.state.rawValue)"
     }
 
     @objc private func remove() {

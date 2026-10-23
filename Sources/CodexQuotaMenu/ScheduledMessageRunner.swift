@@ -5,6 +5,7 @@ struct ScheduledMessageDeliveryError: LocalizedError {
     let code: String
     var errorDescription: String? {
         switch code {
+        case "turn_completed_sidebar_unregistered": return "消息已发送并完成，但未登记到 Codex 普通聊天侧栏。请点“打开任务”查看，不要重发。 / Delivery completed, but the chat is not registered in the Codex Chats sidebar. Use Open chat; do not resend."
         case "desktop_visibility_unverified": return "对话可能已创建或消息已发送，但无法核验 Codex 任务列表可见性。请检查任务 ID，不要直接重发。 / The chat may exist or delivery may have completed, but desktop visibility could not be verified. Check the chat ID before resending."
         case "new_chat_creation_unverified": return "新对话创建未通过核验，消息未发送。请检查任务 ID。 / New chat creation could not be verified. The message was not sent. Check the chat ID."
         case "new_task_removed": return "新建任务功能已移除，此消息未发送。请选择已有任务重新安排。 / New chat creation was removed. This message was not sent. Schedule it for an existing chat."
@@ -30,6 +31,7 @@ struct ScheduledMessageRunner {
     let store: ScheduledMessageStore
     let scheduler: ScheduledMessageScheduler
     var now: () -> Date = Date.init
+    var sidebarRegistration: (String) -> Bool = { ScheduledMessageSidebar.isRegistered($0) }
     var resolveThread: (String) throws -> ScheduledMessageTarget = { id in
         try resolveTarget(id: id, readDesktop: { id in
             let desktop = ScheduledMessageDesktopClient()
@@ -192,7 +194,9 @@ struct ScheduledMessageRunner {
                 completed = try send(item, target, effort)
             }
             item.state = completed ? .sent : .failed
-            item.result = completed ? "turn_completed" : "turn_unverified"
+            item.result = completed
+                ? (item.isNewTask && !sidebarRegistration(item.threadID) ? "turn_completed_sidebar_unregistered" : "turn_completed")
+                : "turn_unverified"
         } catch {
             item.state = .failed
             item.result = (error as? ScheduledMessageDeliveryError)?.code
