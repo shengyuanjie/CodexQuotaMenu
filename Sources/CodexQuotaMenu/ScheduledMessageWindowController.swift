@@ -2,8 +2,8 @@ import AppKit
 
 @MainActor
 final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDelegate {
-    private let store = ScheduledMessageStore()
-    private let scheduler = ScheduledMessageScheduler()
+    private let store: ScheduledMessageStore
+    private let scheduler: ScheduledMessageScheduler
     private let textProvider: () -> AppText
     private var loading = false
     private var scheduling = false
@@ -43,7 +43,10 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
     private let messageLabel = NSTextField(labelWithString: "")
     private let savedLabel = NSTextField(labelWithString: "")
 
-    init(textProvider: @escaping () -> AppText) {
+    init(textProvider: @escaping () -> AppText, store: ScheduledMessageStore = .init(),
+         scheduler: ScheduledMessageScheduler? = nil) {
+        self.store = store
+        self.scheduler = scheduler ?? ScheduledMessageScheduler(store: store)
         self.textProvider = textProvider
         let window = ScheduledMessageWindow(contentRect: NSRect(x: 0, y: 0, width: 650, height: 750),
                               styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
@@ -111,6 +114,8 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         taskField.setAccessibilityLabel("Target Codex chat ID")
         taskField.delegate = self
         savedPicker.target = self; savedPicker.action = #selector(showSavedDetails)
+        savedPicker.setAccessibilityLabel("Scheduled message records")
+        feedback.setAccessibilityLabel("Scheduled message feedback")
         modelPicker.addItem(withTitle: "…")
         modelPicker.target = self; modelPicker.action = #selector(modelChanged)
         effortPicker.setAccessibilityLabel("Scheduled message reasoning effort")
@@ -391,7 +396,8 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         if model.efforts.contains(selected) { effortPicker.selectItem(withTitle: selected) }
     }
 
-    private func refreshSaved() {
+    func refreshSaved(preferredID: UUID? = nil) {
+        let selectedID = preferredID ?? savedPicker.selectedItem?.representedObject as? UUID
         do {
             savedRows = try store.all()
             savedPicker.removeAllItems()
@@ -403,6 +409,9 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
                 row.representedObject = item.id
                 row.toolTip = "\(item.threadTitle)\n\(item.threadID)\n\(item.model) / \(item.effort ?? "auto")\n\(item.result ?? "pending")"
                 savedPicker.menu?.addItem(row)
+            }
+            if let selectedID, let index = savedRows.firstIndex(where: { $0.id == selectedID }) {
+                savedPicker.selectItem(at: index)
             }
             removeButton.isEnabled = !savedRows.isEmpty
             updateOpenTaskButton()
@@ -426,6 +435,7 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
         }
         let title = isNew ? textProvider().modelText("新任务对话", "New chat") : taskRows.first(where: { $0.id == id })?.title ?? id
         let selectedAttachments = attachmentURLs
+        let store = self.store, scheduler = self.scheduler
         let enteredMessage = messageView.string
         let body = enteredMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !selectedAttachments.isEmpty
             ? textProvider().modelText("请查看附件。", "Please review the attachments.") : enteredMessage
@@ -449,12 +459,12 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
                         try ScheduledMessageRunner.checkWorkingDirectory(existing)
                     }
                     else { _ = try ScheduledMessageRunner().resolveThread(id) }
-                    let attachmentStore = ScheduledMessageAttachmentStore(root: ScheduledMessageStore().root)
+                    let attachmentStore = ScheduledMessageAttachmentStore(root: store.root)
                     var prepared = item
                     var scheduled = false
                     defer { if !scheduled { try? attachmentStore.remove(item.id) } }
                     prepared.attachments = try attachmentStore.stage(selectedAttachments, id: item.id)
-                    try ScheduledMessageScheduler().schedule(prepared)
+                    try scheduler.schedule(prepared)
                     scheduled = true
                 }, onSaved: {
                     // Show the saved plan before any system authorization prompt.
@@ -466,7 +476,7 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
                         if self.messageView.string == enteredMessage { self.messageView.string = "" }
                         self.attachmentURLs = []
                         self.updateAttachmentPicker()
-                        self.refreshSaved()
+                        self.refreshSaved(preferredID: item.id)
                     }
                 })
             }
@@ -513,8 +523,15 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
               let item = savedRows.first(where: { $0.id == id }) else { return }
         let attachmentSummary = item.attachmentItems.map(\.name).joined(separator: ", ")
         let result = ScheduledMessageSidebar.needsRegistration(item) ? "turn_completed_sidebar_unregistered" : item.result
+        let state: String
+        switch item.state {
+        case .pending: state = textProvider().modelText("已安排，等待发送", "Scheduled; waiting to send")
+        case .sending: state = textProvider().modelText("正在发送", "Sending")
+        case .sent: state = textProvider().modelText("已发送", "Sent")
+        case .failed: state = textProvider().modelText("发送失败", "Failed")
+        }
         let notification = item.telegramNotification.map { "\n" + $0.title } ?? ""
-        feedback.stringValue = "\(item.threadTitle)\n\(item.threadID) · \(item.model) / \(item.effort ?? "auto")\n\(attachmentSummary)\n\(result.map { ScheduledMessageDeliveryError(code: $0).localizedDescription } ?? item.state.rawValue)\(notification)"
+        feedback.stringValue = "\(item.threadTitle)\n\(item.threadID) · \(item.model) / \(item.effort ?? "auto")\n\(attachmentSummary)\n\(result.map { ScheduledMessageDeliveryError(code: $0).localizedDescription } ?? state)\(notification)"
     }
 
     @objc private func remove() {
@@ -522,8 +539,14 @@ final class ScheduledMessageWindowController: NSWindowController, NSTextFieldDel
               let index = savedRows.firstIndex(where: { $0.id == id }) else { return }
         do {
             try scheduler.cancel(savedRows[index])
-            feedback.stringValue = textProvider().modelText("已移除。", "Removed.")
             refreshSaved()
+            if savedRows.isEmpty {
+                feedback.stringValue = textProvider().modelText("所选记录已移除，当前没有定时消息。", "Selected record removed. No scheduled messages remain.")
+            } else {
+                // The selected row now refers to a remaining record, not the deleted
+                // one. Its actual state must replace the previous deletion message.
+                showSavedDetails()
+            }
         } catch { feedback.stringValue = error.localizedDescription }
     }
 }
